@@ -37,8 +37,11 @@ class PoolFlows(OctaviaPoolFlows):
                       constants.LOADBALANCER]))
         create_pool_flow.add(database_tasks.MarkPoolPendingCreateInDB(
             requires=constants.POOL))
-        create_pool_flow.add(f5_driver_tasks.ListenersUpdate(
-            requires=[constants.LOADBALANCER, constants.LISTENERS,
+        create_pool_flow.add(f5_driver_tasks.PoolCreate(
+            requires=[constants.LOADBALANCER,
+                      constants.POOL,
+                      constants.MEMBERS,
+                      constants.HEALTH_MONITOR,
                       constants.BIGIP]))
         create_pool_flow.add(database_tasks.MarkPoolActiveInDB(
             requires=constants.POOL))
@@ -63,6 +66,10 @@ class PoolFlows(OctaviaPoolFlows):
             requires=constants.POOL, provides=constants.POOL_CHILD_COUNT))
         delete_pool_flow.add(model_tasks.DeleteModelObject(
             rebind={constants.OBJECT: constants.POOL}))
+        delete_pool_flow.add(f5_driver_tasks.PoolDelete(
+            requires=[constants.LOADBALANCER,
+                      constants.POOL,
+                      constants.BIGIP]))
         delete_pool_flow.add(f5_driver_tasks.ListenersUpdate(
             requires=[constants.LOADBALANCER, constants.LISTENERS]))
         delete_pool_flow.add(database_tasks.DeletePoolInDB(
@@ -86,8 +93,12 @@ class PoolFlows(OctaviaPoolFlows):
                       constants.LOADBALANCER]))
         update_pool_flow.add(database_tasks.MarkPoolPendingUpdateInDB(
             requires=constants.POOL))
-        update_pool_flow.add(f5_driver_tasks.ListenersUpdate(
-            requires=[constants.LOADBALANCER, constants.LISTENERS]))
+        update_pool_flow.add(f5_driver_tasks.PoolUpdate(
+            requires=[constants.LOADBALANCER,
+                      constants.POOL,
+                      constants.MEMBERS,
+                      constants.HEALTH_MONITOR,
+                      constants.BIGIP]))
         update_pool_flow.add(database_tasks.UpdatePoolInDB(
             requires=[constants.POOL, constants.UPDATE_DICT]))
         update_pool_flow.add(database_tasks.MarkPoolActiveInDB(

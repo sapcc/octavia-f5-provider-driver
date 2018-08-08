@@ -12,12 +12,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from octavia.common.constants import *
 
-BIGIP = 'bigip'
-PREFIX_PROJECT = 'project_'
-PREFIX_LISTENER = 'listener_'
-PREFIX_POOL = 'pool_'
-PREFIX_HEALTH_MONITOR = 'health_monitor_'
-PREFIX_POLICY = 'l7policy_'
+class PolicyHasNoRules(Exception):
+    pass
 
+class NoActionFoundForPolicy(Exception):
+    pass
