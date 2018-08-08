@@ -1,4 +1,4 @@
-# Copyright 2011 VMware, Inc., 2014 A10 Networks
+# Copyright 2018 SAP SE, F5 Networks, Inc.
 # All Rights Reserved.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -14,7 +14,7 @@
 #    under the License.
 
 """
-Routines for configuring Octavia
+Routines for configuring Octavia F5 Provider
 """
 
 from octavia.common.config import *
@@ -23,11 +23,22 @@ from octavia.i18n import _
 LOG = logging.getLogger(__name__)
 
 f5_agent_opts = [
-    cfg.StrOpt('f5_network_segment_physical_network',
+    cfg.StrOpt('network_segment_physical_network',
                help=_("Restrict discovery of network segmentation ID to  "
-                      "a specific physical network name. "))
-
+                      "a specific physical network name. ")),
+    cfg.StrOpt('bigip_username', default='admin',
+               help=_('The username to use for iControl REST access')),
+    cfg.StrOpt('bigip_password', default='admin',
+               help=_('The password to use for iControl REST access')),
+    cfg.IntOpt('bigip_port', default=443,
+               help=_('The port to use for iControl REST access')),
+    cfg.BoolOpt('bigip_token', default=False,
+                help=_('Use token authentication against iControl REST.')),
+    cfg.BoolOpt('bigip_verify', default=False,
+                help=_('Verify iControl REST TLS Cert.')),
+    cfg.StrOpt('bigip_host', help=_('The Hostname/IP to use for '
+                                    'iControl REST access')),
 ]
 
 # Register the configuration options
-cfg.CONF.register_opts(f5_agent_opts)
+cfg.CONF.register_opts(f5_agent_opts, group='f5_agent')

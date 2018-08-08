@@ -95,7 +95,7 @@ def _map_virtual(listener, pool=None, policies=None):
     port = getattr(listener, "protocol_port", None)
     lb_vip = getattr(loadbalancer, "vip", None)
 
-    if lb_vip.ip_address and port:
+    if lb_vip and port:
         if str(lb_vip.ip_address).endswith('%0'):
             ip_address = lb_vip.ip_address[:-2]
 
@@ -103,12 +103,8 @@ def _map_virtual(listener, pool=None, policies=None):
             vip['destination'] = ip_address + "." + str(port)
         else:
             vip['destination'] = ip_address + ":" + str(port)
-    else:
-        pass
-        #LOG.error("No VIP address or port specified")
 
     vip["mask"] = '255.255.255.255'
-
     if hasattr(listener, 'admin_state_up'):
         if listener.admin_state_up:
             vip["enabled"] = True
