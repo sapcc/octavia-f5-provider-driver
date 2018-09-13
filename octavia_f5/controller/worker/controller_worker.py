@@ -13,8 +13,6 @@
 # under the License.
 #
 import tenacity
-from f5.bigip import ManagementRoot
-from mock import patch
 from oslo_config import cfg
 from oslo_log import log as logging
 from sqlalchemy.orm import exc as db_exceptions
@@ -31,6 +29,7 @@ from octavia_f5.controller.worker.flows import listener_flows
 from octavia_f5.controller.worker.flows import load_balancer_flows
 from octavia_f5.controller.worker.flows import member_flows
 from octavia_f5.controller.worker.flows import pool_flows
+from octavia_f5.restclient.as3restclient import BigipAS3RestClient
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -49,16 +48,10 @@ def _is_provisioning_status_pending_update(lb_obj):
 class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
 
     def __init__(self):
-        # Need to patch signal code since not running in mainthread
-        with patch('f5.bigip.HAS_SIGNAL', False):
-            self.bigip = ManagementRoot(CONF.f5_agent.bigip_host,
-                                        CONF.f5_agent.bigip_username,
-                                        CONF.f5_agent.bigip_password,
-                                        port=CONF.f5_agent.bigip_port,
-                                        token=CONF.f5_agent.bigip_token,
-                                        verify=CONF.f5_agent.bigip_verify)
-            LOG.info("Connected to F5 Device %s running TMOS %s",
-                     self.bigip.hostname, self.bigip.tmos_version)
+        self.bigip = BigipAS3RestClient(CONF.f5_agent.bigip_url,
+                                        CONF.f5_agent.bigip_verify,
+                                        CONF.f5_agent.bigip_token)
+
         self._health_monitor_flows = health_monitor_flows.HealthMonitorFlows()
         self._lb_flows = load_balancer_flows.LoadBalancerFlows()
         self._listener_flows = listener_flows.ListenerFlows()

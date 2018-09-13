@@ -1,3 +1,4 @@
-f5-sdk==3.0.18
 mock>=2.0.0 # BSD
-octavia>=3.0.0
+octavia>=3.0.0 # Apache-2.0
+requests>=2.18.0 # Apache-2.0
+six

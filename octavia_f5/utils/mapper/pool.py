@@ -30,7 +30,7 @@ class PoolMapper(partition.PartitionMapper):
 
         return dict(name=name, partition=partition)
 
-    # from service_adpater.py f5-agent
+    # from service_adpater.py f5_driver-agent
     def map_pool(self, pool, loadbalancer, members, health_monitor):
         obj = self.get_pool_path(loadbalancer, pool)
         obj["description"] = self.get_resource_description(pool)
@@ -61,7 +61,7 @@ class PoolMapper(partition.PartitionMapper):
 
         return obj
 
-    # from service_adpater.py f5-agent
+    # from service_adpater.py f5_driver-agent
     @staticmethod
     def _get_lb_method( method):
         lb_method = method.upper()
@@ -81,7 +81,7 @@ class PoolMapper(partition.PartitionMapper):
         else:
             return 'round-robin'
 
-    # from service_adpater.py f5-agent
+    # from service_adpater.py f5_driver-agent
     def _set_lb_method(self, lb_method, members):
         """Set pool lb method depending on member attributes."""
         lb_method = self._get_lb_method(lb_method)

@@ -11,16 +11,19 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-import json
+
+import uuid
 
 from oslo_log import log as logging
 from taskflow import task
 
+import octavia_f5.restclient.as3mapper as map
 from octavia.controller.worker import task_utils as task_utilities
-from octavia.db import repositories as repo
-from octavia_f5.utils import mapper
+from octavia_f5.restclient import as3convert
+from octavia_f5.restclient.as3classes import ADC
 
 LOG = logging.getLogger(__name__)
+
 
 class F5BaseTask(task.Task):
     """Base task to load drivers common to the tasks."""
@@ -28,84 +31,30 @@ class F5BaseTask(task.Task):
     def __init__(self, **kwargs):
         super(F5BaseTask, self).__init__(**kwargs)
         self.task_utils = task_utilities.TaskUtils()
+        self.converter = as3convert.As3Convert()
 
-    def _path_to_str(self, path):
-        if 'name' in path:
-            return path['partition'] + '/' + path['name']
-
-        return path['partition']
-
-    def create_resource(self, resource, path, create_dict):
-        try:
-            return resource.create(**create_dict)
-        except Exception:
-            LOG.exception("failed creating resource %s: %s failed",
-                          resource.__class__.__name__,
-                          self._path_to_str(path))
-            raise
-
-    def update_resource(self, resource, path, update_dict):
-        try:
-            obj = resource.load(**path)
-            return obj.modify(**update_dict)
-        except Exception:
-            LOG.exception("failed updating resource %s: %s failed",
-                          resource.__class__.__name__,
-                          self._path_to_str(path))
-            raise
-
-    def delete_resource(self, resource, path):
-        try:
-            obj = resource.load(**path)
-            return obj.delete()
-        except Exception:
-            LOG.exception("failed deleting resource %s: %s failed",
-                          resource.__class__.__name__,
-                          self._path_to_str(path))
-            raise
-
-
-class EnsurePartitionCreated(F5BaseTask):
-    """Create the compute instance for a new amphora."""
-
-    def execute(self, loadbalancer, bigip):
-        folder = mapper.get_folder(loadbalancer)
-
-        f = bigip.tm.sys.folders.folder
-
-        try:
-            if f.exists(name=folder['name']):
-                return
-            return f.create(**folder)
-        except Exception:
-            LOG.exception("failed creating partiton: %s failed",
-                          folder['name'])
-            raise
-
-class DeletePartition(F5BaseTask):
-    def execute(self, loadbalancer, bigip):
-        folder_path = mapper.get_partition_path(loadbalancer.project_id)
-        self.delete_resource(bigip.tm.sys.folders.folder, folder_path)
 
 class ListenersUpdate(F5BaseTask):
     """Task to update F5s with all specified listeners' configurations."""
 
     def execute(self, loadbalancer, listeners, bigip):
-        """Execute updates per listener for a f5."""
+        """Execute updates per listener for a f5_driver."""
 
-        f = bigip.tm.ltm.virtuals.virtual
+        decl = ADC(
+            id="urn:uuid:{}".format(uuid.uuid4()),
+            label="ListenerUpdate",
+            remark='update of ' + ', '.join([listener.id for
+                                             listener in listeners])
+        )
+        tenant = decl.getOrCreateTenant(
+            map.project(loadbalancer.project_id)
+        )
+
         for listener in listeners:
-            listener.load_balancer = loadbalancer
-            path = mapper.get_virtual_path(listener)
-            virtual = mapper.get_virtual(listener)
+            app = self.converter.create_application(listener)
+            tenant.add_application(map.listener(listener.id), app)
 
-            if f.exists(**path):
-                obj = f.load(**path)
-                LOG.debug(json.dumps(virtual, indent=4, sort_keys=True))
-                obj.modify(**virtual)
-            else:
-                LOG.debug(json.dumps(virtual, indent=4, sort_keys=True))
-                f.create(**virtual)
+        print(decl.to_json())
 
     def revert(self, loadbalancer, *args, **kwargs):
         """Handle failed listeners updates."""
@@ -116,6 +65,7 @@ class ListenersUpdate(F5BaseTask):
             self.task_utils.mark_listener_prov_status_error(listener.id)
 
         return None
+
 
 class ListenerDelete(F5BaseTask):
     def execute(self, loadbalancer, listener, bigip):
@@ -132,7 +82,7 @@ class ListenerDelete(F5BaseTask):
 class PoolCreate(F5BaseTask):
     def execute(self, pool, loadbalancer, members, health_monitor, bigip):
         f5_pool = mapper.map_pool(pool, loadbalancer,
-                                 members, health_monitor)
+                                  members, health_monitor)
         self.delete_resource(bigip.tm.ltm.pools.pool, f5_pool)
 
     def revert(self, pool, *args, **kwargs):
@@ -167,12 +117,8 @@ class HealthMonitorUpdate(F5BaseTask):
     def execute(self, pool, loadbalancer, listeners, health_monitor, bigip):
         raise NotImplementedError
 
+
 class HealthMonitorDelete(F5BaseTask):
-    def execute(self, pool, loadbalancer, listeners, health_monitor, bigip):
-        raise NotImplementedError
-
-
-class HealthMonitorCreate(F5BaseTask):
     def execute(self, pool, loadbalancer, listeners, health_monitor, bigip):
         raise NotImplementedError
 

@@ -32,8 +32,6 @@ class ListenerFlows(OctaviaListenerFlows):
         create_listener_flow = linear_flow.Flow(constants.CREATE_LISTENER_FLOW)
         create_listener_flow.add(lifecycle_tasks.ListenersToErrorOnRevertTask(
             requires=[constants.LOADBALANCER, constants.LISTENERS]))
-        create_listener_flow.add(f5_driver_tasks.EnsurePartitionCreated(
-            requires=[constants.LOADBALANCER, constants.BIGIP]))
         create_listener_flow.add(f5_driver_tasks.ListenersUpdate(
             requires=[constants.LOADBALANCER, constants.LISTENERS,
                       constants.BIGIP]))

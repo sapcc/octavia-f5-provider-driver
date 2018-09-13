@@ -26,18 +26,12 @@ f5_agent_opts = [
     cfg.StrOpt('network_segment_physical_network',
                help=_("Restrict discovery of network segmentation ID to  "
                       "a specific physical network name. ")),
-    cfg.StrOpt('bigip_username', default='admin',
-               help=_('The username to use for iControl REST access')),
-    cfg.StrOpt('bigip_password', default='admin',
-               help=_('The password to use for iControl REST access')),
-    cfg.IntOpt('bigip_port', default=443,
-               help=_('The port to use for iControl REST access')),
-    cfg.BoolOpt('bigip_token', default=False,
-                help=_('Use token authentication against iControl REST.')),
+    cfg.BoolOpt('bigip_token', default=True,
+                help=_('Use token authentication.')),
     cfg.BoolOpt('bigip_verify', default=False,
-                help=_('Verify iControl REST TLS Cert.')),
-    cfg.StrOpt('bigip_host', help=_('The Hostname/IP to use for '
-                                    'iControl REST access')),
+                help=_('Verify AS3 endpoint TLS cert.')),
+    cfg.StrOpt('bigip_url',
+               help=_('The URL to the bigip host device with AS3 endpoint')),
 ]
 
 # Register the configuration options

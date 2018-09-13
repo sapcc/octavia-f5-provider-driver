@@ -35,9 +35,8 @@ class HealthMonitorFlows(object):
                       constants.LOADBALANCER]))
         create_hm_flow.add(database_tasks.MarkHealthMonitorPendingCreateInDB(
             requires=constants.HEALTH_MON))
-        create_hm_flow.add(f5_driver_tasks.HealthMonitorCreate(
-            requires=[constants.HEALTH_MON,
-                      constants.LOADBALANCER,
+        create_hm_flow.add(f5_driver_tasks.ListenersUpdate(
+            requires=[constants.LOADBALANCER,
                       constants.LISTENERS,
                       constants.BIGIP]))
         create_hm_flow.add(database_tasks.MarkHealthMonitorActiveInDB(
@@ -64,9 +63,8 @@ class HealthMonitorFlows(object):
         delete_hm_flow.add(model_tasks.
                            DeleteModelObject(rebind={constants.OBJECT:
                                                      constants.HEALTH_MON}))
-        delete_hm_flow.add(f5_driver_tasks.HealthMonitorDelete(
-            requires=[constants.HEALTH_MON,
-                      constants.LOADBALANCER,
+        delete_hm_flow.add(f5_driver_tasks.ListenersUpdate(
+            requires=[constants.LOADBALANCER,
                       constants.LISTENERS,
                       constants.BIGIP]))
         delete_hm_flow.add(database_tasks.DeleteHealthMonitorInDB(
@@ -96,9 +94,8 @@ class HealthMonitorFlows(object):
                       constants.LOADBALANCER]))
         update_hm_flow.add(database_tasks.MarkHealthMonitorPendingUpdateInDB(
             requires=constants.HEALTH_MON))
-        update_hm_flow.add(f5_driver_tasks.HealthMonitorUpdate(
-            requires=[constants.HEALTH_MON,
-                      constants.LOADBALANCER,
+        update_hm_flow.add(f5_driver_tasks.ListenersUpdate(
+            requires=[constants.LOADBALANCER,
                       constants.LISTENERS,
                       constants.BIGIP]))
         update_hm_flow.add(database_tasks.UpdateHealthMonInDB(
