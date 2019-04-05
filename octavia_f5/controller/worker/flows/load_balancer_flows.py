@@ -14,6 +14,7 @@
 
 from oslo_config import cfg
 from oslo_log import log as logging
+from taskflow import retry
 from taskflow.patterns import linear_flow
 
 from octavia.controller.worker.flows.load_balancer_flows \
@@ -21,6 +22,7 @@ from octavia.controller.worker.flows.load_balancer_flows \
 from octavia.controller.worker.tasks import database_tasks
 from octavia.controller.worker.tasks import lifecycle_tasks
 from octavia.controller.worker.tasks import network_tasks
+from octavia_f5.controller.worker.tasks import f5_network_tasks, f5_database_tasks
 from octavia_f5.common import constants
 from octavia_f5.controller.worker.flows import listener_flows
 from octavia_f5.controller.worker.flows import pool_flows
@@ -38,7 +40,7 @@ class LoadBalancerFlows(OctaviaLoadBalancerFlows):
         self.pool_flows = pool_flows.PoolFlows()
         self.member_flows = member_flows.MemberFlows()
 
-    def get_create_load_balancer_flow(self, **kwargs):
+    def get_create_load_balancer_flow(self, topology=None, listeners=None):
         """
         :param **kwargs:
         :return: The graph flow for creating a loadbalancer.
@@ -47,16 +49,45 @@ class LoadBalancerFlows(OctaviaLoadBalancerFlows):
         f_name = constants.CREATE_LOADBALANCER_FLOW
         lb_create_flow = linear_flow.Flow(f_name)
 
-        lb_create_flow.add(lifecycle_tasks.LoadBalancerToErrorOnRevertTask(
-            requires=constants.LOADBALANCER))
+        lb_create_flow.add(lifecycle_tasks.LoadBalancerIDToErrorOnRevertTask(
+            requires=constants.LOADBALANCER_ID))
 
-        lb_create_flow.add(f5_driver_tasks.EnsurePartitionCreated(
-            requires=(constants.LOADBALANCER, constants.BIGIP)))
-        lb_create_flow.add(f5_driver_tasks.DeletePartition(
-            requires=(constants.LOADBALANCER, constants.BIGIP)))
+        # allocate VIP
+        lb_create_flow.add(database_tasks.ReloadLoadBalancer(
+            name=constants.RELOAD_LB_BEFOR_ALLOCATE_VIP,
+            requires=constants.LOADBALANCER_ID,
+            provides=constants.LOADBALANCER
+        ))
+        #lb_create_flow.add(f5_network_tasks.getNetworkSegment(
+        #    requires=constants.LOADBALANCER,
+        #    provides=constants.SEGMENT
+        #))
+        lb_create_flow.add(network_tasks.AllocateVIP(
+            requires=constants.LOADBALANCER,
+            provides=constants.VIP))
+        lb_create_flow.add(database_tasks.UpdateVIPAfterAllocation(
+            requires=(constants.LOADBALANCER_ID, constants.VIP),
+            provides=constants.LOADBALANCER))
+        lb_create_flow.add(network_tasks.UpdateVIPSecurityGroup(
+            requires=constants.LOADBALANCER))
+        lb_create_flow.add(network_tasks.GetSubnetFromVIP(
+            requires=constants.LOADBALANCER,
+            provides=constants.SUBNET))
+
+        # get all load balancers of tenant and update f5
+        lb_create_flow.add(f5_database_tasks.ReloadLoadBalancers(
+            requires=constants.LOADBALANCER,
+            provides=constants.LOADBALANCERS))
+        lb_create_flow.add(f5_driver_tasks.LoadBalancersUpdate(
+            requires=[constants.LOADBALANCERS, constants.BIGIP]))
+
+        # set lb active
         lb_create_flow.add(database_tasks.MarkLBActiveInDB(
             name='some-flow-' + constants.MARK_LB_ACTIVE_INDB,
             requires=constants.LOADBALANCER))
+
+        #if listeners:
+        #    lb_create_flow.add(*self._create_listeners_flow())
 
         return lb_create_flow
 

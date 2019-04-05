@@ -11,20 +11,24 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
 from octavia_f5.common import constants
 from octavia_f5.restclient.as3exceptions import *
 import six
 import json
 
+
 class BaseDescription(object):
     def __init__(self, data):
-        data = data.copy()
-        if 'self' in data:
-             del data['self']
-        if 'kwargs' in data:
-            self.__dict__.update(data['kwargs'])
-            del data['kwargs']
-        self.__dict__.update(data)
+        for item in data:
+            if item == 'self':
+                continue
+            if item.startswith('_'):
+                continue
+            if item == 'kwargs':
+                self.__dict__.update(data['kwargs'])
+                continue
+            self.__dict__.update({item: data[item]})
 
     def require(self, key):
         if getattr(self, key, None) is None:
@@ -50,6 +54,7 @@ class BaseDescription(object):
         return json.dumps(self.to_dict(), sort_keys=True,
                           indent=4, separators=(',', ': '))
 
+
 class AS3(BaseDescription):
     ACTIONS = ['deploy', 'dry-run', 'patch', 'redeploy', 'retrieve', 'remove']
 
@@ -60,24 +65,24 @@ class AS3(BaseDescription):
         super(AS3, self).__init__(locals())
         setattr(self, 'class', 'AS3')
 
-    def setADC(self, adc):
+    def set_adc(self, adc):
         setattr(self, 'declaration', adc)
 
 
 class ADC(BaseDescription):
-    def __init__(self, schemaVersion='3.0.0', updateMode='selective', **kwargs):
+    def __init__(self, schemaVersion='3.0.0', updateMode='selective', **kwargs):  # noqa
         super(ADC, self).__init__(locals())
         setattr(self, 'class', 'ADC')
 
         self.require('id')
         self.require('label')
 
-    def setTenant(self, name, tenant):
+    def set_tenant(self, name, tenant):
         setattr(self, name, tenant)
 
-    def getOrCreateTenant(self, name):
+    def get_or_create_tenant(self, name):
         if not hasattr(self, name):
-            self.setTenant(name, Tenant())
+            self.set_tenant(name, Tenant())
 
         return getattr(self, name)
 
@@ -100,7 +105,7 @@ class Application(BaseDescription):
         setattr(self, 'class', 'Application')
 
     def set_service_main(self, service):
-        self.serviceMain = service
+        self.serviceMain = service  # noqa
 
     def add_pool(self, name, pool):
         if hasattr(self, name):
@@ -108,11 +113,11 @@ class Application(BaseDescription):
 
         setattr(self, name, pool)
 
-    def add_service(self, name):
+    def add_service(self, name, service):
         if hasattr(self, name):
-            return getattr(self, name)
-        else:
-            setattr(self, name, Service('Service_Generic'))
+            raise DuplicatedKeyException
+
+        setattr(self, name, service)
 
     def add_monitor(self, name, monitor):
         if hasattr(self, name):
@@ -123,28 +128,32 @@ class Application(BaseDescription):
 
 class Service(BaseDescription):
 
-    def __init__(self, servicetype, virtualAddresses = None,
-                 pool = None, virtualPort = None, **kwargs):
-        if servicetype not in constants.SUPPORTED_SERVICES:
+    def __init__(self, _servicetype, virtualAddresses=None,  # noqa
+                 virtualPort=None, **kwargs):  # noqa
+        if _servicetype not in constants.SUPPORTED_SERVICES:
             raise TypeNotSupportedException
 
         super(Service, self).__init__(locals())
-        setattr(self, 'class', servicetype)
+        setattr(self, 'class', _servicetype)
 
 
 class Pool(BaseDescription):
-    def __init__(self, enable=True, **kwargs):
+    def __init__(self, **kwargs):
         super(Pool, self).__init__(locals())
         setattr(self, 'class', 'Pool')
 
-        self.members = []
-        self.monitors = []
-
     def add_member(self, member):
-        self.members.append(member)
+        if not hasattr(self, 'members'):
+            setattr(self, 'members', [member])
+        else:
+            self.members.append(member)
 
     def add_monitor(self, monitor):
-        self.monitors.append(monitor)
+        if not hasattr(self, 'monitors'):
+            setattr(self, 'monitors', [monitor])
+        else:
+            self.members.append(monitor)
+
 
 class Member(BaseDescription):
     def __init__(self, enable=True, **kwargs):
@@ -158,4 +167,3 @@ class Monitor(BaseDescription):
     def __init__(self, **kwargs):
         super(Monitor, self).__init__(locals())
         setattr(self, 'class', 'Monitor')
-

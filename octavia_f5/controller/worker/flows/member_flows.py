@@ -17,7 +17,7 @@ from taskflow.patterns import linear_flow
 from taskflow.patterns import unordered_flow
 
 from octavia_f5.common import constants
-from octavia_f5.controller.worker.tasks import f5_driver_tasks
+from octavia_f5.controller.worker.tasks import f5_driver_tasks, f5_database_tasks
 from octavia.controller.worker.tasks import database_tasks
 from octavia.controller.worker.tasks import lifecycle_tasks
 from octavia.controller.worker.tasks import model_tasks
@@ -39,17 +39,24 @@ class MemberFlows(object):
                       constants.POOL]))
         create_member_flow.add(database_tasks.MarkMemberPendingCreateInDB(
             requires=constants.MEMBER))
-        create_member_flow.add(network_tasks.CalculateDelta(
-            requires=constants.LOADBALANCER,
-            provides=constants.DELTAS))
-        create_member_flow.add(network_tasks.HandleNetworkDeltas(
-            requires=constants.DELTAS, provides=constants.ADDED_PORTS))
+        #create_member_flow.add(network_tasks.CalculateDelta(
+        #    requires=constants.LOADBALANCER,
+        #    provides=constants.DELTAS))
+        #create_member_flow.add(network_tasks.HandleNetworkDeltas(
+        #    requires=constants.DELTAS, provides=constants.ADDED_PORTS))
         #create_member_flow.add(amphora_driver_tasks.AmphoraePostNetworkPlug(
         #    requires=(constants.LOADBALANCER, constants.ADDED_PORTS)
         #))
-        create_member_flow.add(f5_driver_tasks.ListenersUpdate(
-            requires=(constants.LOADBALANCER, constants.LISTENERS,
-                      constants.BIGIP)))
+        #create_member_flow.add(f5_driver_tasks.ListenersUpdate(
+        #    requires=(constants.LOADBALANCER, constants.LISTENERS,
+        #              constants.BIGIP)))
+        create_member_flow.add(f5_database_tasks.ReloadLoadBalancers(
+            requires=constants.LOADBALANCER,
+            provides=constants.LOADBALANCERS))
+        create_member_flow.add(f5_driver_tasks.TenantUpdate(
+            requires=[constants.PROJECT_ID,
+                      constants.LOADBALANCERS,
+                      constants.BIGIP]))
         create_member_flow.add(database_tasks.MarkMemberActiveInDB(
             requires=constants.MEMBER))
         create_member_flow.add(database_tasks.MarkPoolActiveInDB(

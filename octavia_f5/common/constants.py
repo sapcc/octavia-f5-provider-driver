@@ -14,12 +14,14 @@
 
 from octavia.common.constants import *
 
+PROJECT_ID = 'project_id'
+
 BIGIP = 'bigip'
 PREFIX_PROJECT = 'project_'
 PREFIX_LISTENER = 'listener_'
 PREFIX_POOL = 'pool_'
-PREFIX_HEALTH_MONITOR = 'health_monitor_'
-PREFIX_LOADBALANCER = 'loadbalancer_'
+PREFIX_HEALTH_MONITOR = 'hm_'
+PREFIX_LOADBALANCER = 'lb_'
 PREFIX_POLICY = 'l7policy_'
 
 APPLICATION_TCP = 'tcp'
@@ -42,3 +44,6 @@ SERVICE_L4 = 'Service_L4'
 SERVICE_GENERIC = 'Service_Generic'
 SUPPORTED_SERVICES = (SERVICE_TCP, SERVICE_UDP, SERVICE_HTTP,
                       SERVICE_HTTPS, SERVICE_L4, SERVICE_GENERIC)
+
+SEGMENT = 'segment'
+VIF_TYPE = 'f5'

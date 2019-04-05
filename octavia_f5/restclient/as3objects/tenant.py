@@ -11,25 +11,14 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
 from octavia_f5.common import constants
 
 
-def project(project_id):
-    return constants.PREFIX_PROJECT + \
-               project_id.replace('/', '')
+def get_name(project_id):
+    if project_id is not None:
+        name = constants.PREFIX_PROJECT + project_id.replace('/', '')
+    else:
+        name = "Common"
 
-def loadbalancer(loadbalancer_id):
-    return constants.PREFIX_LOADBALANCER + \
-        loadbalancer_id.replace('/', '')
-
-def listener(listener_id):
-    return constants.PREFIX_LISTENER + \
-        listener_id.replace('/', '')
-
-def pool(pool_id):
-    return constants.PREFIX_POOL + \
-           pool_id.replace('/', '')
-
-def monitor(monitor_id):
-    return constants.PREFIX_POOL + \
-           monitor_id.replace('/', '')
+    return name

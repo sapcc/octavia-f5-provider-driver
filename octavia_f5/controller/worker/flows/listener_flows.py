@@ -15,12 +15,13 @@
 from taskflow.patterns import linear_flow
 
 from octavia_f5.common import constants
-from octavia_f5.controller.worker.tasks import f5_driver_tasks
+from octavia_f5.controller.worker.tasks import f5_driver_tasks, f5_database_tasks
 from octavia.controller.worker.tasks import database_tasks
 from octavia.controller.worker.tasks import lifecycle_tasks
 from octavia.controller.worker.tasks import network_tasks
 from octavia.controller.worker.flows.listener_flows \
     import ListenerFlows as OctaviaListenerFlows
+
 
 class ListenerFlows(OctaviaListenerFlows):
 
@@ -32,15 +33,22 @@ class ListenerFlows(OctaviaListenerFlows):
         create_listener_flow = linear_flow.Flow(constants.CREATE_LISTENER_FLOW)
         create_listener_flow.add(lifecycle_tasks.ListenersToErrorOnRevertTask(
             requires=[constants.LOADBALANCER, constants.LISTENERS]))
-        create_listener_flow.add(f5_driver_tasks.ListenersUpdate(
-            requires=[constants.LOADBALANCER, constants.LISTENERS,
+
+        # get all load balancers of tenant and update f5
+        create_listener_flow.add(f5_database_tasks.ReloadLoadBalancers(
+            requires=constants.LOADBALANCER,
+            provides=constants.LOADBALANCERS))
+        create_listener_flow.add(f5_driver_tasks.TenantUpdate(
+            requires=[constants.PROJECT_ID,
+                      constants.LOADBALANCERS,
                       constants.BIGIP]))
+
         create_listener_flow.add(network_tasks.UpdateVIP(
             requires=constants.LOADBALANCER))
         create_listener_flow.add(database_tasks.
-            MarkLBAndListenersActiveInDB(
-            requires=[constants.LOADBALANCER,
-                      constants.LISTENERS]))
+                                 MarkLBAndListenersActiveInDB(
+                                     requires=[constants.LOADBALANCER,
+                                               constants.LISTENERS]))
         return create_listener_flow
 
     def get_create_all_listeners_flow(self):
@@ -72,7 +80,7 @@ class ListenerFlows(OctaviaListenerFlows):
         delete_listener_flow.add(lifecycle_tasks.ListenerToErrorOnRevertTask(
             requires=constants.LISTENER))
         delete_listener_flow.add(f5_driver_tasks.ListenerDelete(
-            requires=[constants.LOADBALANCER, constants.LISTENER]))
+            requires=[constants.LISTENER, constants.BIGIP]))
         delete_listener_flow.add(network_tasks.UpdateVIPForDelete(
             requires=constants.LOADBALANCER))
         delete_listener_flow.add(database_tasks.DeleteListenerInDB(
@@ -97,8 +105,8 @@ class ListenerFlows(OctaviaListenerFlows):
         update_listener_flow.add(database_tasks.UpdateListenerInDB(
             requires=[constants.LISTENER, constants.UPDATE_DICT]))
         update_listener_flow.add(database_tasks.
-                                 MarkLBAndListenersActiveInDB(
-                                     requires=[constants.LOADBALANCER,
-                                               constants.LISTENERS]))
+            MarkLBAndListenersActiveInDB(
+            requires=[constants.LOADBALANCER,
+                      constants.LISTENERS]))
 
         return update_listener_flow

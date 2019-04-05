@@ -20,7 +20,7 @@ from octavia.controller.worker.tasks import database_tasks
 from octavia.controller.worker.tasks import lifecycle_tasks
 from octavia.controller.worker.tasks import model_tasks
 from octavia_f5.common import constants
-from octavia_f5.controller.worker.tasks import f5_driver_tasks
+from octavia_f5.controller.worker.tasks import f5_driver_tasks, f5_database_tasks
 
 
 class PoolFlows(OctaviaPoolFlows):
@@ -37,11 +37,12 @@ class PoolFlows(OctaviaPoolFlows):
                       constants.LOADBALANCER]))
         create_pool_flow.add(database_tasks.MarkPoolPendingCreateInDB(
             requires=constants.POOL))
-        create_pool_flow.add(f5_driver_tasks.PoolCreate(
-            requires=[constants.LOADBALANCER,
-                      constants.POOL,
-                      constants.MEMBERS,
-                      constants.HEALTH_MONITOR,
+        create_pool_flow.add(f5_database_tasks.ReloadLoadBalancers(
+            requires=constants.LOADBALANCER,
+            provides=constants.LOADBALANCERS))
+        create_pool_flow.add(f5_driver_tasks.TenantUpdate(
+            requires=[constants.PROJECT_ID,
+                      constants.LOADBALANCERS,
                       constants.BIGIP]))
         create_pool_flow.add(database_tasks.MarkPoolActiveInDB(
             requires=constants.POOL))

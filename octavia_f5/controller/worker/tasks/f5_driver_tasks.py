@@ -17,10 +17,16 @@ import uuid
 from oslo_log import log as logging
 from taskflow import task
 
-import octavia_f5.restclient.as3mapper as map
 from octavia.controller.worker import task_utils as task_utilities
+from octavia_f5.common import constants
 from octavia_f5.restclient import as3convert
-from octavia_f5.restclient.as3classes import ADC
+from octavia_f5.restclient.as3classes import ADC, AS3, Application, Member
+from octavia_f5.restclient.as3objects import pool as m_pool
+from octavia_f5.restclient.as3objects import tenant as m_part
+from octavia_f5.restclient.as3objects import application as m_app
+from octavia_f5.restclient.as3objects import service as m_service
+from octavia_f5.restclient.as3objects import monitor as m_monitor
+from octavia_f5.restclient.as3objects import pool_member as m_member
 
 LOG = logging.getLogger(__name__)
 
@@ -28,49 +34,76 @@ LOG = logging.getLogger(__name__)
 class F5BaseTask(task.Task):
     """Base task to load drivers common to the tasks."""
 
+    def execute(self, *args, **kwargs):
+        pass
+
     def __init__(self, **kwargs):
         super(F5BaseTask, self).__init__(**kwargs)
         self.task_utils = task_utilities.TaskUtils()
         self.converter = as3convert.As3Convert()
 
 
-class ListenersUpdate(F5BaseTask):
-    """Task to update F5s with all specified listeners' configurations."""
+class TenantUpdate(F5BaseTask):
+    """Task to update F5s with all specified loadbalancers' configurations
+       of a tenant (project).
 
-    def execute(self, loadbalancer, listeners, bigip):
-        """Execute updates per listener for a f5_driver."""
+    """
 
-        decl = ADC(
+    def execute(self, project_id, loadbalancers, bigip):
+        decl = AS3(
+            persist=False,
+            action='deploy'
+        )
+        adc = ADC(
             id="urn:uuid:{}".format(uuid.uuid4()),
-            label="ListenerUpdate",
-            remark='update of ' + ', '.join([listener.id for
-                                             listener in listeners])
-        )
-        tenant = decl.getOrCreateTenant(
-            map.project(loadbalancer.project_id)
-        )
+            label="F5 Octavia Provider")
+        decl.set_adc(adc)
 
-        for listener in listeners:
-            app = self.converter.create_application(listener)
-            tenant.add_application(map.listener(listener.id), app)
+        tenant = adc.get_or_create_tenant(
+            m_part.get_name(project_id))
 
-        print(decl.to_json())
+        #for listener in listeners:
+        for loadbalancer in loadbalancers:
+            app = Application(constants.APPLICATION_GENERIC,
+                              label=loadbalancer.id)
 
-    def revert(self, loadbalancer, *args, **kwargs):
-        """Handle failed listeners updates."""
+            for listener in loadbalancer.listeners:
+                app.add_service(
+                    m_service.get_name(listener.id),
+                    m_service.get_service(listener)
+                )
 
-        LOG.warning("Reverting listeners updates.")
+            for pool in loadbalancer.pools:
+                as3pool = m_pool.get_pool(pool)
 
-        for listener in loadbalancer.listeners:
-            self.task_utils.mark_listener_prov_status_error(listener.id)
+                for member in pool.members:
+                    as3pool.add_member(
+                        m_member.get_member(member)
+                    )
 
-        return None
+                if pool.health_monitor:
+                    app.add_monitor(
+                        m_monitor.get_name(pool.health_monitor.id),
+                        m_monitor.get_monitor(pool.health_monitor)
+                    )
+
+                app.add_pool(
+                    m_pool.get_name(pool.id),
+                    as3pool
+                )
+
+            tenant.add_application(
+                m_app.get_name(loadbalancer.id),
+                app
+            )
+
+        bigip.post(json=decl.to_json())
 
 
 class ListenerDelete(F5BaseTask):
-    def execute(self, loadbalancer, listener, bigip):
-        virt_path = mapper.get_virtual_path(listener)
-        self.delete_resource(bigip.tm.ltm.virtuals.virtual, virt_path)
+    def execute(self, listener, bigip):
+        bigip.patch('remove', m_service.get_path(listener))
+        LOG.debug("Deleted the listener on the vip")
 
     def revert(self, listener, *args, **kwargs):
         """Handle a failed listener delete."""
@@ -80,11 +113,6 @@ class ListenerDelete(F5BaseTask):
 
 # Pools
 class PoolCreate(F5BaseTask):
-    def execute(self, pool, loadbalancer, members, health_monitor, bigip):
-        f5_pool = mapper.map_pool(pool, loadbalancer,
-                                  members, health_monitor)
-        self.delete_resource(bigip.tm.ltm.pools.pool, f5_pool)
-
     def revert(self, pool, *args, **kwargs):
         """Handle failed pool creation."""
         LOG.warning("Reverting pool creation.")
@@ -93,19 +121,10 @@ class PoolCreate(F5BaseTask):
 
 
 class PoolUpdate(F5BaseTask):
-    def execute(self, pool, loadbalancer, members, health_monitor, bigip):
-        pool_path = mapper.get_pool_path(loadbalancer, pool)
-        f5_pool = mapper.map_pool(pool, loadbalancer,
-                                  members, health_monitor)
-        self.update_resource(bigip.tm.ltm.pools.pool,
-                             pool_path, f5_pool)
+    pass
 
 
 class PoolDelete(F5BaseTask):
-    def execute(self, pool, loadbalancer, bigip):
-        pool_path = mapper.get_pool_path(loadbalancer, pool)
-        self.delete_resource(bigip.tm.ltm.pools.pool, pool_path)
-
     def revert(self, pool, *args, **kwargs):
         """Handle failed pool deletion."""
         LOG.warning("Reverting pool delete.")
@@ -119,8 +138,14 @@ class HealthMonitorUpdate(F5BaseTask):
 
 
 class HealthMonitorDelete(F5BaseTask):
-    def execute(self, pool, loadbalancer, listeners, health_monitor, bigip):
-        raise NotImplementedError
+    def execute(self, health_mon, bigip):
+        bigip.patch('remove', m_monitor.get_path(health_mon))
+        LOG.debug("Deleted the health monitor on the pool")
+
+    def revert(self, health_mon, *args, **kwargs):
+        """Handle a failed listener delete."""
+        LOG.warning("Reverting health monitor delete.")
+        self.task_utils.mark_health_mon_prov_status_error(health_mon.id)
 
 
 class L7RuleUpdate(F5BaseTask):
@@ -144,11 +169,11 @@ class L7PolicyUpdate(F5BaseTask):
 
 
 class L7PolicyDelete(F5BaseTask):
-    def execute(self, pool, loadbalancer, listeners, health_monitor, bigip):
-        policy_path = mapper.get_l7policy_path(loadbalancer, pool)
-        self.delete_resource(bigip.tm.ltm.policys.policy, policy_path)
+    pass
 
 
 class L7PolicyCreate(F5BaseTask):
     def execute(self, pool, loadbalancer, listeners, health_monitor, bigip):
         raise NotImplementedError
+
+

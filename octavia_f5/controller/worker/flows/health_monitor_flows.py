@@ -15,7 +15,7 @@
 from taskflow.patterns import linear_flow
 
 from octavia_f5.common import constants
-from octavia_f5.controller.worker.tasks import f5_driver_tasks
+from octavia_f5.controller.worker.tasks import f5_driver_tasks, f5_database_tasks
 from octavia.controller.worker.tasks import database_tasks
 from octavia.controller.worker.tasks import lifecycle_tasks
 from octavia.controller.worker.tasks import model_tasks
@@ -35,10 +35,16 @@ class HealthMonitorFlows(object):
                       constants.LOADBALANCER]))
         create_hm_flow.add(database_tasks.MarkHealthMonitorPendingCreateInDB(
             requires=constants.HEALTH_MON))
-        create_hm_flow.add(f5_driver_tasks.ListenersUpdate(
-            requires=[constants.LOADBALANCER,
-                      constants.LISTENERS,
+
+        # get all load balancers of tenant and update f5
+        create_hm_flow.add(f5_database_tasks.ReloadLoadBalancers(
+            requires=constants.LOADBALANCER,
+            provides=constants.LOADBALANCERS))
+        create_hm_flow.add(f5_driver_tasks.TenantUpdate(
+            requires=[constants.PROJECT_ID,
+                      constants.LOADBALANCERS,
                       constants.BIGIP]))
+
         create_hm_flow.add(database_tasks.MarkHealthMonitorActiveInDB(
             requires=constants.HEALTH_MON))
         create_hm_flow.add(database_tasks.MarkPoolActiveInDB(
@@ -63,10 +69,8 @@ class HealthMonitorFlows(object):
         delete_hm_flow.add(model_tasks.
                            DeleteModelObject(rebind={constants.OBJECT:
                                                      constants.HEALTH_MON}))
-        delete_hm_flow.add(f5_driver_tasks.ListenersUpdate(
-            requires=[constants.LOADBALANCER,
-                      constants.LISTENERS,
-                      constants.BIGIP]))
+        delete_hm_flow.add(f5_driver_tasks.HealthMonitorDelete(
+            requires=[constants.HEALTH_MON, constants.BIGIP]))
         delete_hm_flow.add(database_tasks.DeleteHealthMonitorInDB(
             requires=constants.HEALTH_MON))
         delete_hm_flow.add(database_tasks.DecrementHealthMonitorQuota(

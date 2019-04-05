@@ -50,7 +50,8 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
     def __init__(self):
         self.bigip = BigipAS3RestClient(CONF.f5_agent.bigip_url,
                                         CONF.f5_agent.bigip_verify,
-                                        CONF.f5_agent.bigip_token)
+                                        CONF.f5_agent.bigip_token,
+                                        CONF.f5_agent.network_segment_physical_network)
 
         self._health_monitor_flows = health_monitor_flows.HealthMonitorFlows()
         self._lb_flows = load_balancer_flows.LoadBalancerFlows()
@@ -67,20 +68,9 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
         self._pool_repo = repo.PoolRepository()
         self._l7policy_repo = repo.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
-
-        self._exclude_result_logging_tasks = (
-            constants.ROLE_STANDALONE + '-' +
-            constants.GENERATE_SERVER_PEM,
-            constants.ROLE_BACKUP + '-' +
-            constants.GENERATE_SERVER_PEM,
-            constants.ROLE_MASTER + '-' +
-            constants.GENERATE_SERVER_PEM,
-            constants.GENERATE_SERVER_PEM_TASK)
+        self._flavor_repo = repo.FlavorRepository()
 
         super(ControllerWorker, self).__init__()
-
-        # Todo: make configurable
-
 
     @tenacity.retry(
         retry=(
@@ -93,7 +83,6 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
 
         return repo.get(db_apis.get_session(), id=id)
 
-
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
         wait=tenacity.wait_incrementing(
@@ -102,7 +91,7 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
     def create_health_monitor(self, health_monitor_id):
         """Creates a health monitor.
 
-        :param pool_id: ID of the pool to create a health monitor on
+        :param health_monitor_id: ID of the health monitor
         :returns: None
         :raises NoResultFound: Unable to find the object
         """
@@ -124,6 +113,7 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
                    constants.POOL: pool,
                    constants.LISTENERS: listeners,
                    constants.LOADBALANCER: load_balancer,
+                   constants.PROJECT_ID: health_mon.project_id,
                    constants.BIGIP: self.bigip})
         with tf_logging.DynamicLoggingListener(create_hm_tf,
                                                log=LOG):
@@ -132,7 +122,7 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
     def delete_health_monitor(self, health_monitor_id):
         """Deletes a health monitor.
 
-        :param pool_id: ID of the pool to delete its health monitor
+        :param health_monitor_id: ID of this health monitor
         :returns: None
         :raises HMNotFound: The referenced health monitor was not found
         """
@@ -212,7 +202,8 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
 
         store = {constants.LOADBALANCER: listener.load_balancer,
                  constants.LISTENERS: [listener],
-                 constants.BIGIP: self.bigip}
+                 constants.BIGIP: self.bigip,
+                 constants.PROJECT_ID: listener.project_id}
 
         create_listener_tf = self._taskflow_load(self._listener_flows.
                                                  get_create_listener_flow(),
@@ -263,8 +254,8 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
 
         store = {constants.LISTENER: listener,
                  constants.LOADBALANCER: listener.load_balancer,
-                 constants.UPDATE_DICT:listener_updates,
-                 constants.LISTENERS:[listener],
+                 constants.UPDATE_DICT: listener_updates,
+                 constants.LISTENERS: [listener],
                  constants.BIGIP: self.bigip}
 
         update_listener_tf = self._taskflow_load(self._listener_flows.
@@ -278,7 +269,7 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def create_load_balancer(self, load_balancer_id):
+    def create_load_balancer(self, load_balancer_id, flavor=None):
         """Creates a load balancer by allocation a partition.
 
         :param load_balancer_id: ID of the load balancer to create
@@ -291,17 +282,17 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
                         '60 seconds.', 'load_balancer', load_balancer_id)
             raise db_exceptions.NoResultFound
 
-        store = {constants.LOADBALANCER: lb,
-                 constants.BIGIP: self.bigip,
+        store = {constants.BIGIP: self.bigip,
+                 constants.LOADBALANCER_ID: load_balancer_id,
                  constants.BUILD_TYPE_PRIORITY:
-                 constants.LB_CREATE_NORMAL_PRIORITY}
+                 constants.LB_CREATE_NORMAL_PRIORITY,
+                 constants.FLAVOR: flavor}
 
-        create_lb_flow = self._lb_flows.get_create_load_balancer_flow()
+        create_lb_flow = self._lb_flows.get_create_load_balancer_flow(
+            listeners=lb.listeners)
 
         create_lb_tf = self._taskflow_load(create_lb_flow, store=store)
-        with tf_logging.DynamicLoggingListener(
-                create_lb_tf, log=LOG,
-                hide_inputs_outputs_of=self._exclude_result_logging_tasks):
+        with tf_logging.DynamicLoggingListener(create_lb_tf, log=LOG):
             create_lb_tf.run()
 
     def delete_load_balancer(self, load_balancer_id, cascade=False):
@@ -386,7 +377,8 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
                  constants.LISTENERS: member.pool.listeners,
                  constants.LOADBALANCER: member.pool.load_balancer,
                  constants.POOL: member.pool,
-                 constants.BIGIP: self.bigip}
+                 constants.BIGIP: self.bigip,
+                 constants.PROJECT_ID: member.project_id}
 
         create_member_tf = self._taskflow_load(self._member_flows.
                                                get_create_member_flow(),
@@ -507,9 +499,8 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
         store = {constants.POOL: pool,
                  constants.LISTENERS: pool.listeners,
                  constants.LOADBALANCER: pool.load_balancer,
-                 constants.MEMBERS: pool.members,
                  constants.BIGIP: self.bigip,
-                 constants.HEALTH_MONITOR: pool.health_monitor}
+                 constants.PROJECT_ID: pool.project_id}
 
         create_pool_tf = self._taskflow_load(self._pool_flows.
                                              get_create_pool_flow(),

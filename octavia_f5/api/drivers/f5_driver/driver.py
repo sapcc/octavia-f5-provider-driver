@@ -16,8 +16,9 @@ import oslo_messaging as messaging
 from oslo_config import cfg
 from oslo_log import log as logging
 
-from octavia.api.drivers import exceptions
-from octavia.api.drivers import provider_base as driver_base
+from octavia_lib.api.drivers import data_models as driver_dm
+from octavia_lib.api.drivers import exceptions
+from octavia_lib.api.drivers import provider_base as driver_base
 from octavia.api.drivers import utils as driver_utils
 from octavia.common import constants as consts
 from octavia.common import data_models
@@ -61,6 +62,8 @@ class F5ProviderDriver(driver_base.ProviderDriver):
         LOG.debug('Provider %s, loadbalancer_create loadbalancer %s',
                   self.__class__.__name__, loadbalancer.loadbalancer_id)
 
+        if loadbalancer.flavor == driver_dm.Unset:
+            loadbalancer.flavor = None
         payload = {consts.LOAD_BALANCER_ID: loadbalancer.loadbalancer_id}
         self.client.cast({}, 'create_load_balancer', **payload)
 
