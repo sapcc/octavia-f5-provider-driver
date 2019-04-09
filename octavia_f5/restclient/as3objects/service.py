@@ -13,7 +13,7 @@
 # under the License.
 
 from octavia_f5.common import constants
-from octavia_f5.restclient.as3classes import Service
+from octavia_f5.restclient.as3classes import Service, Service_Generic_iRules
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import application as m_app
 
@@ -30,7 +30,7 @@ def get_path(listener):
             '/' + get_name(listener.id)
 
 
-def get_service(listener):
+def get_service(listener, irules):
     servicetype = constants.SERVICE_GENERIC
     if listener.protocol == constants.PROTOCOL_TCP:
         servicetype = constants.SERVICE_TCP
@@ -44,36 +44,23 @@ def get_service(listener):
     elif listener.protocol == constants.PROTOCOL_HTTPS:
         servicetype = constants.SERVICE_HTTPS
 
+    vip = listener.load_balancer.vip
+
     service_args = {
         '_servicetype': servicetype,
         'virtualPort': listener.protocol_port,
-        'virtualAddresses': ['1.2.3.4']  # TODO: port.ip
+        'virtualAddresses': [vip.ip_address]
     }
+
+    if listener.connection_limit > 0:
+        service_args['maxConnections'] = listener.connection_limit
 
     if listener.default_pool_id:
         service_args['pool'] = m_pool.get_name(listener.default_pool_id)
 
+    service_args['iRules'] = [
+        Service_Generic_iRules('/Common/' + rule) for
+        rule in irules
+    ]
+
     return Service(**service_args)
-"""
-    app = Application(constants.APPLICATION_GENERIC, label=listener.id)
-    app.add_service(m_virtual.get_path(listener.id), service)
-    for pool in listener.pools:
-        f5_pool = self._get_f5_pool(pool)
-        for member in pool.members:
-            f5_member = self._get_f5_member(member)
-            f5_pool.add_member(f5_member)
-
-        if pool.health_monitor:
-            (f5_hm_name, f5_hm_obj) = self.get_f5_monitor(
-                pool.health_monitor
-            )
-            if f5_hm_obj:
-                app.add_monitor(f5_hm_name, f5_hm_obj)
-                f5_pool.add_monitor({'use': f5_hm_name})
-            else:
-                f5_pool.add_monitor(f5_hm_name)
-
-        app.add_pool(m_pool.get_path(pool.id), f5_pool)
-
-    return app
-"""

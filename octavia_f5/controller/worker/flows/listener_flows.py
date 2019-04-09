@@ -33,8 +33,6 @@ class ListenerFlows(OctaviaListenerFlows):
         create_listener_flow = linear_flow.Flow(constants.CREATE_LISTENER_FLOW)
         create_listener_flow.add(lifecycle_tasks.ListenersToErrorOnRevertTask(
             requires=[constants.LOADBALANCER, constants.LISTENERS]))
-
-        # get all load balancers of tenant and update f5
         create_listener_flow.add(f5_database_tasks.ReloadLoadBalancers(
             requires=constants.LOADBALANCER,
             provides=constants.LOADBALANCERS))
@@ -42,7 +40,6 @@ class ListenerFlows(OctaviaListenerFlows):
             requires=[constants.PROJECT_ID,
                       constants.LOADBALANCERS,
                       constants.BIGIP]))
-
         create_listener_flow.add(network_tasks.UpdateVIP(
             requires=constants.LOADBALANCER))
         create_listener_flow.add(database_tasks.

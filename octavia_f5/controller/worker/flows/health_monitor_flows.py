@@ -35,8 +35,6 @@ class HealthMonitorFlows(object):
                       constants.LOADBALANCER]))
         create_hm_flow.add(database_tasks.MarkHealthMonitorPendingCreateInDB(
             requires=constants.HEALTH_MON))
-
-        # get all load balancers of tenant and update f5
         create_hm_flow.add(f5_database_tasks.ReloadLoadBalancers(
             requires=constants.LOADBALANCER,
             provides=constants.LOADBALANCERS))
@@ -44,7 +42,6 @@ class HealthMonitorFlows(object):
             requires=[constants.PROJECT_ID,
                       constants.LOADBALANCERS,
                       constants.BIGIP]))
-
         create_hm_flow.add(database_tasks.MarkHealthMonitorActiveInDB(
             requires=constants.HEALTH_MON))
         create_hm_flow.add(database_tasks.MarkPoolActiveInDB(

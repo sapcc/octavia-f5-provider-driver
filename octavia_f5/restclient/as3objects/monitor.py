@@ -33,6 +33,8 @@ def get_path(health_monitor):
 
 def get_monitor(health_monitor):
     args = dict()
+
+    # Standard Octavia monitor types
     if health_monitor.type == 'HTTP':
         args['monitorType'] = 'http'
     elif health_monitor.type == 'HTTPS':
@@ -46,21 +48,35 @@ def get_monitor(health_monitor):
     elif health_monitor.type == 'UDP-CONNECT':
         args['monitorType'] = 'udp'
 
+    # F5 specific monitory types
+    elif health_monitor.type == 'SIP':
+        args['monitorType'] = 'sip'
+    elif health_monitor.type == 'SMTP':
+        args['monitorType'] = 'smtp'
+    elif health_monitor.type == 'TCP-HALF_OPEN':
+        args['monitorType'] = 'tcp-half-open'
+    elif health_monitor.type == 'LDAP':
+        args['monitorType'] = 'ldap'
+    elif health_monitor.type == 'DNS':
+        args['monitorType'] = 'dns'
+        args['queryName'] = health_monitor.domain_name
+    # No Health monitor type available
+    else:
+        return {}
+
     if health_monitor.type == 'HTTP' or health_monitor.type == 'HTTPS':
+        send = "{} {} HTTP/{}\\r\\n".format(
+            health_monitor.http_method,
+            health_monitor.url_path,
+            health_monitor.http_version)
         if hasattr(health_monitor, 'domain_name'):
-            args['send'] = "{} {} HTTP/{}\\r\\nHost: {}\\r\\n\\r\\n".format(
-                health_monitor.http_method,
-                health_monitor.url_path,
-                health_monitor.http_version,
-                health_monitor.domain_name
-            )
+            send += "Host: {}\\r\\n\\r\\n".format(
+                health_monitor.domain_name)
         else:
-            args['send'] = "{} {} HTTP/{:1.1f}\\r\\n\\r\\n".format(
-                health_monitor.http_method,
-                health_monitor.url_path,
-                health_monitor.http_version
-            )
-        args["receive"] = _get_recv_text(health_monitor)
+            send += "\\r\\n"
+
+        args['send'] = send
+        args['receive'] = _get_recv_text(health_monitor)
 
     if hasattr(health_monitor, 'delay'):
         args["interval"] = health_monitor.delay

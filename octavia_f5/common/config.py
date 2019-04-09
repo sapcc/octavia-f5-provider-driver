@@ -32,6 +32,8 @@ f5_agent_opts = [
                 help=_('Verify AS3 endpoint TLS cert.')),
     cfg.StrOpt('bigip_url',
                help=_('The URL to the bigip host device with AS3 endpoint')),
+    cfg.StrOpt('esd_dir',
+               help=_('Directory of the esd files'))
 ]
 
 # Register the configuration options

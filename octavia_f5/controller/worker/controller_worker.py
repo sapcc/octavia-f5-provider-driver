@@ -12,6 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 #
+import os
+
 import tenacity
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -30,6 +32,7 @@ from octavia_f5.controller.worker.flows import load_balancer_flows
 from octavia_f5.controller.worker.flows import member_flows
 from octavia_f5.controller.worker.flows import pool_flows
 from octavia_f5.restclient.as3restclient import BigipAS3RestClient
+from octavia_f5.utils import esd_repo
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -48,10 +51,12 @@ def _is_provisioning_status_pending_update(lb_obj):
 class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
 
     def __init__(self):
+        self._esd = esd_repo.EsdRepository()
         self.bigip = BigipAS3RestClient(CONF.f5_agent.bigip_url,
                                         CONF.f5_agent.bigip_verify,
                                         CONF.f5_agent.bigip_token,
-                                        CONF.f5_agent.network_segment_physical_network)
+                                        CONF.f5_agent.network_segment_physical_network,
+                                        self._esd)
 
         self._health_monitor_flows = health_monitor_flows.HealthMonitorFlows()
         self._lb_flows = load_balancer_flows.LoadBalancerFlows()
@@ -595,7 +600,8 @@ class ControllerWorker(base_taskflow.BaseTaskFlowEngine):
             store={constants.L7POLICY: l7policy,
                    constants.LISTENERS: listeners,
                    constants.LOADBALANCER: load_balancer,
-                   constants.BIGIP: self.bigip})
+                   constants.BIGIP: self.bigip,
+                   constants.PROJECT_ID: l7policy.project_id})
         with tf_logging.DynamicLoggingListener(create_l7policy_tf,
                                                log=LOG):
             create_l7policy_tf.run()

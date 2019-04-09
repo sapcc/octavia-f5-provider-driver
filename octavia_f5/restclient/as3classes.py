@@ -167,3 +167,17 @@ class Monitor(BaseDescription):
     def __init__(self, **kwargs):
         super(Monitor, self).__init__(locals())
         setattr(self, 'class', 'Monitor')
+
+
+class Service_Generic_iRules(BaseDescription):
+    def __init__(self, bigip):
+        super(Service_Generic_iRules, self).__init__(locals())
+
+        self.require('bigip')
+
+
+class IRule(BaseDescription):
+    def __init__(self, iRule, **kwargs):
+        super(IRule, self).__init__(locals())
+        setattr(self, 'class', 'iRule')
+        setattr(self, 'iRule', iRule)

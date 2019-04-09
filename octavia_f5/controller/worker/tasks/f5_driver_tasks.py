@@ -19,7 +19,6 @@ from taskflow import task
 
 from octavia.controller.worker import task_utils as task_utilities
 from octavia_f5.common import constants
-from octavia_f5.restclient import as3convert
 from octavia_f5.restclient.as3classes import ADC, AS3, Application, Member
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import tenant as m_part
@@ -27,6 +26,7 @@ from octavia_f5.restclient.as3objects import application as m_app
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import monitor as m_monitor
 from octavia_f5.restclient.as3objects import pool_member as m_member
+from octavia_f5.restclient.as3objects import irule as m_irule
 
 LOG = logging.getLogger(__name__)
 
@@ -40,7 +40,6 @@ class F5BaseTask(task.Task):
     def __init__(self, **kwargs):
         super(F5BaseTask, self).__init__(**kwargs)
         self.task_utils = task_utilities.TaskUtils()
-        self.converter = as3convert.As3Convert()
 
 
 class TenantUpdate(F5BaseTask):
@@ -52,51 +51,54 @@ class TenantUpdate(F5BaseTask):
     def execute(self, project_id, loadbalancers, bigip):
         decl = AS3(
             persist=False,
-            action='deploy'
-        )
+            action='deploy')
         adc = ADC(
             id="urn:uuid:{}".format(uuid.uuid4()),
-            label="F5 Octavia Provider")
+            label="F5 BigIP Octavia Provider")
         decl.set_adc(adc)
 
         tenant = adc.get_or_create_tenant(
             m_part.get_name(project_id))
 
-        #for listener in listeners:
         for loadbalancer in loadbalancers:
+            lb_irules = []
+
+            # Create generic application
             app = Application(constants.APPLICATION_GENERIC,
                               label=loadbalancer.id)
 
+            # attach listeners with iRules
             for listener in loadbalancer.listeners:
+                irules = m_irule.get_irule_names(
+                    listener.l7policies,
+                    bigip.esd)
                 app.add_service(
                     m_service.get_name(listener.id),
-                    m_service.get_service(listener)
-                )
+                    m_service.get_service(listener,
+                                          irules))
 
+            # attach pools
             for pool in loadbalancer.pools:
                 as3pool = m_pool.get_pool(pool)
 
                 for member in pool.members:
                     as3pool.add_member(
-                        m_member.get_member(member)
-                    )
+                        m_member.get_member(member))
 
                 if pool.health_monitor:
                     app.add_monitor(
                         m_monitor.get_name(pool.health_monitor.id),
-                        m_monitor.get_monitor(pool.health_monitor)
-                    )
+                        m_monitor.get_monitor(pool.health_monitor))
 
                 app.add_pool(
                     m_pool.get_name(pool.id),
-                    as3pool
-                )
+                    as3pool)
 
             tenant.add_application(
                 m_app.get_name(loadbalancer.id),
-                app
-            )
+                app)
 
+        # send to bigip
         bigip.post(json=decl.to_json())
 
 
@@ -158,11 +160,6 @@ class L7RuleDelete(F5BaseTask):
         raise NotImplementedError
 
 
-class L7RuleCreate(F5BaseTask):
-    def execute(self, pool, loadbalancer, listeners, health_monitor, bigip):
-        raise NotImplementedError
-
-
 class L7PolicyUpdate(F5BaseTask):
     def execute(self, pool, loadbalancer, listeners, health_monitor, bigip):
         raise NotImplementedError
@@ -170,10 +167,5 @@ class L7PolicyUpdate(F5BaseTask):
 
 class L7PolicyDelete(F5BaseTask):
     pass
-
-
-class L7PolicyCreate(F5BaseTask):
-    def execute(self, pool, loadbalancer, listeners, health_monitor, bigip):
-        raise NotImplementedError
 
 

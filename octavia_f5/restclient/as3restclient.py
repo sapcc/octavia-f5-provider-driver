@@ -24,7 +24,7 @@ LOG = logging.getLogger(__name__)
 
 class BigipAS3RestClient(object):
     def __init__(self, bigip_url, enable_verify=True, enable_token=True,
-                 physical_network=None):
+                 physical_network=None, esd=None):
         self.bigip = parse.urlsplit(bigip_url, allow_fragments=False)
         self.enable_verify = enable_verify
         self.enable_token = enable_token
@@ -32,6 +32,7 @@ class BigipAS3RestClient(object):
         self.s = self._create_session()
         self.reauthorize()
         self.physical_network = physical_network
+        self.esd = esd
 
     def reauthorize(self):
         # Login

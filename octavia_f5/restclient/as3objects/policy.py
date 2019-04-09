@@ -19,7 +19,7 @@ from octavia_f5.utils.mapper import partition as mapper
 LOG = logging.getLogger(__name__)
 
 
-def _get_l7policy_name(policy):
+def get_name(policy):
     return constants.PREFIX_POLICY + policy.id
 
 

@@ -15,7 +15,7 @@
 from taskflow.patterns import linear_flow
 
 from octavia_f5.common import constants
-from octavia_f5.controller.worker.tasks import f5_driver_tasks
+from octavia_f5.controller.worker.tasks import f5_driver_tasks, f5_database_tasks
 from octavia.controller.worker.tasks import database_tasks
 from octavia.controller.worker.tasks import lifecycle_tasks
 from octavia.controller.worker.tasks import model_tasks
@@ -35,10 +35,12 @@ class L7RuleFlows(object):
                       constants.LOADBALANCER]))
         create_l7rule_flow.add(database_tasks.MarkL7RulePendingCreateInDB(
             requires=constants.L7RULE))
-        create_l7rule_flow.add(f5_driver_tasks.L7RuleCreate(
-            requires=[constants.L7RULE,
-                      constants.LOADBALANCER,
-                      constants.LISTENERS,
+        create_l7rule_flow.add(f5_database_tasks.ReloadLoadBalancers(
+            requires=constants.LOADBALANCER,
+            provides=constants.LOADBALANCERS))
+        create_l7rule_flow.add(f5_driver_tasks.TenantUpdate(
+            requires=[constants.PROJECT_ID,
+                      constants.LOADBALANCERS,
                       constants.BIGIP]))
         create_l7rule_flow.add(database_tasks.MarkL7RuleActiveInDB(
             requires=constants.L7RULE))

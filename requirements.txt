@@ -1,3 +1,6 @@
+sqlalchemy
+oslo.db
+alembic
 taskflow
 mock>=2.0.0 # BSD
 octavia>=3.0.0 # Apache-2.0
