@@ -169,11 +169,19 @@ class Monitor(BaseDescription):
         setattr(self, 'class', 'Monitor')
 
 
-class Service_Generic_iRules(BaseDescription):
+class BigIP(BaseDescription):
     def __init__(self, bigip):
-        super(Service_Generic_iRules, self).__init__(locals())
+        super(BigIP, self).__init__(locals())
 
         self.require('bigip')
+
+
+class Service_Generic_profileTCP(BaseDescription):
+    def __init__(self, ingress, egress):
+        super(Service_Generic_profileTCP, self).__init__(locals())
+
+        self.require('ingress')
+        self.require('egress')
 
 
 class IRule(BaseDescription):
@@ -181,3 +189,9 @@ class IRule(BaseDescription):
         super(IRule, self).__init__(locals())
         setattr(self, 'class', 'iRule')
         setattr(self, 'iRule', iRule)
+
+
+class Persist(BaseDescription):
+    def __init__(self, **kwargs):
+        super(Persist, self).__init__(locals())
+        setattr(self, 'class', 'Persist')

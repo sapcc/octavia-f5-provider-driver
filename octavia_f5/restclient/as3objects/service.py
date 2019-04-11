@@ -12,8 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from octavia_f5.common import constants
-from octavia_f5.restclient.as3classes import Service, Service_Generic_iRules
+from octavia_f5.common import constants as con
+from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Persist
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import application as m_app
 
@@ -21,7 +21,7 @@ from octavia_f5.restclient.as3objects import application as m_app
 
 
 def get_name(listener_id):
-    return constants.PREFIX_LISTENER + \
+    return con.PREFIX_LISTENER + \
            listener_id.replace('/', '').replace('-', '')
 
 
@@ -30,19 +30,22 @@ def get_path(listener):
             '/' + get_name(listener.id)
 
 
-def get_service(listener, irules):
-    servicetype = constants.SERVICE_GENERIC
-    if listener.protocol == constants.PROTOCOL_TCP:
-        servicetype = constants.SERVICE_TCP
+def get_service(listener, esd):
+    # Determine service type
+    servicetype = con.SERVICE_GENERIC
+    if listener.protocol == con.PROTOCOL_TCP:
+        # Use fastl4 for TCP
+        servicetype = con.SERVICE_L4
+        # servicetype = con.SERVICE_TCP
     # UDP
-    elif listener.protocol == constants.PROTOCOL_UDP:
-        servicetype = constants.SERVICE_UDP
+    elif listener.protocol == con.PROTOCOL_UDP:
+        servicetype = con.SERVICE_UDP
     # HTTP
-    elif listener.protocol == constants.PROTOCOL_HTTP:
-        servicetype = constants.SERVICE_HTTP
+    elif listener.protocol == con.PROTOCOL_HTTP:
+        servicetype = con.SERVICE_HTTP
     # HTTPS
-    elif listener.protocol == constants.PROTOCOL_HTTPS:
-        servicetype = constants.SERVICE_HTTPS
+    elif listener.protocol == con.PROTOCOL_HTTPS:
+        servicetype = con.SERVICE_HTTPS
 
     vip = listener.load_balancer.vip
 
@@ -55,12 +58,61 @@ def get_service(listener, irules):
     if listener.connection_limit > 0:
         service_args['maxConnections'] = listener.connection_limit
 
+    # Add default pool and session persistence
     if listener.default_pool_id:
-        service_args['pool'] = m_pool.get_name(listener.default_pool_id)
+        default_pool = m_pool.get_name(listener.default_pool_id)
+        persistence = default_pool.session_persistence
+        lb_algorithm = listener.load_balancer.lb_algorith
+        service_args['pool'] = default_pool
 
-    service_args['iRules'] = [
-        Service_Generic_iRules('/Common/' + rule) for
-        rule in irules
-    ]
+        # lb algorithm rules them all
+        if lb_algorithm == 'SOURCE_IP':
+            service_args['persistenceMethods'] = ['source-address']
+        elif persistence.type == 'HTTP_COOKIE':
+            service_args['persistenceMethods'] = ['cookie']
+        elif persistence.type == 'SOURCE_IP':
+            # TODO: add persistence_timeout and/or persistence_granularity
+            service_args['persistenceMethods'] = ['source-address']
+        elif persistence.type == 'APP_COOKIE':
+            service_args['persistenceMethods'] = Persist(
+                persistenceMethod='cookie',
+                cookieName=persistence.cookie_name
+            )
+
+    irules = esd.get('lbaas_irule', None)
+    if irules:
+        service_args['iRules'] = [
+            BigIP('/Common/' + rule) for
+            rule in irules
+        ]
+
+    # client / server tcp profiles
+    if servicetype in [con.SERVICE_HTTP, con.SERVICE_HTTPS,
+                       con.SERVICE_TCP]:
+        ctcp = esd.get('lbaas_ctcp', None)
+        stcp = esd.get('lbaas_stcp', None)
+        if stcp and ctcp:
+            # Server and Clientside profile defined
+            service_args['profileTCP'] = Service_Generic_profileTCP(
+                ingress=BigIP('/Common/' + ctcp),
+                egress=BigIP('/Common/' + stcp)
+            )
+        elif ctcp:
+            service_args['profileTCP'] = BigIP('/Common/' + ctcp)
+        else:
+            service_args['profileTCP'] = 'normal'
+
+    if servicetype in [con.SERVICE_HTTP, con.SERVICE_HTTPS]:
+        # OneConnect (Multiplex) Profile
+        oneconnect = esd.get('lbaas_one_connect', None)
+        if oneconnect:
+            service_args['profileMultiplex'] = BigIP(
+                '/Common/' + oneconnect)
+
+        # HTTP Compression Profile
+        compression = esd.get('lbaas_http_compression', None)
+        if compression:
+            service_args['profileHTTPCompression'] = BigIP(
+                '/Common/' + compression)
 
     return Service(**service_args)

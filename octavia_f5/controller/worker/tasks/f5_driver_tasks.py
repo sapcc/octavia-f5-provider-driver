@@ -67,15 +67,19 @@ class TenantUpdate(F5BaseTask):
             app = Application(constants.APPLICATION_GENERIC,
                               label=loadbalancer.id)
 
-            # attach listeners with iRules
+            # attach listeners with ESDs
             for listener in loadbalancer.listeners:
-                irules = m_irule.get_irule_names(
-                    listener.l7policies,
-                    bigip.esd)
+
+                # Process ESDs
+                merged_esd = {}
+                for l7policy in listener.l7policies:
+                    merged_esd.update(
+                        bigip.esd.get_esd(l7policy.name))
+
                 app.add_service(
                     m_service.get_name(listener.id),
                     m_service.get_service(listener,
-                                          irules))
+                                          merged_esd))
 
             # attach pools
             for pool in loadbalancer.pools:

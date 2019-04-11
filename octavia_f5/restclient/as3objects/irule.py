@@ -19,11 +19,3 @@ def get_irule(name):
         BigIP('/Common/' + name))
 
 
-def get_irule_names(l7policies, esd_repo):
-    irules = []
-    for l7policy in l7policies:
-        esd = esd_repo.get_esd(l7policy.name)
-        if esd:
-            irules.extend(esd.get('lbaas_irule', []))
-
-    return irules
