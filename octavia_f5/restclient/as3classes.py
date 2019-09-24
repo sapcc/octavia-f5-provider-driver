@@ -125,6 +125,15 @@ class Application(BaseDescription):
 
         setattr(self, name, monitor)
 
+    def add_policy_endpoint(self, name, policy_endpoint):
+        if hasattr(self, name):
+            raise DuplicatedKeyException
+
+        if not hasattr(self, 'policyEndpoint'):
+            setattr(self, 'policyEndpoint', [policy_endpoint])
+        else:
+            self.policyEndpoint.append(policy_endpoint)
+
 
 class Service(BaseDescription):
 
@@ -195,3 +204,42 @@ class Persist(BaseDescription):
     def __init__(self, **kwargs):
         super(Persist, self).__init__(locals())
         setattr(self, 'class', 'Persist')
+
+
+class Endpoint_Policy(BaseDescription):
+    STRATEGY = ['all-match', 'best-match', 'first-match', 'custom']
+
+    def __init__(self, strategy, **kwargs):
+        super(Endpoint_Policy, self).__init__(locals())
+        setattr(self, 'class', 'Endpoint_Policy')
+        if strategy not in self.STRATEGY:
+            raise TypeNotSupportedException
+
+
+class Endpoint_Policy_Rule(BaseDescription):
+    def __init__(self, **kwargs):
+        super(Endpoint_Policy_Rule, self).__init__(locals())
+
+
+class Policy_Condition(BaseDescription):
+    def __init__(self, **kwargs):
+        super(Policy_Condition, self).__init__(locals())
+
+
+class Policy_Action(BaseDescription):
+    def __init__(self, **kwargs):
+        super(Policy_Action, self).__init__(locals())
+
+
+class Policy_Compare_String(BaseDescription):
+    TYPE = ['httpHeader', 'httpUri', 'httpCookie', 'sslExtension']
+
+    def __init__(self, type, values, operand='equals', case_sensitive=False):
+        super(Policy_Compare_String, self).__init__(locals())
+        if case_sensitive:
+            setattr(self, 'caseSensitive', 'true')
+        else:
+            setattr(self, 'caseSensitive', 'false')
+
+        if type not in self.TYPE:
+            raise TypeNotSupportedException

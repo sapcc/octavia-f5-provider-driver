@@ -12,7 +12,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from octavia.common.constants import *
+from octavia_lib.common.constants import *
 
 PROJECT_ID = 'project_id'
 
@@ -48,3 +48,4 @@ SUPPORTED_SERVICES = (SERVICE_TCP, SERVICE_UDP, SERVICE_HTTP,
 SEGMENT = 'segment'
 VIF_TYPE = 'f5'
 ESD = 'esd'
+RPC_NAMESPACE_CONTROLLER_AGENT = 'f5controller'

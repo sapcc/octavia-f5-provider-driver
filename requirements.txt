@@ -1,3 +1,5 @@
+tenacity
+stevedore
 sqlalchemy
 oslo.db
 alembic

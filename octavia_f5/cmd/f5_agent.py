@@ -12,13 +12,30 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from oslo_config import cfg
-from oslo_log import log as logging
-from taskflow.patterns import linear_flow
+import sys
 
-from octavia.common import constants
-from octavia.controller.worker.tasks import lifecycle_tasks
-from octavia.controller.worker.tasks import database_tasks
+import cotyledon
+from cotyledon import oslo_config_glue
+from oslo_config import cfg
+from oslo_log import log
+
+from octavia_f5.common import config
+from octavia_f5.controller.f5service import F5Service
 
 CONF = cfg.CONF
-LOG = logging.getLogger(__name__)
+
+def main():
+    argv = sys.argv or []
+    config.init(argv[1:])
+    log.set_defaults()
+    config.setup_logging(CONF)
+
+    sm = cotyledon.ServiceManager()
+    sm.add(F5Service, workers=CONF.controller_worker.workers,
+           args=(CONF,))
+    oslo_config_glue.setup(sm, CONF, reload_method="mutate")
+    sm.run()
+
+
+if __name__ == "__main__":
+    main()

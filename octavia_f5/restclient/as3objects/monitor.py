@@ -123,13 +123,11 @@ def _get_recv_text(healthmonitor):
                     healthmonitor.expected_codes)
         except Exception as exc:
             LOG.error(
-                "invalid monitor: %s, expected_codes %s, setting to 200"
-                % (exc, healthmonitor.expected_codes))
-            recv_text = "HTTP/{:1.1f} 200".format(
-                    healthmonitor.http_version)
+                "invalid monitor expected_codes={}, http_version={}, defaulting to 'HTTP/1.0 200': {}".format(
+                healthmonitor.expected_codes, healthmonitor.http_version, exc))
+            recv_text = "HTTP/1.0 200"
     else:
-        recv_text = "HTTP/{:1.1f} 200".format(
-                    healthmonitor.http_version)
+        recv_text = "HTTP/1.0 200"
 
     return recv_text
 

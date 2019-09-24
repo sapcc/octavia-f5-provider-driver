@@ -74,46 +74,43 @@ class Condition(object):
 class Rule(object):
     """Describes a single rule for a policy."""
 
-    def __init__(self, policy, service, partition, env_prefix):
+    def __init__(self, policy):
         self._set_name(policy)
         self.ordinal = policy['position']
         self.actions = []
         self.conditions = []
         self._adapt_rule_to_conditions_and_actions(
-            policy, service, partition, env_prefix)
+            policy)
 
     def _adapt_rule_to_conditions_and_actions(
-            self, policy, service, partition, env_prefix):
+            self, policy):
         """Adapt OpenStack rules into conditions and actions."""
-        for idx, os_rule_dict in enumerate(policy['rules']):
-            os_rule = self._get_l7rule(os_rule_dict['id'], service)
-            if os_rule['provisioning_status'] != 'PENDING_DELETE' and \
-               os_rule['admin_state_up']:
+        for idx, os_rule_dict in enumerate(policy.l7rules):
+            os_rule = self._get_l7rule(os_rule_dict.id)
+            if os_rule.enabled:
                 cond = Condition(os_rule, str(idx))
                 self.conditions.append(cond.__dict__)
-        act_type, act_val = self._get_action_and_value(policy['id'], service)
-        action = Action(act_type, '0', partition, env_prefix, act_val)
+        act_type, act_val = self._get_action_and_value(policy.id)
+        action = Action(act_type, '0', act_val)
         self.actions.append(action.__dict__)
 
-    def _get_l7rule(self, rule_id, service):
+    def _get_l7rule(self, rule_id, l7policy):
         """Get rule dict from service list."""
-        for rule in service['l7rules']:
-            if rule['id'] == rule_id:
+        for rule in l7policy.l7rules:
+            if rule.id == rule_id:
                 return rule
 
     def _set_name(self, policy):
         """Set name of rule to something intelligent."""
-        name = ''
-        if not policy['name']:
-            name = policy['action'].lower()
-            name += '_' + str(policy['position'])
+        if not policy.name:
+            self.name = policy.action.lower()
+            self.name += '_' + str(policy.position)
         else:
-            name = policy['name']
-        self.name = name
+            self.name = policy.name
 
-    def _get_action_and_value(self, policy_id, service):
+    def _get_action_and_value(self, policy_id, listener):
         """Get the action and action value associated with a policy."""
-        for pol in service['l7policies']:
+        for pol in listener.l7policies:
             if pol['id'] == policy_id:
                 action = pol['action']
                 action_val = None
@@ -127,67 +124,66 @@ class Rule(object):
         raise NoActionFoundForPolicy(msg)
 
 
-class L7PolicyServiceAdapter(ServiceModelAdapter):
-    """Map OpenStack policies and rules to policy and rules on device."""
-    def _adapt_policies_to_rules(self):
-        """OS Policies are translated into Rules on the device."""
-        for policy in self.service['l7policies']:
-            if policy['provisioning_status'] != 'PENDING_DELETE' and \
-               policy['admin_state_up']:
-                bigip_rule = Rule(
-                    policy, self.service, self.folder, self.prefix)
-                self.policy_dict['rules'].append(bigip_rule.__dict__)
-        if not self.policy_dict['rules']:
-            msg = 'All policies were in a PENDING_DELETE or admin_state ' \
-                'DOWN.  Deleting wrapper_policy.'
-            raise PolicyHasNoRules(msg)
-        self._check_if_adapted_rules_empty()
 
-    def _check_if_adapted_rules_empty(self):
-        """Delete wrapper policy if all rules in PENDING_DELETE state."""
-        delete_wrapper_policy = True
-        for os_rule in self.policy_dict['rules']:
-            if os_rule['conditions']:
-                delete_wrapper_policy = False
-                break
-        if delete_wrapper_policy:
-            msg = 'All rules were in a PENDING_DELETE state. Deleting ' \
-                'wrapper_policy.'
-            raise PolicyHasNoRules(msg)
+"""Map OpenStack policies and rules to policy and rules on device."""
+def _adapt_policies_to_rules(listener):
+    """OS Policies are translated into Rules on the device."""
+    policy_dict = {}
+    for policy in listener.l7policies:
+        if not policy.enabled:
+            continue
 
-    def _adapt_policy(self):
-        """Setup the wrapper policy, which will contain rules."""
-        self.policy_dict = {}
-        self.policy_dict['name'] = 'wrapper_policy_' + self.listener
-        self.policy_dict['partition'] = self.folder
+        bigip_rule = Rule(policy)
+        policy_dict['rules'].append(bigip_rule.__dict__)
+    if not policy_dict['rules']:
+        msg = 'All policies were in a PENDING_DELETE or admin_state ' \
+            'DOWN.  Deleting wrapper_policy.'
+        raise PolicyHasNoRules(msg)
+    _check_if_adapted_rules_empty()
 
-        self.policy_dict['strategy'] = 'first-match'
-        self.policy_dict['rules'] = list()
-        self.policy_dict['legacy'] = True
-        self.policy_dict['requires'] = ['http']
-        self.policy_dict['controls'] = ['forwarding']
 
-        if not self.service['l7rules']:
-            msg = 'No Rules given to implement. A Policy cannot be attached ' \
-                'to a Virtual until it has one or more Rules.'
-            raise PolicyHasNoRules(msg)
-        self._adapt_policies_to_rules()
+def _check_if_adapted_rules_empty():
+    policy_dict = {}
+    """Delete wrapper policy if all rules in PENDING_DELETE state."""
+    delete_wrapper_policy = True
+    for os_rule in policy_dict['rules']:
+        if os_rule['conditions']:
+            delete_wrapper_policy = False
+            break
+    if delete_wrapper_policy:
+        msg = 'All rules were in a PENDING_DELETE state. Deleting ' \
+            'wrapper_policy.'
+        raise PolicyHasNoRules(msg)
 
-    def translate(self, service):
 
-        self.service = service
-        self.folder = self.get_folder_name(
-            self.service['l7policies'][0]['tenant_id'])
-        self.listener = \
-            self.service['l7policies'][0]['listener_id']
-        try:
-            self._adapt_policy()
-        except (PolicyHasNoRules, NoActionFoundForPolicy) as error:
-            LOG.debug(error.message)
-            self.policy_dict['rules'] = list()
+def _adapt_policy(listener):
+    """Setup the wrapper policy, which will contain rules."""
+    policy_dict = {}
+    policy_dict['name'] = 'wrapper_policy_' + listener.id
 
-        return self.policy_dict
+    policy_dict['strategy'] = 'first-match'
+    policy_dict['rules'] = list()
+    policy_dict['legacy'] = True
+    policy_dict['requires'] = ['http']
+    policy_dict['controls'] = ['forwarding']
 
-    def translate_name(self, l7policy):
-        return {'name': 'wrapper_policy',
-                'partition': self.get_folder_name(l7policy['tenant_id'])}
+    l7rules = sum([len(l7policy.l7rules) for
+                   l7policy in listener.l7policies])
+    if not l7rules:
+        msg = 'No Rules given to implement. A Policy cannot be attached ' \
+            'to a Virtual until it has one or more Rules.'
+        raise PolicyHasNoRules(msg)
+    _adapt_policies_to_rules(listener)
+
+def translate(listener):
+    policy_dict = {}
+    try:
+        _adapt_policy(listener)
+    except (PolicyHasNoRules, NoActionFoundForPolicy) as error:
+        LOG.debug(error.message)
+        policy_dict['rules'] = list()
+
+    return policy_dict
+
+def translate_name(l7policy):
+    return {'name': 'wrapper_policy'}

@@ -13,9 +13,12 @@
 # under the License.
 
 from octavia_f5.common import constants as con
+from oslo_config import cfg
 from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Persist
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import application as m_app
+
+CONF = cfg.CONF
 
 """ Maps listener to AS3 service """
 
@@ -30,55 +33,8 @@ def get_path(listener):
             '/' + get_name(listener.id)
 
 
-def get_service(listener, esd):
-    # Determine service type
-    servicetype = con.SERVICE_GENERIC
-    if listener.protocol == con.PROTOCOL_TCP:
-        # Use fastl4 for TCP
-        servicetype = con.SERVICE_L4
-        # servicetype = con.SERVICE_TCP
-    # UDP
-    elif listener.protocol == con.PROTOCOL_UDP:
-        servicetype = con.SERVICE_UDP
-    # HTTP
-    elif listener.protocol == con.PROTOCOL_HTTP:
-        servicetype = con.SERVICE_HTTP
-    # HTTPS
-    elif listener.protocol == con.PROTOCOL_HTTPS:
-        servicetype = con.SERVICE_HTTPS
-
-    vip = listener.load_balancer.vip
-
-    service_args = {
-        '_servicetype': servicetype,
-        'virtualPort': listener.protocol_port,
-        'virtualAddresses': [vip.ip_address]
-    }
-
-    if listener.connection_limit > 0:
-        service_args['maxConnections'] = listener.connection_limit
-
-    # Add default pool and session persistence
-    if listener.default_pool_id:
-        default_pool = m_pool.get_name(listener.default_pool_id)
-        persistence = default_pool.session_persistence
-        lb_algorithm = listener.load_balancer.lb_algorith
-        service_args['pool'] = default_pool
-
-        # lb algorithm rules them all
-        if lb_algorithm == 'SOURCE_IP':
-            service_args['persistenceMethods'] = ['source-address']
-        elif persistence.type == 'HTTP_COOKIE':
-            service_args['persistenceMethods'] = ['cookie']
-        elif persistence.type == 'SOURCE_IP':
-            # TODO: add persistence_timeout and/or persistence_granularity
-            service_args['persistenceMethods'] = ['source-address']
-        elif persistence.type == 'APP_COOKIE':
-            service_args['persistenceMethods'] = Persist(
-                persistenceMethod='cookie',
-                cookieName=persistence.cookie_name
-            )
-
+def process_esd(servicetype, esd):
+    service_args = {}
     irules = esd.get('lbaas_irule', None)
     if irules:
         service_args['iRules'] = [
@@ -115,4 +71,59 @@ def get_service(listener, esd):
             service_args['profileHTTPCompression'] = BigIP(
                 '/Common/' + compression)
 
+    return service_args
+
+
+def get_service(listener):
+    # Determine service type
+    servicetype = con.SERVICE_GENERIC
+    if listener.protocol == con.PROTOCOL_TCP:
+        servicetype = CONF.f5_agent.tcp_service_type
+    # UDP
+    elif listener.protocol == con.PROTOCOL_UDP:
+        servicetype = con.SERVICE_UDP
+    # HTTP
+    elif listener.protocol == con.PROTOCOL_HTTP:
+        servicetype = con.SERVICE_HTTP
+    # HTTPS
+    elif listener.protocol == con.PROTOCOL_HTTPS:
+        servicetype = con.SERVICE_HTTPS
+
+    vip = listener.load_balancer.vip
+
+    service_args = {
+        '_servicetype': servicetype,
+        'virtualPort': listener.protocol_port,
+        'virtualAddresses': [vip.ip_address]
+    }
+
+    if listener.connection_limit > 0:
+        service_args['maxConnections'] = listener.connection_limit
+
+    # Add default pool and session persistence
+    if listener.default_pool_id:
+        default_pool = m_pool.get_name(listener.default_pool_id)
+        persistence = listener.default_pool.session_persistence
+        #lb_algorithm = listener.default_pool.lb_algorith
+        lb_algorithm = 'SOURCE_IP'
+
+        service_args['pool'] = default_pool
+
+        # lb algorithm rules them all
+        if lb_algorithm == 'SOURCE_IP':
+            service_args['persistenceMethods'] = ['source-address']
+        elif persistence.type == 'HTTP_COOKIE':
+            service_args['persistenceMethods'] = ['cookie']
+        elif persistence.type == 'SOURCE_IP':
+            # TODO: add persistence_timeout and/or persistence_granularity
+            service_args['persistenceMethods'] = ['source-address']
+        elif persistence.type == 'APP_COOKIE':
+            service_args['persistenceMethods'] = Persist(
+                persistenceMethod='cookie',
+                cookieName=persistence.cookie_name
+            )
+
     return Service(**service_args)
+
+def get_service_profiles(l7policy):
+    pass

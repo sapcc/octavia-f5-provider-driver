@@ -18,3 +18,15 @@ class PolicyHasNoRules(Exception):
 
 class NoActionFoundForPolicy(Exception):
     pass
+
+class CompareTypeNotSupported(Exception):
+    pass
+
+class PolicyTypeNotSupported(Exception):
+    pass
+
+class PolicyRuleInvertNotSupported(Exception):
+    pass
+
+class PolicyActionNotSupported(Exception):
+    pass

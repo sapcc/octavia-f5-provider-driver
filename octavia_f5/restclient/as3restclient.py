@@ -14,12 +14,20 @@
 import json
 
 import requests
+from oslo_log import log as logging
 from requests.auth import HTTPBasicAuth
 from six.moves.urllib import parse
-from octavia_f5.restclient.as3exceptions import UnprocessableEntityException
-from oslo_log import log as logging
+from tenacity import *
 
 LOG = logging.getLogger(__name__)
+RETRY_ATTEMPTS = 15
+RETRY_INITIAL_DELAY = 1
+RETRY_BACKOFF = 1
+RETRY_MAX = 5
+
+AS3_LOGIN_PATH = '/mgmt/shared/authn/login'
+AS3_TOKENS_PATH = '/mgmt/shared/authz/tokens/{}'
+AS3_DECLARE_PATH = '/mgmt/shared/appsvcs/declare'
 
 
 class BigipAS3RestClient(object):
@@ -30,33 +38,8 @@ class BigipAS3RestClient(object):
         self.enable_token = enable_token
         self.token = None
         self.s = self._create_session()
-        self.reauthorize()
         self.physical_network = physical_network
         self.esd = esd
-
-    def reauthorize(self):
-        # Login
-        login = '/mgmt/shared/authn/login'
-        credentials = {
-            "username": self.bigip.username,
-            "password": self.bigip.password,
-            "loginProviderName": "tmos"
-        }
-        basicauth = HTTPBasicAuth(self.bigip.username, self.bigip.password)
-        r = self.s.post(self._url(login),
-                        json=credentials, auth=basicauth)
-        r.raise_for_status()
-        print(json.dumps(r.json(), indent=4, sort_keys=True))
-        self.token = r.json()['token']['token']
-
-        self.s.headers.update({'X-F5-Auth-Token': self.token})
-
-        url = '/mgmt/shared/authz/tokens/{}'
-        patch_timeout = {
-            "timeout": "36000"
-        }
-        r = self.s.patch(self._url(url.format(self.token)), json=patch_timeout)
-        print(json.dumps(r.json(), indent=4, sort_keys=True))
 
     def _url(self, path):
         return parse.urlunsplit(
@@ -72,27 +55,62 @@ class BigipAS3RestClient(object):
         session.verify = self.enable_verify
         return session
 
+    def _authorized(self, response):
+        if response.status_code == 401:
+            self.reauthorize()
+
+    @retry(
+        retry=retry_if_exception_type(requests.exceptions.BaseHTTPError),
+        wait=wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=stop_after_attempt(RETRY_ATTEMPTS))
+    def reauthorize(self):
+        # Login
+        credentials = {
+            "username": self.bigip.username,
+            "password": self.bigip.password,
+            "loginProviderName": "tmos"
+        }
+        basicauth = HTTPBasicAuth(self.bigip.username, self.bigip.password)
+        r = self.s.post(self._url(AS3_LOGIN_PATH),
+                        json=credentials, auth=basicauth)
+        r.raise_for_status()
+        print(json.dumps(r.json(), indent=4, sort_keys=True))
+        self.token = r.json()['token']['token']
+
+        self.s.headers.update({'X-F5-Auth-Token': self.token})
+
+        patch_timeout = {
+            "timeout": "36000"
+        }
+        r = self.s.patch(self._url(AS3_TOKENS_PATH.format(self.token)), json=patch_timeout)
+        print(json.dumps(r.json(), indent=4, sort_keys=True))
+
+    @retry(
+        retry=retry_if_exception_type(requests.exceptions.BaseHTTPError),
+        wait=wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=stop_after_attempt(RETRY_ATTEMPTS))
     def post(self, **kwargs):
-        url = '/mgmt/shared/appsvcs/declare'
-        print(kwargs.get('json'))
-        response = self.s.post(self._url(url), **kwargs)
+        LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
+        response = self.s.post(self._url(AS3_DECLARE_PATH), **kwargs)
+        self._authorized(response)
+        response.raise_for_status()
         print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
-        if response.status_code == 422:
-            raise UnprocessableEntityException(response.text)
         return response
 
+    @retry(
+        retry=retry_if_exception_type(requests.exceptions.BaseHTTPError),
+        wait=wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=stop_after_attempt(RETRY_ATTEMPTS))
     def patch(self, operation, path, **kwargs):
-        url = '/mgmt/shared/appsvcs/declare'
-
         LOG.debug("Calling PATCH %s with path %s", operation, path)
         params = kwargs.copy()
 
         params.update({'op': operation, 'path': path})
-        response = self.s.patch(self._url(url), json=[params])
+        response = self.s.patch(self._url(AS3_DECLARE_PATH), json=[params])
+        self._authorized(response)
+        response.raise_for_status()
         print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
-        #if response.status_code == 422:
-        #    raise UnprocessableEntityException(response.text)
-
-        #response.raise_for_status()
         return response
-
