@@ -23,7 +23,7 @@ LOG = logging.getLogger(__name__)
 
 def get_name(healthmonitor_id):
     return constants.PREFIX_HEALTH_MONITOR + \
-           healthmonitor_id.replace('/', '').replace('-', '')
+           healthmonitor_id.replace('/', '').replace('-', '_')
 
 
 def get_path(health_monitor):

@@ -22,7 +22,7 @@ LOG = logging.getLogger(__name__)
 
 def get_path(listener_id):
     return constants.PREFIX_LISTENER + \
-           listener_id.replace('/', '').replace('-', '')
+           listener_id.replace('/', '').replace('-', '_')
 
 
 def to_dict(listener):

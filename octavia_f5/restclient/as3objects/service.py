@@ -25,7 +25,7 @@ CONF = cfg.CONF
 
 def get_name(listener_id):
     return con.PREFIX_LISTENER + \
-           listener_id.replace('/', '').replace('-', '')
+           listener_id.replace('/', '').replace('-', '_')
 
 
 def get_path(listener):

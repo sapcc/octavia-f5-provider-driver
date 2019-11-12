@@ -28,14 +28,14 @@ from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 LOG = logging.getLogger(__name__)
 
 
-def tenant_update(project_id, loadbalancers, bigip):
+def tenant_update(project_id, loadbalancers, bigip, action='deploy'):
     """Task to update F5s with all specified loadbalancers' configurations
        of a tenant (project).
 
     """
     decl = AS3(
         persist=False,
-        action='deploy')
+        action=action)
     adc = ADC(
         id="urn:uuid:{}".format(uuid.uuid4()),
         label="F5 BigIP Octavia Provider")

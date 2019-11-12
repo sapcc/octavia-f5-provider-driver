@@ -13,8 +13,10 @@
 # under the License.
 import json
 
+import functools
 import requests
 from oslo_log import log as logging
+from requests import HTTPError
 from requests.auth import HTTPBasicAuth
 from six.moves.urllib import parse
 from tenacity import *
@@ -59,11 +61,25 @@ class BigipAS3RestClient(object):
         if response.status_code == 401:
             self.reauthorize()
 
+    def authorized(func):
+        @functools.wraps(func)
+        def wrapper(self, *args, **kwargs):
+            try:
+                return func(self, *args, **kwargs)
+            except HTTPError as e:
+                if e.response.status_code == 401:
+                    self.reauthorize()
+                    return func(self, *args, **kwargs)
+                else:
+                    raise(e)
+        return wrapper
+
     @retry(
-        retry=retry_if_exception_type(requests.exceptions.BaseHTTPError),
+        retry=retry_if_exception_type(HTTPError),
         wait=wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS))
+        stop=stop_after_attempt(RETRY_ATTEMPTS),
+    )
     def reauthorize(self):
         # Login
         credentials = {
@@ -75,7 +91,6 @@ class BigipAS3RestClient(object):
         r = self.s.post(self._url(AS3_LOGIN_PATH),
                         json=credentials, auth=basicauth)
         r.raise_for_status()
-        print(json.dumps(r.json(), indent=4, sort_keys=True))
         self.token = r.json()['token']['token']
 
         self.s.headers.update({'X-F5-Auth-Token': self.token})
@@ -84,33 +99,35 @@ class BigipAS3RestClient(object):
             "timeout": "36000"
         }
         r = self.s.patch(self._url(AS3_TOKENS_PATH.format(self.token)), json=patch_timeout)
-        print(json.dumps(r.json(), indent=4, sort_keys=True))
+        LOG.debug("Reauthorized!")
 
     @retry(
-        retry=retry_if_exception_type(requests.exceptions.BaseHTTPError),
+        retry=retry_if_exception_type(HTTPError),
         wait=wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS))
+        stop=stop_after_attempt(RETRY_ATTEMPTS)
+    )
+    @authorized
     def post(self, **kwargs):
         LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
         response = self.s.post(self._url(AS3_DECLARE_PATH), **kwargs)
-        self._authorized(response)
         response.raise_for_status()
+        LOG.debug("POST finished with %d", response.status_code)
         print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
         return response
 
     @retry(
-        retry=retry_if_exception_type(requests.exceptions.BaseHTTPError),
+        retry=retry_if_exception_type(HTTPError),
         wait=wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=stop_after_attempt(RETRY_ATTEMPTS))
+    @authorized
     def patch(self, operation, path, **kwargs):
         LOG.debug("Calling PATCH %s with path %s", operation, path)
         params = kwargs.copy()
 
         params.update({'op': operation, 'path': path})
         response = self.s.patch(self._url(AS3_DECLARE_PATH), json=[params])
-        self._authorized(response)
         response.raise_for_status()
         print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
         return response

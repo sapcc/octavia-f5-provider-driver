@@ -96,7 +96,7 @@ class ControllerWorker(object):
 
     def refresh(self, ctxt, project_id):
         loadbalancers = self._get_all_loadbalancer(project_id)
-        if tenant_update(project_id, loadbalancers, self.bigip):
+        if tenant_update(project_id, loadbalancers, self.bigip, action='dry-run'):
             return True
         return False
 
