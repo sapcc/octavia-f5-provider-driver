@@ -28,7 +28,6 @@ from octavia_f5.restclient.as3restclient import BigipAS3RestClient
 from octavia_f5.utils import esd_repo
 from octavia_lib.api.drivers import driver_lib
 from octavia_lib.api.drivers import exceptions as driver_exceptions
-#from octavia_f5.utils.l7policy_adapter import L7PolicyServiceAdapter
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -38,10 +37,6 @@ RETRY_ATTEMPTS = 15
 RETRY_INITIAL_DELAY = 1
 RETRY_BACKOFF = 1
 RETRY_MAX = 5
-
-
-def _is_provisioning_status_pending_update(lb_obj):
-    return not lb_obj.provisioning_status == constants.PENDING_UPDATE
 
 
 class ControllerWorker(object):
