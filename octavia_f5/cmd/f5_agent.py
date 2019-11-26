@@ -25,6 +25,7 @@ from octavia_f5.controller.f5service import F5Service
 CONF = cfg.CONF
 
 def main():
+    """Entry point of the F5 agent process. Starts the F5 cotyledon service."""
     argv = sys.argv or []
     config.init(argv[1:])
     log.set_defaults()

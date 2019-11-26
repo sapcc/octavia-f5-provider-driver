@@ -26,6 +26,7 @@ LOG = logging.getLogger(__name__)
 
 
 class F5ProviderDriver(driver_base.ProviderDriver):
+    """Octavia plugin for the F5 driver."""
     def __init__(self):
         super(F5ProviderDriver, self).__init__()
         topic = cfg.CONF.oslo_messaging.topic
@@ -41,6 +42,7 @@ class F5ProviderDriver(driver_base.ProviderDriver):
 
     # Load Balancer
     def create_vip_port(self, loadbalancer_id, project_id, vip_dictionary):
+        """Returns dictionary populated by neutron L2 driver for F5."""
         return vip_dictionary
 
     def loadbalancer_create(self, loadbalancer):

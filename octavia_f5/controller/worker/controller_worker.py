@@ -45,6 +45,7 @@ def _is_provisioning_status_pending_update(lb_obj):
 
 
 class ControllerWorker(object):
+    """Worker class to update load balancers."""
     # API version history:
     #   1.0 - Initial version.
     target = messaging.Target(
