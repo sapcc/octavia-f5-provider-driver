@@ -22,7 +22,7 @@ from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
-from octavia_f5.controller.worker.f5driver import tenant_update
+from octavia_f5.controller.worker.f5agent_driver import tenant_update
 from octavia_f5.db import api as db_apis
 from octavia_f5.restclient.as3restclient import BigipAS3RestClient
 from octavia_f5.utils import esd_repo
