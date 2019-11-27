@@ -24,6 +24,7 @@ LOG = logging.getLogger(__name__)
 
 
 class F5Service(cotyledon.Service):
+    """Service running in cotyledon service manager. Starts F5 driver workers."""
     def __init__(self, worker_id, conf):
         super(F5Service, self).__init__(worker_id)
         self.conf = conf
