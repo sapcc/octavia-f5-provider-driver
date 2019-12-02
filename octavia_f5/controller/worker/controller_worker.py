@@ -12,10 +12,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 #
-import json
 
 import oslo_messaging as messaging
 import tenacity
+from octavia_lib.api.drivers import driver_lib
 from oslo_config import cfg
 from oslo_log import log as logging
 from sqlalchemy.orm import exc as db_exceptions
@@ -26,8 +26,6 @@ from octavia_f5.controller.worker.f5agent_driver import tenant_update
 from octavia_f5.db import api as db_apis
 from octavia_f5.restclient.as3restclient import BigipAS3RestClient
 from octavia_f5.utils import esd_repo
-from octavia_lib.api.drivers import driver_lib
-from octavia_lib.api.drivers import exceptions as driver_exceptions
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -43,6 +41,8 @@ class ControllerWorker(object):
     """Worker class to update load balancers."""
     # API version history:
     #   1.0 - Initial version.
+
+    # target for OSLO initialization in ControllerWorker initialization
     target = messaging.Target(
         namespace=constants.RPC_NAMESPACE_CONTROLLER_AGENT,
         version='1.0')
@@ -53,7 +53,6 @@ class ControllerWorker(object):
         self._esd = esd_repo.EsdRepository()
         self._l7policy_repo = repo.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
-        #self._l7policy_adapter = L7PolicyServiceAdapter(self.conf)
         self.bigip = BigipAS3RestClient(CONF.f5_agent.bigip_url,
                                         CONF.f5_agent.bigip_verify,
                                         CONF.f5_agent.bigip_token,
@@ -61,21 +60,6 @@ class ControllerWorker(object):
                                         self._esd)
 
         super(ControllerWorker, self).__init__()
-
-    @tenacity.retry(
-        retry=(
-                tenacity.retry_if_exception_type()),
-        wait=tenacity.wait_incrementing(
-            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def _update_status_to_octavia(self, status):
-        try:
-            self._octavia_driver_lib.update_loadbalancer_status(status)
-        except driver_exceptions.UpdateStatusError as e:
-            msg = ("Error while updating status to octavia: "
-                   "%s") % e.fault_string
-            LOG.error(msg)
-            raise driver_exceptions.UpdateStatusError(msg)
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
@@ -95,27 +79,3 @@ class ControllerWorker(object):
         if tenant_update(project_id, loadbalancers, self.bigip, action='dry-run'):
             return True
         return False
-
-    def _build_policy(self, l7policies, listener, l7rule):
-        # build data structure for service adapter input
-        os_policies = {'l7rules': [], 'l7policies': [], 'f5_policy': {}}
-
-        # get all policies and rules for listener referenced by this policy
-        for policy_id in listener.l7_policies:
-            policy = self._l7policy_repo.get(
-                db_apis.get_session(), id=policy_id.id)
-            if policy:
-                os_policies['l7policies'].append(policy)
-                for rule in policy.rules:
-                    l7rule = self._l7rule_repo.get(
-                        db_apis.get_session(), id=rule.id)
-
-                    if l7rule:
-                        os_policies['l7rules'].append(l7rule)
-
-        #if os_policies['l7policies']:
-        #    os_policies['f5_policy'] = self.l7policy_adapter.translate(
-        #        os_policies)
-
-        LOG.debug(json.dumps(os_policies, indent=4, sort_keys=True))
-        return os_policies
