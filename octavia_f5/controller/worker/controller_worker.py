@@ -16,6 +16,7 @@
 import oslo_messaging as messaging
 import tenacity
 from octavia_lib.api.drivers import driver_lib
+from octavia_lib.api.drivers import exceptions as driver_exceptions
 from oslo_config import cfg
 from oslo_log import log as logging
 from sqlalchemy.orm import exc as db_exceptions
@@ -63,6 +64,21 @@ class ControllerWorker(object):
                                         self._esd)
 
         super(ControllerWorker, self).__init__()
+
+    @ tenacity.retry(
+        retry = (
+                tenacity.retry_if_exception_type()),
+        wait = tenacity.wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop = tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    def _update_status_to_octavia(self, status):
+        try:
+            self._octavia_driver_lib.update_loadbalancer_status(status)
+        except driver_exceptions.UpdateStatusError as e:
+            msg = ("Error while updating status to octavia: "
+                   "%s") % e.fault_string
+            LOG.error(msg)
+            raise driver_exceptions.UpdateStatusError(msg)
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
