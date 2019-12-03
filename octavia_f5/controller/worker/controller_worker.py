@@ -66,11 +66,11 @@ class ControllerWorker(object):
         super(ControllerWorker, self).__init__()
 
     @ tenacity.retry(
-        retry = (
+        retry=(
                 tenacity.retry_if_exception_type()),
-        wait = tenacity.wait_incrementing(
+        wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop = tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
     def _update_status_to_octavia(self, status):
         try:
             self._octavia_driver_lib.update_loadbalancer_status(status)
