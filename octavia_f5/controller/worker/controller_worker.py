@@ -49,7 +49,10 @@ class ControllerWorker(object):
 
     def __init__(self):
         self._loadbalancer_repo = repo.LoadBalancerRepository()
-        self._octavia_driver_lib = driver_lib.DriverLibrary()
+        self._octavia_driver_lib = driver_lib.DriverLibrary(
+            status_socket=CONF.driver_agent.status_socket_path,
+            stats_socket=CONF.driver_agent.stats_socket_path
+        )
         self._esd = esd_repo.EsdRepository()
         self._l7policy_repo = repo.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
@@ -77,5 +80,12 @@ class ControllerWorker(object):
     def refresh(self, ctxt, project_id):
         loadbalancers = self._get_all_loadbalancer(project_id)
         if tenant_update(project_id, loadbalancers, self.bigip, action='dry-run'):
+            for lb in loadbalancers:
+                status_active = {"loadbalancers": [{"id": lb.id,
+                                                    "provisioning_status": "ACTIVE",
+                                                    "operating_status": "ONLINE"}],
+                                 "healthmonitors": [], "l7policies": [], "l7rules": [],
+                                 "listeners": [], "members": [], "pools": [] }
+                self._update_status_to_octavia(status_active)
             return True
         return False
