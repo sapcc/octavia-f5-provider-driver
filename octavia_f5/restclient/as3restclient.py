@@ -39,7 +39,7 @@ class BigipAS3RestClient(object):
         self.enable_verify = enable_verify
         self.enable_token = enable_token
         self.token = None
-        self.s = self._create_session()
+        self.session = self._create_session()
         self.physical_network = physical_network
         self.esd = esd
 
@@ -88,17 +88,17 @@ class BigipAS3RestClient(object):
             "loginProviderName": "tmos"
         }
         basicauth = HTTPBasicAuth(self.bigip.username, self.bigip.password)
-        r = self.s.post(self._url(AS3_LOGIN_PATH),
-                        json=credentials, auth=basicauth)
+        r = self.session.post(self._url(AS3_LOGIN_PATH),
+                              json=credentials, auth=basicauth)
         r.raise_for_status()
         self.token = r.json()['token']['token']
 
-        self.s.headers.update({'X-F5-Auth-Token': self.token})
+        self.session.headers.update({'X-F5-Auth-Token': self.token})
 
         patch_timeout = {
             "timeout": "36000"
         }
-        r = self.s.patch(self._url(AS3_TOKENS_PATH.format(self.token)), json=patch_timeout)
+        r = self.session.patch(self._url(AS3_TOKENS_PATH.format(self.token)), json=patch_timeout)
         LOG.debug("Reauthorized!")
 
     @retry(
@@ -110,7 +110,7 @@ class BigipAS3RestClient(object):
     @authorized
     def post(self, **kwargs):
         LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
-        response = self.s.post(self._url(AS3_DECLARE_PATH), **kwargs)
+        response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
         response.raise_for_status()
         LOG.debug("POST finished with %d", response.status_code)
         print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
@@ -127,7 +127,7 @@ class BigipAS3RestClient(object):
         params = kwargs.copy()
 
         params.update({'op': operation, 'path': path})
-        response = self.s.patch(self._url(AS3_DECLARE_PATH), json=[params])
+        response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
         response.raise_for_status()
         print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
         return response

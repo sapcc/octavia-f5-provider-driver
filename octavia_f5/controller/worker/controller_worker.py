@@ -12,7 +12,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 #
-import json
 
 import oslo_messaging as messaging
 import tenacity
@@ -43,6 +42,8 @@ class ControllerWorker(object):
     """Worker class to update load balancers."""
     # API version history:
     #   1.0 - Initial version.
+
+    # target for OSLO initialization in ControllerWorker initialization
     target = messaging.Target(
         namespace=constants.RPC_NAMESPACE_CONTROLLER_AGENT,
         version='1.0')
@@ -64,7 +65,7 @@ class ControllerWorker(object):
 
         super(ControllerWorker, self).__init__()
 
-    @tenacity.retry(
+    @ tenacity.retry(
         retry=(
                 tenacity.retry_if_exception_type()),
         wait=tenacity.wait_incrementing(
@@ -104,27 +105,3 @@ class ControllerWorker(object):
                 self._update_status_to_octavia(status_active)
             return True
         return False
-
-    def _build_policy(self, l7policies, listener, l7rule):
-        # build data structure for service adapter input
-        os_policies = {'l7rules': [], 'l7policies': [], 'f5_policy': {}}
-
-        # get all policies and rules for listener referenced by this policy
-        for policy_id in listener.l7_policies:
-            policy = self._l7policy_repo.get(
-                db_apis.get_session(), id=policy_id.id)
-            if policy:
-                os_policies['l7policies'].append(policy)
-                for rule in policy.rules:
-                    l7rule = self._l7rule_repo.get(
-                        db_apis.get_session(), id=rule.id)
-
-                    if l7rule:
-                        os_policies['l7rules'].append(l7rule)
-
-        #if os_policies['l7policies']:
-        #    os_policies['f5_policy'] = self.l7policy_adapter.translate(
-        #        os_policies)
-
-        LOG.debug(json.dumps(os_policies, indent=4, sort_keys=True))
-        return os_policies

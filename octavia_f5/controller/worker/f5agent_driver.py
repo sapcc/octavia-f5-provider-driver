@@ -34,7 +34,7 @@ def tenant_update(project_id, loadbalancers, bigip, action='deploy'):
 
     """
     decl = AS3(
-        persist=False,
+        persist=True,
         action=action)
     adc = ADC(
         id="urn:uuid:{}".format(uuid.uuid4()),
