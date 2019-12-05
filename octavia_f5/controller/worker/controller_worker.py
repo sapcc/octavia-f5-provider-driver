@@ -23,9 +23,9 @@ from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
-from octavia_f5.controller.worker.f5agent_driver import tenant_update
+from octavia_f5.controller.worker import f5agent_driver
 from octavia_f5.db import api as db_apis
-from octavia_f5.restclient.as3restclient import BigipAS3RestClient
+from octavia_f5.restclient import as3restclient
 from octavia_f5.utils import esd_repo
 
 CONF = cfg.CONF
@@ -57,7 +57,7 @@ class ControllerWorker(object):
         self._esd = esd_repo.EsdRepository()
         self._l7policy_repo = repo.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
-        self.bigip = BigipAS3RestClient(CONF.f5_agent.bigip_url,
+        self.bigip = as3restclient.BigipAS3RestClient(CONF.f5_agent.bigip_url,
                                         CONF.f5_agent.bigip_verify,
                                         CONF.f5_agent.bigip_token,
                                         CONF.f5_agent.network_segment_physical_network,
@@ -95,7 +95,7 @@ class ControllerWorker(object):
 
     def refresh(self, ctxt, project_id):
         loadbalancers = self._get_all_loadbalancer(project_id)
-        if tenant_update(project_id, loadbalancers, self.bigip, action='dry-run'):
+        if f5agent_driver.tenant_update(project_id, loadbalancers, self.bigip, action='dry-run'):
             for lb in loadbalancers:
                 status_active = {"loadbalancers": [{"id": lb.id,
                                                     "provisioning_status": "ACTIVE",

@@ -14,11 +14,10 @@
 # limitations under the License.
 
 
-from octavia.common import constants
-from octavia.common.data_models import BaseDataModel
+from octavia.common import data_models
 
 
-class ESD(BaseDataModel):
+class ESD(data_models.BaseDataModel):
     def __init__(self, id=None, name=None, attributes=None):
         self.id = id
         self.name = name

@@ -12,18 +12,17 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 import uuid
-
 from oslo_log import log as logging
 
 from octavia_f5.common import constants
-from octavia_f5.restclient.as3classes import ADC, AS3, Application
-from octavia_f5.restclient.as3objects import pool as m_pool
-from octavia_f5.restclient.as3objects import tenant as m_part
+from octavia_f5.restclient import as3classes
 from octavia_f5.restclient.as3objects import application as m_app
-from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import monitor as m_monitor
-from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
+from octavia_f5.restclient.as3objects import pool as m_pool
+from octavia_f5.restclient.as3objects import pool_member as m_member
+from octavia_f5.restclient.as3objects import service as m_service
+from octavia_f5.restclient.as3objects import tenant as m_part
 
 LOG = logging.getLogger(__name__)
 
@@ -33,10 +32,10 @@ def tenant_update(project_id, loadbalancers, bigip, action='deploy'):
        of a tenant (project).
 
     """
-    decl = AS3(
+    decl = as3classes.AS3(
         persist=True,
         action=action)
-    adc = ADC(
+    adc = as3classes.ADC(
         id="urn:uuid:{}".format(uuid.uuid4()),
         label="F5 BigIP Octavia Provider")
     decl.set_adc(adc)
@@ -46,7 +45,7 @@ def tenant_update(project_id, loadbalancers, bigip, action='deploy'):
 
     for loadbalancer in loadbalancers:
         # Create generic application
-        app = Application(constants.APPLICATION_GENERIC,
+        app = as3classes.Application(constants.APPLICATION_GENERIC,
                           label=loadbalancer.id)
 
         # attach listeners with ESDs / L7Policies

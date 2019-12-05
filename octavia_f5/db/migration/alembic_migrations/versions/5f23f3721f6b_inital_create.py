@@ -10,18 +10,18 @@ Create Date: 2019-04-08 15:38:36.415727
 revision = '5f23f3721f6b'
 down_revision = None
 
-from alembic import op
+import alembic as a
 import sqlalchemy as sa
 
 
 def upgrade():
-    op.create_table(
+    a.op.create_table(
         u'f5_esd',
         sa.Column(u'name', sa.String(63), nullable=False),
         sa.PrimaryKeyConstraint(u'name')
     )
 
-    op.create_table(
+    a.op.create_table(
         u'f5_esd_attributes',
         sa.Column(u'f5_esd_name', sa.String(36), nullable=False),
         sa.Column(u'name', sa.String(255), nullable=False),
@@ -35,7 +35,7 @@ def upgrade():
         sa.column(u'name', sa.String)
     )
 
-    op.bulk_insert(
+    a.op.bulk_insert(
         insert_table,
         [
             {'name': 'proxy_protocol_2edF_v1_0'},
@@ -59,7 +59,7 @@ def upgrade():
         sa.column(u'type', sa.String),
     )
 
-    op.bulk_insert(
+    a.op.bulk_insert(
         insert_table,
         [
             {'f5_esd_name': 'proxy_protocol_2edF_v1_0',

@@ -20,7 +20,7 @@ from oslo_config import cfg
 from oslo_log import log
 
 from octavia_f5.common import config
-from octavia_f5.controller.f5service import F5Service
+from octavia_f5.controller import f5service
 
 CONF = cfg.CONF
 
@@ -32,7 +32,7 @@ def main():
     config.setup_logging(CONF)
 
     sm = cotyledon.ServiceManager()
-    sm.add(F5Service, workers=CONF.controller_worker.workers,
+    sm.add(f5service.F5Service, workers=CONF.controller_worker.workers,
            args=(CONF,))
     oslo_config_glue.setup(sm, CONF, reload_method="mutate")
     sm.run()

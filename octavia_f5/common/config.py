@@ -18,11 +18,11 @@ Routines for configuring Octavia F5 Provider
 """
 import sys
 
+from octavia_lib import i18n
 from oslo_config import cfg
 from oslo_log import log as logging
-from octavia_f5.common import constants
 
-from octavia_lib.i18n import _
+from octavia_f5.common import constants
 
 LOG = logging.getLogger(__name__)
 
@@ -44,21 +44,21 @@ def setup_logging(conf):
 
 f5_agent_opts = [
     cfg.StrOpt('network_segment_physical_network',
-               help=_("Restrict discovery of network segmentation ID to  "
+               help=i18n._("Restrict discovery of network segmentation ID to  "
                       "a specific physical network name. ")),
     cfg.BoolOpt('bigip_token', default=True,
-                help=_('Use token authentication.')),
+                help=i18n._('Use token authentication.')),
     cfg.BoolOpt('bigip_verify', default=False,
-                help=_('Verify AS3 endpoint TLS cert.')),
+                help=i18n._('Verify AS3 endpoint TLS cert.')),
     cfg.StrOpt('bigip_url',
-               help=_('The URL to the bigip host device with AS3 endpoint')),
+               help=i18n._('The URL to the bigip host device with AS3 endpoint')),
     cfg.StrOpt('esd_dir',
-               help=_('Directory of the esd files')),
+               help=i18n._('Directory of the esd files')),
 
     cfg.StrOpt('tcp_service_type', default=constants.SERVICE_L4,
                choices=[constants.SERVICE_L4,
                         constants.SERVICE_TCP],
-               help=_("Service type used for TCP listener")),
+               help=i18n._("Service type used for TCP listener")),
 
 ]
 

@@ -13,12 +13,12 @@
 # under the License.
 
 import cotyledon
-from oslo_log import log as logging
 import oslo_messaging as messaging
+from oslo_log import log as logging
 from oslo_messaging.rpc import dispatcher
 
 from octavia_f5.common import constants
-from octavia_f5.controller.worker.controller_worker import ControllerWorker
+from octavia_f5.controller.worker import controller_worker
 
 LOG = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ class F5Service(cotyledon.Service):
         self.conf = conf
         self.topic = conf.oslo_messaging.topic
         self.server = conf.host
-        self.endpoints = [ControllerWorker()]
+        self.endpoints = [controller_worker.ControllerWorker()]
         self.access_policy = dispatcher.DefaultRPCAccessPolicy
         self.message_listener = None
 

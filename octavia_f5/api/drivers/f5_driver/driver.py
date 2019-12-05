@@ -13,11 +13,11 @@
 #    under the License.
 
 import oslo_messaging as messaging
+from octavia_lib.api.drivers import exceptions
+from octavia_lib.api.drivers import provider_base as driver_base
 from oslo_config import cfg
 from oslo_log import log as logging
 
-from octavia_lib.api.drivers import provider_base as driver_base
-from octavia_lib.api.drivers import exceptions
 from octavia_f5.common import constants as consts
 
 CONF = cfg.CONF
