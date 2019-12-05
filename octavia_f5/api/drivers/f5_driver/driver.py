@@ -49,7 +49,7 @@ class F5ProviderDriver(driver_base.ProviderDriver):
         self._refresh(loadbalancer.project_id)
 
     def loadbalancer_delete(self, loadbalancer, cascade=False):
-        # TODO also delete neutron port
+        # TODO(Benjamin Ludwig) also delete neutron port
         self._refresh(loadbalancer.project_id)
 
     def loadbalancer_failover(self, loadbalancer_id):

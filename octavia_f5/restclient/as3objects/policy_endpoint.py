@@ -53,7 +53,7 @@ def _get_condition(l7rule):
     return Policy_Condition(**args)
 
 def _get_action(l7policy):
-    # TODO!!! REDIRECT_PREFIX (http://abc.de -> https://abc.de)
+    # TODO(Andrew Karpow) REDIRECT_PREFIX (http://abc.de -> https://abc.de)
     SUPPORTED_ACTION_TYPE = ['REDIRECT_TO_POOL', 'REDIRECT_TO_URL', 'REJECT']
     if l7policy.action not in SUPPORTED_ACTION_TYPE:
         raise PolicyActionNotSupported()

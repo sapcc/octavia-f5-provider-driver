@@ -115,7 +115,7 @@ def get_service(listener):
         elif persistence.type == 'HTTP_COOKIE':
             service_args['persistenceMethods'] = ['cookie']
         elif persistence.type == 'SOURCE_IP':
-            # TODO: add persistence_timeout and/or persistence_granularity
+            # TODO(Andrew Karpow) add persistence_timeout and/or persistence_granularity
             service_args['persistenceMethods'] = ['source-address']
         elif persistence.type == 'APP_COOKIE':
             service_args['persistenceMethods'] = Persist(
