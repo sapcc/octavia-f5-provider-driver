@@ -31,16 +31,17 @@ def get_network_driver():
     ).driver
 
 
-def provider_vip_dict_to_vip_obj(vip_dictionary):
+def lb_to_vip_obj(lb):
     vip_obj = data_models.VIP()
-    if 'vip_address' in vip_dictionary:
-        vip_obj.ip_address = vip_dictionary['vip_address']
-    if 'vip_network_id' in vip_dictionary:
-        vip_obj.network_id = vip_dictionary['vip_network_id']
-    if 'vip_port_id' in vip_dictionary:
-        vip_obj.port_id = vip_dictionary['vip_port_id']
-    if 'vip_subnet_id' in vip_dictionary:
-        vip_obj.subnet_id = vip_dictionary['vip_subnet_id']
-    if 'vip_qos_policy_id' in vip_dictionary:
-        vip_obj.qos_policy_id = vip_dictionary['vip_qos_policy_id']
+    if lb.vip_address:
+        vip_obj.ip_address = lb.vip_address
+    if lb.vip_network_id:
+        vip_obj.network_id = lb.vip_network_id
+    if lb.vip_port_id:
+        vip_obj.port_id = lb.vip_port_id
+    if lb.vip_subnet_id:
+        vip_obj.subnet_id = lb.vip_subnet_id
+    if lb.vip_qos_policy_id:
+        vip_obj.qos_policy_id = lb.vip_qos_policy_id
+    vip_obj.load_balancer = lb
     return vip_obj
