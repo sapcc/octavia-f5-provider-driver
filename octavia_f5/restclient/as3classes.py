@@ -12,10 +12,15 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import json
+
+import six
+from oslo_log import log as logging
+
 from octavia_f5.common import constants
 from octavia_f5.restclient.as3exceptions import *
-import six
-import json
+
+LOG = logging.getLogger(__name__)
 
 
 class BaseDescription(object):
@@ -43,10 +48,8 @@ class BaseDescription(object):
                 data[key] = []
                 for item in self.__dict__[key]:
                     if isinstance(item, BaseDescription):
-                        print(item.to_dict())
                         data[key].append(item.to_dict())
                     else:
-                        print(item)
                         data[key].append(item)
         return data
 

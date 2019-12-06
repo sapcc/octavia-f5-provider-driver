@@ -113,7 +113,7 @@ class BigipAS3RestClient(object):
         response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
         response.raise_for_status()
         LOG.debug("POST finished with %d", response.status_code)
-        print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
+        LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
         return response
 
     @retry(
@@ -129,5 +129,5 @@ class BigipAS3RestClient(object):
         params.update({'op': operation, 'path': path})
         response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
         response.raise_for_status()
-        print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
+        LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
         return response
