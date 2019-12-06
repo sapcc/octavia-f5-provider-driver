@@ -40,7 +40,9 @@ class EsdJSONValidation(object):
     """
 
     def __init__(self, esddir):
+        assert esddir != None
         self.esdJSONFileList = glob.glob(os.path.join(esddir, '*.json'))
+        assert len(self.esdJSONFileList) > 0 # check that files have been found
         self.esdJSONDict = {}
 
     def read_json(self):
@@ -70,8 +72,7 @@ class EsdRepository(EsdJSONValidation):
     def __init__(self):
         self.esd_dict = {}
         self.validtags = []
-        esddir = CONF.f5_agent.esd_dir
-        super(EsdRepository, self).__init__(esddir)
+        super(EsdRepository, self).__init__(CONF.f5_agent.esd_dir)
         self.process_esd()
 
     # this function will return intersection of known valid esd tags
