@@ -34,13 +34,12 @@ AS3_DECLARE_PATH = '/mgmt/shared/appsvcs/declare'
 
 class BigipAS3RestClient(object):
     def __init__(self, bigip_url, enable_verify=True, enable_token=True,
-                 physical_network=None, esd=None):
+                 esd=None):
         self.bigip = parse.urlsplit(bigip_url, allow_fragments=False)
         self.enable_verify = enable_verify
         self.enable_token = enable_token
         self.token = None
         self.session = self._create_session()
-        self.physical_network = physical_network
         self.esd = esd
 
     def _url(self, path):

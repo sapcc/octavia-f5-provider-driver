@@ -43,9 +43,6 @@ def setup_logging(conf):
 
 
 f5_agent_opts = [
-    cfg.StrOpt('network_segment_physical_network',
-               help=_("Restrict discovery of network segmentation ID to  "
-                      "a specific physical network name. ")),
     cfg.BoolOpt('bigip_token', default=True,
                 help=_('Use token authentication.')),
     cfg.BoolOpt('bigip_verify', default=False,
