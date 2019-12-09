@@ -13,32 +13,20 @@
 # under the License.
 
 from neutronclient.common import exceptions as neutron_client_exceptions
-from oslo_config import cfg
 from oslo_log import log as logging
-import six
-from stevedore import driver as stevedore_driver
 
-from octavia_f5.common import constants
-from octavia.common import exceptions
 from octavia.i18n import _
 from octavia.network import base
-from octavia.network.drivers.neutron import base as neutron_base
+from octavia.network.drivers.neutron import allowed_address_pairs
 from octavia.network.drivers.neutron import utils
+from octavia_f5.common import constants
 
 LOG = logging.getLogger(__name__)
 
 PROJECT_ID_ALIAS = 'project-id'
-VIP_SECURITY_GRP_PREFIX = 'lb-'
-LBAASV2_OWNER = 'network:f5lbaasv2'
-
-CONF = cfg.CONF
 
 
-class HierachicalPortBindingDriver(neutron_base.BaseNeutronDriver):
-
-    def __init__(self):
-        super(HierachicalPortBindingDriver, self).__init__()
-
+class HierachicalPortBindingDriver(allowed_address_pairs.AllowedAddressPairsDriver):
     def allocate_vip(self, load_balancer):
         if load_balancer.vip.port_id:
             LOG.info('Port %s already exists. Nothing to be done.',
@@ -63,8 +51,9 @@ class HierachicalPortBindingDriver(neutron_base.BaseNeutronDriver):
                          'network_id': load_balancer.vip.network_id,
                          'admin_state_up': False,
                          'device_id': 'lb-{0}'.format(load_balancer.id),
-                         'device_owner': LBAASV2_OWNER,
-                         'binding:host_id': 'f512-03',
+                         'device_owner': constants.DEVICE_OWNER_LISTENER,
+                         # TODO: needs to be auto-scheduled by agent
+                         'binding:host_id': 'neutron-f5-f512-01',
                          project_id_key: load_balancer.project_id}}
 
         if fixed_ip:
@@ -93,9 +82,7 @@ class HierachicalPortBindingDriver(neutron_base.BaseNeutronDriver):
                         "Continuing cleanup.".format(vip.port_id))
             port = None
 
-        self._delete_security_group(vip, port)
-
-        if port and port.device_owner == LBAASV2_OWNER:
+        if port and port.device_owner == constants.DEVICE_OWNER_LISTENER:
             try:
                 self.neutron_client.delete_port(vip.port_id)
             except (neutron_client_exceptions.NotFound,
@@ -110,44 +97,3 @@ class HierachicalPortBindingDriver(neutron_base.BaseNeutronDriver):
         elif port:
             LOG.info("Port %s will not be deleted by Octavia as it was "
                      "not created by Octavia.", vip.port_id)
-
-    def update_vip(self, load_balancer, for_delete=False):
-        pass
-
-    def plug_vip(self, load_balancer, vip):
-        pass
-
-    def unplug_vip(self, load_balancer, vip):
-        pass
-
-    def plug_network(self, compute_id, network_id, ip_address=None):
-        pass
-
-    def unplug_network(self, compute_id, network_id, ip_address=None):
-        pass
-
-    def failover_preparation(self, amphora):
-        pass
-
-    def plug_port(self, amphora, port):
-        pass
-
-    def get_network_configs(self, load_balancer, amphora=None):
-        pass
-
-    def wait_for_port_detach(self, amphora):
-        pass
-
-    def update_vip_sg(self, load_balancer, vip):
-        """ Not supported yet """
-        pass
-
-    def plug_aap_port(self, load_balancer, vip, amphora, subnet):
-        pass
-
-    def unplug_aap_port(self, vip, amphora, subnet):
-        pass
-
-    def _delete_security_group(self, vip, port):
-        """ Not implemented yet """
-        pass

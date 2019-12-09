@@ -1,10 +1,7 @@
-tenacity
-stevedore
-sqlalchemy
-oslo.db
-alembic
-taskflow
+tenacity>=4.9.0  # Apache-2.0
+stevedore>=1.20.0 # Apache-2.0
 mock>=2.0.0 # BSD
 octavia>=3.0.0 # Apache-2.0
 requests>=2.18.0 # Apache-2.0
+python-neutronclient>=6.7.0 # Apache-2.0
 six

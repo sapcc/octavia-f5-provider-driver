@@ -16,8 +16,10 @@ import oslo_messaging as messaging
 from oslo_config import cfg
 from oslo_log import log as logging
 
+from octavia_f5.utils import driver_utils
 from octavia_lib.api.drivers import provider_base as driver_base
 from octavia_lib.api.drivers import exceptions
+from octavia_lib.api.drivers import data_models
 from octavia_f5.common import constants as consts
 
 CONF = cfg.CONF
@@ -42,14 +44,16 @@ class F5ProviderDriver(driver_base.ProviderDriver):
 
     # Load Balancer
     def create_vip_port(self, loadbalancer_id, project_id, vip_dictionary):
-        """Returns dictionary populated by neutron L2 driver for F5."""
-        return vip_dictionary
+        # Let Octavia create the port
+        raise exceptions.NotImplementedError()
 
     def loadbalancer_create(self, loadbalancer):
         self._refresh(loadbalancer.project_id)
 
     def loadbalancer_delete(self, loadbalancer, cascade=False):
-        # TODO also delete neutron port
+        network = driver_utils.get_network_driver()
+        vip_obj = driver_utils.lb_to_vip_obj(loadbalancer)
+        network.deallocate_vip(vip_obj)
         self._refresh(loadbalancer.project_id)
 
     def loadbalancer_failover(self, loadbalancer_id):
