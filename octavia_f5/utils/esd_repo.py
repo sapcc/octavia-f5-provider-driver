@@ -18,13 +18,11 @@ Defines interface for ESD access that Resource or Octavia Controllers may
 reference
 """
 
-import datetime
 import glob
 import json
 import os
-import types
+import six
 
-from enum import Enum
 from oslo_config import cfg
 from octavia.common import exceptions
 from oslo_log import log as logging
@@ -152,27 +150,27 @@ class EsdRepository(EsdJSONValidation):
 
     valid_esd_tags = {
         'lbaas_fastl4': {
-            'value_type': types.StringTypes},
+            'value_type': six.string_types},
         'lbaas_ctcp': {
-            'value_type': types.StringTypes},
+            'value_type': six.string_types},
         'lbaas_stcp': {
-            'value_type': types.StringTypes},
+            'value_type': six.string_types},
         'lbaas_http': {
-            'value_type': types.StringTypes},
+            'value_type': six.string_types},
         'lbaas_one_connect': {
-            'value_type': types.StringTypes},
+            'value_type': six.string_types},
         'lbaas_http_compression': {
-            'value_type': types.StringTypes},
+            'value_type': six.string_types},
         'lbaas_cssl_profile': {
-            'value_type': types.StringTypes},
+            'value_type': six.string_types},
         'lbaas_sssl_profile': {
-            'value_type': types.StringTypes},
+            'value_type': six.string_types},
         'lbaas_irule': {
-            'value_type': types.ListType},
+            'value_type': list},
         'lbaas_policy': {
-            'value_type': types.ListType},
+            'value_type': list},
         'lbaas_persist': {
-            'value_type': types.StringTypes},
+            'value_type': six.string_types},
         'lbaas_fallback_persist': {
-            'value_type': types.StringTypes}
+            'value_type': six.string_types}
     }

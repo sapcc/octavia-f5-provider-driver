@@ -60,7 +60,6 @@ class ControllerWorker(object):
         self.bigip = BigipAS3RestClient(CONF.f5_agent.bigip_url,
                                         CONF.f5_agent.bigip_verify,
                                         CONF.f5_agent.bigip_token,
-                                        CONF.f5_agent.network_segment_physical_network,
                                         self._esd)
 
         super(ControllerWorker, self).__init__()

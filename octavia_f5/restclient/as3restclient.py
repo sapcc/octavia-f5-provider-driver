@@ -34,13 +34,12 @@ AS3_DECLARE_PATH = '/mgmt/shared/appsvcs/declare'
 
 class BigipAS3RestClient(object):
     def __init__(self, bigip_url, enable_verify=True, enable_token=True,
-                 physical_network=None, esd=None):
+                 esd=None):
         self.bigip = parse.urlsplit(bigip_url, allow_fragments=False)
         self.enable_verify = enable_verify
         self.enable_token = enable_token
         self.token = None
         self.session = self._create_session()
-        self.physical_network = physical_network
         self.esd = esd
 
     def _url(self, path):
@@ -113,7 +112,7 @@ class BigipAS3RestClient(object):
         response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
         response.raise_for_status()
         LOG.debug("POST finished with %d", response.status_code)
-        print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
+        LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
         return response
 
     @retry(
@@ -129,5 +128,5 @@ class BigipAS3RestClient(object):
         params.update({'op': operation, 'path': path})
         response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
         response.raise_for_status()
-        print json.dumps(json.loads(response.text), indent=4, sort_keys=True)
+        LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
         return response
