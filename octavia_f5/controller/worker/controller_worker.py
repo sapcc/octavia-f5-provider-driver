@@ -57,10 +57,11 @@ class ControllerWorker(object):
         self._esd = esd_repo.EsdRepository()
         self._l7policy_repo = repo.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
-        self.bigip = BigipAS3RestClient(CONF.f5_agent.bigip_url,
-                                        CONF.f5_agent.bigip_verify,
-                                        CONF.f5_agent.bigip_token,
-                                        self._esd)
+        self.bigip = BigipAS3RestClient(
+            bigip_url=CONF.f5_agent.bigip_url,
+            enable_verify=CONF.f5_agent.bigip_verify,
+            enable_token=CONF.f5_agent.bigip_token,
+            esd=self._esd)
 
         super(ControllerWorker, self).__init__()
 
