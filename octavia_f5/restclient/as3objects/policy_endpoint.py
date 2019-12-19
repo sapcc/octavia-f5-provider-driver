@@ -77,9 +77,11 @@ def _get_action(l7policy):
 def get_endpoint_policy(l7policy):
     args = dict()
     args['label'] = l7policy.name
-    args['name'] = l7policy.id.replace('-', '_')
     args['remark'] = l7policy.description
-    args['conditions'] = [_get_condition(l7rule) for l7rule in l7policy.l7rules]
-    args['actions'] = [_get_action(l7policy)]
+    args['rules'] = [Endpoint_Policy_Rule(
+        name=get_name(l7policy.id),
+        conditions=[_get_condition(l7rule) for l7rule in l7policy.l7rules],
+        actions=[_get_action(l7policy)]
+    )]
     args['strategy'] = 'all-match'
     return Endpoint_Policy(**args)

@@ -15,10 +15,6 @@
 from octavia_f5.common import constants
 
 
-def get_name(project_id):
-    if project_id is not None:
-        name = constants.PREFIX_PROJECT + project_id.replace('/', '')
-    else:
-        name = "Common"
-
-    return name
+def get_name(network_id):
+    return "{}{}".format(constants.PREFIX_NETWORK,
+                         network_id.replace('-', '_'))

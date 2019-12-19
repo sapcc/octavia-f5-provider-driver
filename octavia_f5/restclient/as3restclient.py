@@ -16,16 +16,12 @@ import json
 import functools
 import requests
 from oslo_log import log as logging
-from requests import HTTPError
+from requests.adapters import HTTPAdapter
 from requests.auth import HTTPBasicAuth
 from six.moves.urllib import parse
-from tenacity import *
+from urllib3.util.retry import Retry
 
 LOG = logging.getLogger(__name__)
-RETRY_ATTEMPTS = 15
-RETRY_INITIAL_DELAY = 1
-RETRY_BACKOFF = 1
-RETRY_MAX = 5
 
 AS3_LOGIN_PATH = '/mgmt/shared/authn/login'
 AS3_TOKENS_PATH = '/mgmt/shared/authz/tokens/{}'
@@ -53,6 +49,12 @@ class BigipAS3RestClient(object):
 
     def _create_session(self):
         session = requests.Session()
+        retry = Retry(
+            total=5,
+            backoff_factor=0.3,
+            status_forcelist=(500, 502, 503, 504),
+        )
+        session.mount('https://', HTTPAdapter(max_retries=retry))
         session.verify = self.enable_verify
         return session
 
@@ -63,22 +65,14 @@ class BigipAS3RestClient(object):
     def authorized(func):
         @functools.wraps(func)
         def wrapper(self, *args, **kwargs):
-            try:
+            response = func(self, *args, **kwargs)
+            if response.status_code == 401:
+                self.reauthorize()
                 return func(self, *args, **kwargs)
-            except HTTPError as e:
-                if e.response.status_code == 401:
-                    self.reauthorize()
-                    return func(self, *args, **kwargs)
-                else:
-                    raise(e)
+            else:
+                return response
         return wrapper
 
-    @retry(
-        retry=retry_if_exception_type(HTTPError),
-        wait=wait_incrementing(
-            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS),
-    )
     def reauthorize(self):
         # Login
         credentials = {
@@ -89,7 +83,6 @@ class BigipAS3RestClient(object):
         basicauth = HTTPBasicAuth(self.bigip.username, self.bigip.password)
         r = self.session.post(self._url(AS3_LOGIN_PATH),
                               json=credentials, auth=basicauth)
-        r.raise_for_status()
         self.token = r.json()['token']['token']
 
         self.session.headers.update({'X-F5-Auth-Token': self.token})
@@ -100,26 +93,17 @@ class BigipAS3RestClient(object):
         r = self.session.patch(self._url(AS3_TOKENS_PATH.format(self.token)), json=patch_timeout)
         LOG.debug("Reauthorized!")
 
-    @retry(
-        retry=retry_if_exception_type(HTTPError),
-        wait=wait_incrementing(
-            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS)
-    )
     @authorized
     def post(self, **kwargs):
         LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
         response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
-        response.raise_for_status()
         LOG.debug("POST finished with %d", response.status_code)
-        LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
+        if response.headers.get('Content-Type') == 'application/json':
+            LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
+        else:
+            LOG.debug(response.text)
         return response
 
-    @retry(
-        retry=retry_if_exception_type(HTTPError),
-        wait=wait_incrementing(
-            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS))
     @authorized
     def patch(self, operation, path, **kwargs):
         LOG.debug("Calling PATCH %s with path %s", operation, path)
@@ -127,6 +111,24 @@ class BigipAS3RestClient(object):
 
         params.update({'op': operation, 'path': path})
         response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
-        response.raise_for_status()
-        LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
+        if response.headers.get('Content-Type') == 'application/json':
+            LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
+        else:
+            LOG.debug(response.text)
+        return response
+
+    @authorized
+    def delete(self, **kwargs):
+        tenants = kwargs.get('tenants', None)
+        if not tenants:
+            LOG.error("Delete called without tenant, would wipe all AS3 Declaration, ignoring!")
+            return None
+
+        LOG.debug("Calling DELETE for tenants %s", tenants)
+        response = self.session.delete(self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants))))
+        LOG.debug("DELETE finished with %d", response.status_code)
+        if response.headers.get('Content-Type') == 'application/json':
+            LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
+        else:
+            LOG.debug(response.text)
         return response

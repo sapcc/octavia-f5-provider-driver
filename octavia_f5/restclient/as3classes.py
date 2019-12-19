@@ -132,10 +132,7 @@ class Application(BaseDescription):
         if hasattr(self, name):
             raise DuplicatedKeyException
 
-        if not hasattr(self, 'policyEndpoint'):
-            setattr(self, 'policyEndpoint', [policy_endpoint])
-        else:
-            self.policyEndpoint.append(policy_endpoint)
+        setattr(self, name, policy_endpoint)
 
 
 class Service(BaseDescription):
@@ -225,7 +222,12 @@ class Endpoint_Policy_Rule(BaseDescription):
 
 
 class Policy_Condition(BaseDescription):
-    def __init__(self, **kwargs):
+    TYPE = ['httpHeader', 'httpUri', 'httpCookie', 'sslExtension']
+
+    def __init__(self, type, **kwargs):
+        if type not in self.TYPE:
+            raise TypeNotSupportedException
+
         super(Policy_Condition, self).__init__(locals())
 
 
@@ -235,14 +237,7 @@ class Policy_Action(BaseDescription):
 
 
 class Policy_Compare_String(BaseDescription):
-    TYPE = ['httpHeader', 'httpUri', 'httpCookie', 'sslExtension']
-
-    def __init__(self, type, values, operand='equals', case_sensitive=False):
+    def __init__(self, values, operand='equals', _case_sensitive=False):
         super(Policy_Compare_String, self).__init__(locals())
-        if case_sensitive:
-            setattr(self, 'caseSensitive', 'true')
-        else:
-            setattr(self, 'caseSensitive', 'false')
 
-        if type not in self.TYPE:
-            raise TypeNotSupportedException
+        setattr(self, 'caseSensitive', _case_sensitive)

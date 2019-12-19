@@ -26,7 +26,7 @@ LOG = logging.getLogger(__name__)
 
 def get_name(pool_id):
     return constants.PREFIX_POOL + \
-           pool_id.replace('/', '').replace('-','')
+           pool_id.replace('/', '').replace('-','_')
 
 
 def get_path(pool):
@@ -42,7 +42,7 @@ def get_pool(pool):
 
     return Pool(
         label=pool.name,
-        remark=pool.description,
+        remark=pool.description or pool.id,
         loadBalancingMode=lbmode
     )
 

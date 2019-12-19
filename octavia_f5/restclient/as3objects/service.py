@@ -11,12 +11,14 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+from oslo_config import cfg
 
 from octavia_f5.common import constants as con
-from oslo_config import cfg
 from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Persist
-from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import application as m_app
+from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
+from octavia_f5.restclient.as3objects import pool as m_pool
+from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
 
@@ -122,6 +124,12 @@ def get_service(listener):
                 persistenceMethod='cookie',
                 cookieName=persistence.cookie_name
             )
+
+    if listener.l7policies:
+        service_args['policyEndpoint'] = [
+            m_policy.get_name(l7policy.id) for l7policy in listener.l7policies
+            if l7policy.provisioning_status != lib_consts.PENDING_DELETE
+        ]
 
     return Service(**service_args)
 
