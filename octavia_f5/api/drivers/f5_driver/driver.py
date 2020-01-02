@@ -16,7 +16,9 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia.api.drivers.amphora_driver import driver
+from octavia_f5.utils import driver_utils as utils
 from octavia_lib.api.drivers import exceptions
+from octavia.db import api as db_apis
 
 CONF = cfg.CONF
 CONF.import_group('oslo_messaging', 'octavia.common.config')
@@ -27,6 +29,14 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
     """Octavia plugin for the F5 driver."""
     def __init__(self):
         super(F5ProviderDriver, self).__init__()
+
+    def loadbalancer_create(self, loadbalancer):
+        # Fetch default route domain
+        network_driver = utils.get_network_driver()
+        segmentation_id = network_driver.get_segmentation_id(loadbalancer.vip_network_id)
+        self.repositories.load_balancer.update(db_apis.get_session(),
+                                               id=loadbalancer.loadbalancer_id,
+                                               tags=[segmentation_id])
 
     def create_vip_port(self, loadbalancer_id, project_id, vip_dictionary):
         # Let Octavia create the port

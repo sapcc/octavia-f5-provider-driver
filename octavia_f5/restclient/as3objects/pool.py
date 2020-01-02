@@ -15,10 +15,11 @@
 
 from octavia_f5.common import constants
 from oslo_log import log as logging
+from octavia_lib.common import constants as lib_consts
 
-from octavia_f5.restclient.as3classes import Pool
+from octavia_f5.restclient.as3classes import Pool, Pointer
 from octavia_f5.restclient.as3objects import tenant as m_partition
-#from octavia_f5.restclient.as3objects import monitor as m_monitor
+from octavia_f5.restclient.as3objects import monitor as m_monitor
 from octavia_f5.restclient.as3objects import application as m_app
 
 LOG = logging.getLogger(__name__)
@@ -40,11 +41,15 @@ def get_pool(pool):
         lbmode = 'least-connections-member'
     # SOURCE_IP algo not supported by BigIP
 
-    return Pool(
-        label=pool.name,
-        remark=pool.description or pool.id,
-        loadBalancingMode=lbmode
-    )
+    args = {
+        'label': pool.name or pool.id,
+        'remark': pool.description or pool.id,
+        'loadBalancingMode': lbmode,
+    }
+    if pool.health_monitor:
+        args['monitors'] = [Pointer(use=m_monitor.get_name(pool.health_monitor.id))]
+
+    return Pool(**args)
 
 
 def to_dict(loadbalancer, pool):

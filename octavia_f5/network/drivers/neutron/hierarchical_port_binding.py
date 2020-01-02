@@ -14,6 +14,7 @@
 
 from neutronclient.common import exceptions as neutron_client_exceptions
 from oslo_log import log as logging
+from oslo_config import cfg
 
 from octavia.i18n import _
 from octavia.network import base
@@ -22,11 +23,20 @@ from octavia.network.drivers.neutron import utils
 from octavia_f5.common import constants
 
 LOG = logging.getLogger(__name__)
+CONF = cfg.CONF
 
 PROJECT_ID_ALIAS = 'project-id'
 
 
 class HierachicalPortBindingDriver(allowed_address_pairs.AllowedAddressPairsDriver):
+    def __init__(self):
+        super(HierachicalPortBindingDriver, self).__init__()
+        cfg_physical = cfg.StrOpt('f5_network_segment_physical_network', default="",
+                                  help=_('Restrict discovery of network segmentation ID '
+                                         'to a specific physical network name.'))
+        CONF.register_opt(cfg_physical,
+                          group='networking')
+
     def allocate_vip(self, load_balancer):
         if load_balancer.vip.port_id:
             LOG.info('Port %s already exists. Nothing to be done.',
@@ -97,3 +107,15 @@ class HierachicalPortBindingDriver(allowed_address_pairs.AllowedAddressPairsDriv
         elif port:
             LOG.info("Port %s will not be deleted by Octavia as it was "
                      "not created by Octavia.", vip.port_id)
+
+    def get_segmentation_id(self, network_id):
+        physical_network = CONF.networking.f5_network_segment_physical_network
+        # List neutron ports associated with the Amphora
+        try:
+            network = self.neutron_client.show_network(network_id)
+            for segment in network['network']['segments']:
+                if segment['provider:physical_network'] == physical_network:
+                    return segment['provider:segmentation_id']
+        except Exception as e:
+            LOG.error('Error retrieving segmentation id for network "%s": %s', network_id, e)
+        return 0

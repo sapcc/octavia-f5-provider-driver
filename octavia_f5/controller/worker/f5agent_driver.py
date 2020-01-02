@@ -46,12 +46,11 @@ def _pending_delete(obj):
         RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
     stop=stop_after_attempt(RETRY_ATTEMPTS)
 )
-def tenant_update(bigip, tenant, loadbalancers, action='deploy'):
+def tenant_update(bigip, tenant, loadbalancers, segmentation_id, action='deploy'):
     """Task to update F5s with all specified loadbalancers' configurations
        of a tenant (project).
 
     """
-    status = defaultdict(list)
     decl = AS3(
         persist=True,
         action=action)
@@ -61,7 +60,9 @@ def tenant_update(bigip, tenant, loadbalancers, action='deploy'):
     decl.set_adc(adc)
 
     tenant = adc.get_or_create_tenant(
-        m_part.get_name(tenant))
+        m_part.get_name(tenant),
+        defaultRouteDomain=segmentation_id
+    )
 
     for loadbalancer in loadbalancers:
         if _pending_delete(loadbalancer):

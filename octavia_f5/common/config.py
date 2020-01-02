@@ -59,5 +59,9 @@ f5_agent_opts = [
 
 ]
 
+f5_networking_opts = [
+]
+
 # Register the configuration options
 cfg.CONF.register_opts(f5_agent_opts, group='f5_agent')
+cfg.CONF.register_opts(f5_networking_opts, group='networking')

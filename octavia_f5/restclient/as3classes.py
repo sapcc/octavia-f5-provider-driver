@@ -83,9 +83,9 @@ class ADC(BaseDescription):
     def set_tenant(self, name, tenant):
         setattr(self, name, tenant)
 
-    def get_or_create_tenant(self, name):
+    def get_or_create_tenant(self, name, **kwargs):
         if not hasattr(self, name):
-            self.set_tenant(name, Tenant())
+            self.set_tenant(name, Tenant(**kwargs))
 
         return getattr(self, name)
 
@@ -156,12 +156,6 @@ class Pool(BaseDescription):
             setattr(self, 'members', [member])
         else:
             self.members.append(member)
-
-    def add_monitor(self, monitor):
-        if not hasattr(self, 'monitors'):
-            setattr(self, 'monitors', [monitor])
-        else:
-            self.members.append(monitor)
 
 
 class Member(BaseDescription):
@@ -241,3 +235,10 @@ class Policy_Compare_String(BaseDescription):
         super(Policy_Compare_String, self).__init__(locals())
 
         setattr(self, 'caseSensitive', _case_sensitive)
+
+
+class Pointer(BaseDescription):
+    def __init__(self, use):
+        super(Pointer, self).__init__(locals())
+
+        self.require('use')

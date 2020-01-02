@@ -25,7 +25,7 @@ from octavia.db import repositories as repo, models
 from octavia_f5.controller.worker.f5agent_driver import tenant_update, tenant_delete
 from octavia_f5.db import api as db_apis
 from octavia_f5.restclient.as3restclient import BigipAS3RestClient
-from octavia_f5.utils import esd_repo
+from octavia_f5.utils import esd_repo, driver_utils
 from octavia_lib.api.drivers import driver_lib
 from octavia_lib.api.drivers import exceptions as driver_exceptions
 from octavia_lib.common import constants as lib_consts
@@ -75,6 +75,7 @@ class ControllerWorker(object):
             enable_verify=CONF.f5_agent.bigip_verify,
             enable_token=CONF.f5_agent.bigip_token,
             esd=self._esd)
+        self.network_driver = driver_utils.get_network_driver()
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None)]
         )
@@ -150,7 +151,8 @@ class ControllerWorker(object):
 
     def _refresh(self, network_id):
         loadbalancers = self._get_all_loadbalancer(network_id)
-        ret = tenant_update(self.bigip, network_id, loadbalancers)
+        segmentation_id = self.network_driver.get_segmentation_id(network_id)
+        ret = tenant_update(self.bigip, network_id, loadbalancers, segmentation_id)
 
         if ret.status_code < 400:
             status = defaultdict(list)
@@ -177,6 +179,11 @@ class ControllerWorker(object):
                     for member in pool.members:
                         status[lib_consts.MEMBERS].append(
                             _status(member.id))
+
+                    if pool.health_monitor:
+                        status[lib_consts.HEALTHMONITORS].append(
+                            _status(pool.health_monitor.id))
+
 
             self._update_status_to_octavia(status)
             return True
@@ -232,8 +239,9 @@ class ControllerWorker(object):
             # Delete whole tenant
             ret = tenant_delete(self.bigip, lb.vip.network_id)
         else:
-            # Delete only single loadbalancer
-            ret = tenant_update(self.bigip, lb.vip.network_id, existing_lbs)
+            # Don't delete whole tenant
+            segmentation_id = self.network_driver.get_segmentation_id(lb.vip.network_id)
+            ret = tenant_update(self.bigip, lb.vip.network_id, existing_lbs, segmentation_id)
 
         if ret.status_code < 400:
             self._set_status_deleted(lb.id, lib_consts.LOADBALANCERS)
