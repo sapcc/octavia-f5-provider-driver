@@ -15,7 +15,6 @@
 
 from octavia_f5.common import constants
 from oslo_log import log as logging
-import octavia_f5.restclient.as3objects.pool as m_pool
 from octavia_f5.restclient.as3classes import Monitor
 
 LOG = logging.getLogger(__name__)
@@ -24,11 +23,6 @@ LOG = logging.getLogger(__name__)
 def get_name(healthmonitor_id):
     return constants.PREFIX_HEALTH_MONITOR + \
            healthmonitor_id.replace('/', '').replace('-', '_')
-
-
-def get_path(health_monitor):
-    return m_pool.get_path(health_monitor.pool) \
-           + '/' + get_name(health_monitor.id)
 
 
 def get_monitor(health_monitor):

@@ -15,10 +15,8 @@
 
 from octavia_f5.common import constants
 from oslo_log import log as logging
-from octavia_lib.common import constants as lib_consts
 
 from octavia_f5.restclient.as3classes import Pool, Pointer
-from octavia_f5.restclient.as3objects import tenant as m_partition
 from octavia_f5.restclient.as3objects import monitor as m_monitor
 from octavia_f5.restclient.as3objects import application as m_app
 
@@ -27,7 +25,7 @@ LOG = logging.getLogger(__name__)
 
 def get_name(pool_id):
     return constants.PREFIX_POOL + \
-           pool_id.replace('/', '').replace('-','_')
+           pool_id.replace('/', '').replace('-', '_')
 
 
 def get_path(pool):
@@ -50,45 +48,6 @@ def get_pool(pool):
         args['monitors'] = [Pointer(use=m_monitor.get_name(pool.health_monitor.id))]
 
     return Pool(**args)
-
-
-def to_dict(loadbalancer, pool):
-    name = get_path(pool.id) if pool else ''
-    partition = m_partition.get_partition_name(loadbalancer.project_id)
-
-    return dict(name=name, partition=partition)
-
-
-# from service_adpater.py f5_driver-agent
-def map_pool(pool, loadbalancer, members, health_monitor):
-    obj = to_dict(loadbalancer, pool)
-    obj["description"] = m_partition.get_resource_description(pool)
-
-    if hasattr(pool, 'lb_algorithm'):
-        lbaas_lb_method = pool.lb_algorithm.upper()
-        obj['loadBalancingMode'] = \
-            _set_lb_method(lbaas_lb_method, members)
-
-        # If source_ip lb method, add SOURCE_IP persistence to ensure
-        # source IP loadbalancing. See issue #344 for details.
-        if pool.lb_algorithm.upper() == 'SOURCE_IP':
-            persist = getattr(pool, 'session_persistence', None)
-            if not persist:
-                obj['session_persistence'] = {'type': 'SOURCE_IP'}
-
-    if pool.health_monitor:
-        hm = m_monitor.to_dict(loadbalancer, pool.health_monitor)
-        obj["monitor"] = hm.name
-
-    obj_members = list()
-    for member in members:
-        provisioning_status = member.get('provisioning_status', "")
-        if provisioning_status != "PENDING_DELETE":
-            obj_members.append(_map_member(member))
-
-        obj["members"] = obj_members
-
-    return obj
 
 
 # from service_adpater.py f5_driver-agent
@@ -157,5 +116,3 @@ def _map_member(self, member):
     obj["partition"] = self.get_partition_name(member.project_id)
     obj["address"] = ip_address
     return obj
-
-
