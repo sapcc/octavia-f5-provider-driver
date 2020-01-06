@@ -20,6 +20,7 @@ from futurist import periodics
 from oslo_config import cfg
 from oslo_log import log as logging
 from sqlalchemy.orm import exc as db_exceptions
+from stevedore import driver as stevedore_driver
 
 from octavia.db import repositories as repo, models
 from octavia_f5.controller.worker.f5agent_driver import tenant_update, tenant_delete
@@ -75,6 +76,11 @@ class ControllerWorker(object):
             enable_verify=CONF.f5_agent.bigip_verify,
             enable_token=CONF.f5_agent.bigip_token,
             esd=self._esd)
+        self.cert_manager = stevedore_driver.DriverManager(
+            namespace='octavia.cert_manager',
+            name=CONF.certificates.cert_manager,
+            invoke_on_load=True,
+        ).driver
         self.network_driver = driver_utils.get_network_driver()
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None)]
@@ -152,7 +158,7 @@ class ControllerWorker(object):
     def _refresh(self, network_id):
         loadbalancers = self._get_all_loadbalancer(network_id)
         segmentation_id = self.network_driver.get_segmentation_id(network_id)
-        ret = tenant_update(self.bigip, network_id, loadbalancers, segmentation_id)
+        ret = tenant_update(self.bigip, self.cert_manager, network_id, loadbalancers, segmentation_id)
 
         if ret.status_code < 400:
             status = defaultdict(list)
@@ -183,7 +189,6 @@ class ControllerWorker(object):
                     if pool.health_monitor:
                         status[lib_consts.HEALTHMONITORS].append(
                             _status(pool.health_monitor.id))
-
 
             self._update_status_to_octavia(status)
             return True
@@ -241,7 +246,7 @@ class ControllerWorker(object):
         else:
             # Don't delete whole tenant
             segmentation_id = self.network_driver.get_segmentation_id(lb.vip.network_id)
-            ret = tenant_update(self.bigip, lb.vip.network_id, existing_lbs, segmentation_id)
+            ret = tenant_update(self.bigip, self.cert_manager, lb.vip.network_id, existing_lbs, segmentation_id)
 
         if ret.status_code < 400:
             self._set_status_deleted(lb.id, lib_consts.LOADBALANCERS)

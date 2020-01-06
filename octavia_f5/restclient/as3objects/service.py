@@ -13,11 +13,12 @@
 # under the License.
 from oslo_config import cfg
 
-from octavia_f5.common import constants as con
+from octavia_f5.common import constants as const
 from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Persist
 from octavia_f5.restclient.as3objects import application as m_app
 from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
+from octavia_f5.restclient.as3objects import tls as m_tls
 from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
@@ -26,7 +27,7 @@ CONF = cfg.CONF
 
 
 def get_name(listener_id):
-    return con.PREFIX_LISTENER + \
+    return const.PREFIX_LISTENER + \
            listener_id.replace('/', '').replace('-', '_')
 
 
@@ -45,8 +46,8 @@ def process_esd(servicetype, esd):
         ]
 
     # client / server tcp profiles
-    if servicetype in [con.SERVICE_HTTP, con.SERVICE_HTTPS,
-                       con.SERVICE_TCP]:
+    if servicetype in [const.SERVICE_HTTP, const.SERVICE_HTTPS,
+                       const.SERVICE_TCP]:
         ctcp = esd.get('lbaas_ctcp', None)
         stcp = esd.get('lbaas_stcp', None)
         if stcp and ctcp:
@@ -60,7 +61,7 @@ def process_esd(servicetype, esd):
         else:
             service_args['profileTCP'] = 'normal'
 
-    if servicetype in [con.SERVICE_HTTP, con.SERVICE_HTTPS]:
+    if servicetype in [const.SERVICE_HTTP, const.SERVICE_HTTPS]:
         # OneConnect (Multiplex) Profile
         oneconnect = esd.get('lbaas_one_connect', None)
         if oneconnect:
@@ -78,18 +79,20 @@ def process_esd(servicetype, esd):
 
 def get_service(listener):
     # Determine service type
-    servicetype = con.SERVICE_GENERIC
-    if listener.protocol == con.PROTOCOL_TCP:
+    servicetype = const.SERVICE_GENERIC
+    if listener.protocol == const.PROTOCOL_TCP:
         servicetype = CONF.f5_agent.tcp_service_type
     # UDP
-    elif listener.protocol == con.PROTOCOL_UDP:
-        servicetype = con.SERVICE_UDP
+    elif listener.protocol == const.PROTOCOL_UDP:
+        servicetype = const.SERVICE_UDP
     # HTTP
-    elif listener.protocol == con.PROTOCOL_HTTP:
-        servicetype = con.SERVICE_HTTP
-    # HTTPS
-    elif listener.protocol == con.PROTOCOL_HTTPS:
-        servicetype = con.SERVICE_HTTPS
+    elif listener.protocol == const.PROTOCOL_HTTP:
+        servicetype = const.SERVICE_HTTP
+    # HTTPS (non-terminated)
+    elif listener.protocol == const.PROTOCOL_HTTPS:
+        servicetype = const.SERVICE_HTTPS
+    elif listener.protocol == const.PROTOCOL_TERMINATED_HTTPS:
+        servicetype = const.SERVICE_HTTPS
 
     vip = listener.load_balancer.vip
 
@@ -98,6 +101,11 @@ def get_service(listener):
         'virtualPort': listener.protocol_port,
         'virtualAddresses': [vip.ip_address]
     }
+
+    # Terminated HTTPS handling
+    if listener.protocol == const.PROTOCOL_TERMINATED_HTTPS:
+        service_args['serverTLS'] = m_tls.get_name(listener.id)
+        service_args['redirect80'] = False
 
     if listener.connection_limit > 0:
         service_args['maxConnections'] = listener.connection_limit
@@ -132,6 +140,7 @@ def get_service(listener):
         ]
 
     return Service(**service_args)
+
 
 def get_service_profiles(l7policy):
     pass

@@ -134,6 +134,12 @@ class Application(BaseDescription):
 
         setattr(self, name, policy_endpoint)
 
+    def add_tls_server(self, name, tls_server):
+        setattr(self, name, tls_server)
+
+    def add_certificate(self, name, certificate):
+        setattr(self, name, certificate)
+
 
 class Service(BaseDescription):
 
@@ -182,7 +188,6 @@ class BigIP(BaseDescription):
 class Service_Generic_profileTCP(BaseDescription):
     def __init__(self, ingress, egress):
         super(Service_Generic_profileTCP, self).__init__(locals())
-
         self.require('ingress')
         self.require('egress')
 
@@ -233,12 +238,23 @@ class Policy_Action(BaseDescription):
 class Policy_Compare_String(BaseDescription):
     def __init__(self, values, operand='equals', _case_sensitive=False):
         super(Policy_Compare_String, self).__init__(locals())
-
         setattr(self, 'caseSensitive', _case_sensitive)
 
 
 class Pointer(BaseDescription):
     def __init__(self, use):
         super(Pointer, self).__init__(locals())
-
         self.require('use')
+
+
+class TLS_Server(BaseDescription):
+    def __init__(self, **kwargs):
+        super(TLS_Server, self).__init__(locals())
+        setattr(self, 'class', 'TLS_Server')
+
+
+class Certificate(BaseDescription):
+    def __init__(self, **kwargs):
+        super(Certificate, self).__init__(locals())
+        setattr(self, 'class', 'Certificate')
+        self.require('certificate')

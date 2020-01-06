@@ -27,6 +27,8 @@ from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import tenant as m_part
+from octavia_f5.restclient.as3objects import tls as m_tls
+from octavia_f5.restclient.as3objects import certificate as m_cert
 from octavia_lib.common import constants as lib_consts
 
 LOG = logging.getLogger(__name__)
@@ -46,7 +48,7 @@ def _pending_delete(obj):
         RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
     stop=stop_after_attempt(RETRY_ATTEMPTS)
 )
-def tenant_update(bigip, tenant, loadbalancers, segmentation_id, action='deploy'):
+def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, action='deploy'):
     """Task to update F5s with all specified loadbalancers' configurations
        of a tenant (project).
 
@@ -94,6 +96,15 @@ def tenant_update(bigip, tenant, loadbalancers, segmentation_id, action='deploy'
                 m_service.get_name(listener.id),
                 m_service.get_service(listener)
             )
+
+            if listener.tls_certificate_id:
+                certificates = m_cert.get_certificates(listener, cert_manager)
+                app.add_tls_server(
+                    m_tls.get_name(listener.id),
+                    m_tls.get_tls_server([cert['id'] for cert in certificates])
+                )
+                for cert in certificates:
+                    app.add_certificate(cert['id'], cert['as3'])
 
         # attach pools
         for pool in loadbalancer.pools:

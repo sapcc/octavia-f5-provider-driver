@@ -56,6 +56,10 @@ f5_agent_opts = [
                choices=[constants.SERVICE_L4,
                         constants.SERVICE_TCP],
                help=_("Service type used for TCP listener")),
+    cfg.StrOpt('default', default=constants.SERVICE_L4,
+               choices=[constants.SERVICE_L4,
+                        constants.SERVICE_TCP],
+               help=_("Service type used for TCP listener")),
 
 ]
 
