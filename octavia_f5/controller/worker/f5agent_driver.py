@@ -92,10 +92,7 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
                         m_policy.get_name(l7policy.id),
                         m_policy.get_endpoint_policy(l7policy)
                     )
-            app.add_service(
-                m_service.get_name(listener.id),
-                m_service.get_service(listener)
-            )
+            app.add_entities(m_service.get_service(listener))
 
             if listener.tls_certificate_id:
                 certificates = m_cert.get_certificates(listener, cert_manager)

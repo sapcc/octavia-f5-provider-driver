@@ -14,11 +14,12 @@
 from oslo_config import cfg
 
 from octavia_f5.common import constants as const
-from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Persist
+from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Persist, Pointer
 from octavia_f5.restclient.as3objects import application as m_app
 from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import tls as m_tls
+from octavia_f5.restclient.as3objects import persist as m_persist
 from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
@@ -78,60 +79,68 @@ def process_esd(servicetype, esd):
 
 
 def get_service(listener):
-    # Determine service type
-    servicetype = const.SERVICE_GENERIC
-    if listener.protocol == const.PROTOCOL_TCP:
-        servicetype = CONF.f5_agent.tcp_service_type
-    # UDP
-    elif listener.protocol == const.PROTOCOL_UDP:
-        servicetype = const.SERVICE_UDP
-    # HTTP
-    elif listener.protocol == const.PROTOCOL_HTTP:
-        servicetype = const.SERVICE_HTTP
-    # HTTPS (non-terminated)
-    elif listener.protocol == const.PROTOCOL_HTTPS:
-        servicetype = const.SERVICE_HTTPS
-    elif listener.protocol == const.PROTOCOL_TERMINATED_HTTPS:
-        servicetype = const.SERVICE_HTTPS
-
+    entities = []
     vip = listener.load_balancer.vip
-
     service_args = {
-        '_servicetype': servicetype,
         'virtualPort': listener.protocol_port,
-        'virtualAddresses': [vip.ip_address]
+        'virtualAddresses': [vip.ip_address],
+        'persistenceMethods': [],
     }
 
-    # Terminated HTTPS handling
-    if listener.protocol == const.PROTOCOL_TERMINATED_HTTPS:
+    # Determine service type
+    if listener.protocol == const.PROTOCOL_TCP:
+        service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
+    # UDP
+    elif listener.protocol == const.PROTOCOL_UDP:
+        service_args['_servicetype'] = const.SERVICE_UDP
+    # HTTP
+    elif listener.protocol == const.PROTOCOL_HTTP:
+        service_args['_servicetype'] = const.SERVICE_HTTP
+    # HTTPS (non-terminated)
+    elif listener.protocol == const.PROTOCOL_HTTPS:
+        service_args['_servicetype'] = const.SERVICE_GENERIC
+    elif listener.protocol == const.PROTOCOL_TERMINATED_HTTPS:
+        service_args['_servicetype'] = const.SERVICE_HTTPS
         service_args['serverTLS'] = m_tls.get_name(listener.id)
         service_args['redirect80'] = False
+
+    if CONF.f5_agent.profile_l4:
+        service_args['profileL4'] = BigIP(CONF.f5_agent.profile_l4)
+    if CONF.f5_agent.profile_multiplex:
+        service_args['profileMultiplex'] = BigIP(CONF.f5_agent.profile_multiplex)
 
     if listener.connection_limit > 0:
         service_args['maxConnections'] = listener.connection_limit
 
     # Add default pool and session persistence
-    if listener.default_pool_id:
+    if listener.default_pool_id and listener.default_pool.session_persistence:
         default_pool = m_pool.get_name(listener.default_pool_id)
         persistence = listener.default_pool.session_persistence
-        #lb_algorithm = listener.default_pool.lb_algorith
-        lb_algorithm = 'SOURCE_IP'
-
+        lb_algorithm = listener.default_pool.lb_algorithm
         service_args['pool'] = default_pool
 
-        # lb algorithm rules them all
-        if lb_algorithm == 'SOURCE_IP':
-            service_args['persistenceMethods'] = ['source-address']
+        if persistence.type == 'APP_COOKIE':
+            name, obj_persist = m_persist.get_app_cookie(persistence.cookie_name)
+            service_args['persistenceMethods'] = [Pointer(name)]
+            entities.append((name, obj_persist))
+            if lb_algorithm == 'SOURCE_IP':
+                service_args['fallbackPersistenceMethod'] = 'source-address'
+
+        elif persistence.type == 'SOURCE_IP':
+            if not persistence.persistence_timeout and not persistence.persistence_granularity:
+                service_args['persistenceMethods'] = ['source-address']
+            else:
+                name, obj_persist = m_persist.get_source_ip(
+                    persistence.persistence_timeout,
+                    persistence.persistence_granularity
+                )
+                service_args['persistenceMethods'] = [Pointer(name)]
+                entities.append((name, obj_persist))
+
         elif persistence.type == 'HTTP_COOKIE':
             service_args['persistenceMethods'] = ['cookie']
-        elif persistence.type == 'SOURCE_IP':
-            # TODO: add persistence_timeout and/or persistence_granularity
-            service_args['persistenceMethods'] = ['source-address']
-        elif persistence.type == 'APP_COOKIE':
-            service_args['persistenceMethods'] = Persist(
-                persistenceMethod='cookie',
-                cookieName=persistence.cookie_name
-            )
+            if lb_algorithm == 'SOURCE_IP':
+                service_args['fallbackPersistenceMethod'] = 'source-address'
 
     if listener.l7policies:
         service_args['policyEndpoint'] = [
@@ -139,8 +148,6 @@ def get_service(listener):
             if l7policy.provisioning_status != lib_consts.PENDING_DELETE
         ]
 
-    return Service(**service_args)
-
-
-def get_service_profiles(l7policy):
-    pass
+    service = Service(**service_args)
+    entities.append((get_name(listener.id), service))
+    return entities

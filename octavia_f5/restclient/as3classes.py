@@ -110,6 +110,10 @@ class Application(BaseDescription):
     def set_service_main(self, service):
         self.serviceMain = service  # noqa
 
+    def add_entities(self, entities):
+        for name, entinty in entities:
+            setattr(self, name, entinty)
+
     def add_pool(self, name, pool):
         if hasattr(self, name):
             raise DuplicatedKeyException
