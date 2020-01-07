@@ -11,10 +11,9 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-import json
 
-from octavia_f5.tests.unit import base
 from octavia_f5.restclient.as3classes import *
+from octavia.tests.unit import base
 
 
 class TestAS3Classes(base.TestCase):
