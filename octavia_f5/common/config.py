@@ -56,11 +56,12 @@ f5_agent_opts = [
                choices=[constants.SERVICE_L4,
                         constants.SERVICE_TCP],
                help=_("Service type used for TCP listener")),
-    cfg.StrOpt('default', default=constants.SERVICE_L4,
-               choices=[constants.SERVICE_L4,
-                        constants.SERVICE_TCP],
-               help=_("Service type used for TCP listener")),
-
+    cfg.StrOpt('profile_l4', default=None,
+               help=_("Path to default l4 acceleration profile"
+                      "(e.g. /Common/custom_fastl4)")),
+    cfg.StrOpt('profile_multiplex', default=None,
+               help=_("Path to default multiplex (oneconnect) acceleration"
+                      " profile (e.g. /Common/custom_oneconnect)"))
 ]
 
 f5_networking_opts = [

@@ -34,11 +34,8 @@ def get_path(pool):
 
 
 def get_pool(pool):
-    lbmode = 'round-robin'
-    if pool.lb_algorithm is constants.LB_ALGORITHM_LEAST_CONNECTIONS:
-        lbmode = 'least-connections-member'
-    # SOURCE_IP algo not supported by BigIP
-
+    lbaas_lb_method = pool.lb_algorithm.upper()
+    lbmode = _set_lb_method(lbaas_lb_method, pool.members)
     args = {
         'label': pool.name or pool.id,
         'remark': pool.description or pool.id,
@@ -54,11 +51,11 @@ def get_pool(pool):
 def _get_lb_method(method):
     lb_method = method.upper()
 
-    if lb_method == 'LEAST_CONNECTIONS':
+    if lb_method == constants.LB_ALGORITHM_LEAST_CONNECTIONS:
         return 'least-connections-member'
     elif lb_method == 'RATIO_LEAST_CONNECTIONS':
         return 'ratio-least-connections-member'
-    elif lb_method == 'SOURCE_IP':
+    elif lb_method == constants.LB_ALGORITHM_SOURCE_IP:
         return 'least-connections-node'
     elif lb_method == 'OBSERVED_MEMBER':
         return 'observed-member'
@@ -71,9 +68,9 @@ def _get_lb_method(method):
 
 
 # from service_adpater.py f5_driver-agent
-def _set_lb_method(self, lb_method, members):
+def _set_lb_method(lbaas_lb_method, members):
     """Set pool lb method depending on member attributes."""
-    lb_method = self._get_lb_method(lb_method)
+    lb_method = _get_lb_method(lbaas_lb_method)
 
     if lb_method == 'SOURCE_IP':
         return lb_method
@@ -87,32 +84,7 @@ def _set_lb_method(self, lb_method, members):
 
     if member_has_weight:
         if lb_method == 'LEAST_CONNECTIONS':
-            return self._get_lb_method('RATIO_LEAST_CONNECTIONS')
-        return self._get_lb_method('RATIO')
+            return _get_lb_method('RATIO_LEAST_CONNECTIONS')
+        return _get_lb_method('RATIO')
     return lb_method
 
-
-def _map_member(self, member):
-    obj = {}
-    port = member.protocol_port
-    ip_address = member.address
-
-    if member.admin_state_up:
-        obj["session"] = "user-enabled"
-    else:
-        obj["session"] = "user-disabled"
-
-    if member.weight == 0:
-        obj["ratio"] = 1
-        obj["session"] = "user-disabled"
-    else:
-        obj["ratio"] = member.weight
-
-    if ':' in ip_address:
-        obj['name'] = ip_address + '.' + str(port)
-    else:
-        obj['name'] = ip_address + ':' + str(port)
-
-    obj["partition"] = self.get_partition_name(member.project_id)
-    obj["address"] = ip_address
-    return obj
