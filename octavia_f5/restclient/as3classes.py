@@ -18,7 +18,7 @@ import six
 from oslo_log import log as logging
 
 from octavia_f5.common import constants
-from octavia_f5.restclient.as3exceptions import *
+from octavia_f5.restclient import as3exceptions
 
 LOG = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class BaseDescription(object):
 
     def require(self, key):
         if getattr(self, key, None) is None:
-            raise RequiredKeyMissingException(key)
+            raise as3exceptions.RequiredKeyMissingException(key)
 
     def to_dict(self):
         data = self.__dict__.copy()
@@ -63,7 +63,7 @@ class AS3(BaseDescription):
 
     def __init__(self, persist=True, action='deploy'):
         if action not in self.ACTIONS:
-            raise TypeNotSupportedException
+            raise as3exceptions.TypeNotSupportedException
 
         super(AS3, self).__init__(locals())
         setattr(self, 'class', 'AS3')
@@ -102,7 +102,7 @@ class Tenant(BaseDescription):
 class Application(BaseDescription):
     def __init__(self, template, **kwargs):
         if template not in constants.SUPPORTED_APPLICATION_TEMPLATES:
-            raise TypeNotSupportedException
+            raise as3exceptions.TypeNotSupportedException
 
         super(Application, self).__init__(locals())
         setattr(self, 'class', 'Application')
@@ -112,25 +112,25 @@ class Application(BaseDescription):
 
     def add_pool(self, name, pool):
         if hasattr(self, name):
-            raise DuplicatedKeyException
+            raise as3exceptions.DuplicatedKeyException
 
         setattr(self, name, pool)
 
     def add_service(self, name, service):
         if hasattr(self, name):
-            raise DuplicatedKeyException
+            raise as3exceptions.DuplicatedKeyException
 
         setattr(self, name, service)
 
     def add_monitor(self, name, monitor):
         if hasattr(self, name):
-            raise DuplicatedKeyException
+            raise as3exceptions.DuplicatedKeyException
 
         setattr(self, name, monitor)
 
     def add_policy_endpoint(self, name, policy_endpoint):
         if hasattr(self, name):
-            raise DuplicatedKeyException
+            raise as3exceptions.DuplicatedKeyException
 
         setattr(self, name, policy_endpoint)
 
@@ -146,7 +146,7 @@ class Service(BaseDescription):
     def __init__(self, _servicetype, virtualAddresses=None,  # noqa
                  virtualPort=None, **kwargs):  # noqa
         if _servicetype not in constants.SUPPORTED_SERVICES:
-            raise TypeNotSupportedException
+            raise as3exceptions.TypeNotSupportedException
 
         super(Service, self).__init__(locals())
         setattr(self, 'class', _servicetype)
@@ -212,7 +212,7 @@ class Endpoint_Policy(BaseDescription):
         super(Endpoint_Policy, self).__init__(locals())
         setattr(self, 'class', 'Endpoint_Policy')
         if strategy not in self.STRATEGY:
-            raise TypeNotSupportedException
+            raise as3exceptions.TypeNotSupportedException
 
 
 class Endpoint_Policy_Rule(BaseDescription):
@@ -225,7 +225,7 @@ class Policy_Condition(BaseDescription):
 
     def __init__(self, type, **kwargs):
         if type not in self.TYPE:
-            raise TypeNotSupportedException
+            raise as3exceptions.TypeNotSupportedException
 
         super(Policy_Condition, self).__init__(locals())
 
