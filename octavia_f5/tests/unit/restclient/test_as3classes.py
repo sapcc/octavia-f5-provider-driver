@@ -49,23 +49,15 @@ class TestAS3Classes(base.TestCase):
         self.assertIsInstance(tenannt_obj, as3classes.Tenant)
         self.assertEqual(adc, adc_obj.to_dict())
 
-        adc = {'class': 'ADC', 'id': 123, 'updateMode': 'selective',
-                  'schemaVersion': '3.0.0', 'my-tenant': {'class': 'Tenant'},
-                  'label': 'test'}
-        adc_obj = as3classes.ADC(label='test', id=123)
-        adc_obj.set_tenant('my-tenant', as3classes.Tenant())
-        self.assertEqual(adc, adc_obj.to_dict())
-
     def test_tenant(self):
+        # creation
         tenant = {'class': 'Tenant'}
-        self.assertEqual(tenant, as3classes.Tenant().__dict__)
+        tenant_obj = as3classes.Tenant()
+        self.assertEqual(tenant, tenant_obj.to_dict())
 
-    def test_tenant_attributes(self):
-        result = {'updateMode': 'selective', 'class': 'ADC',
-                  'schemaVersion': '3.0.0', 'id': 123,
-                  'my-tenant': {'class': 'Tenant'},
-                  'label': 'test'}
+        # adding an application
+        app_name = 'test_app'
+        app = {app_name: 'app_content'}
+        tenant_obj.add_application(app_name, app[app_name])
+        self.assertEqual(app[app_name], tenant_obj.to_dict()[app_name])
 
-        adc = as3classes.ADC(label='test', id=123)
-        adc.set_tenant('my-tenant', as3classes.Tenant())
-        self.assertEqual(result, adc.to_dict())
