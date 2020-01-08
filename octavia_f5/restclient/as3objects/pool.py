@@ -37,8 +37,8 @@ def get_pool(pool):
     lbaas_lb_method = pool.lb_algorithm.upper()
     lbmode = _set_lb_method(lbaas_lb_method, pool.members)
     args = {
-        'label': pool.name or pool.id,
-        'remark': pool.description or pool.id,
+        'label': (pool.name or pool.id)[:64],
+        'remark': (pool.description or pool.id)[:64],
         'loadBalancingMode': lbmode,
     }
     if pool.health_monitor:

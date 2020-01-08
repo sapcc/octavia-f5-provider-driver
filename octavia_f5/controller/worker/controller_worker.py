@@ -71,6 +71,7 @@ class ControllerWorker(object):
         self._l7policy_repo = repo.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
         self._flavor_repo = repo.FlavorRepository()
+        self._vip_repo = repo.VipRepository()
         self.bigip = BigipAS3RestClient(
             bigip_url=CONF.f5_agent.bigip_url,
             enable_verify=CONF.f5_agent.bigip_verify,
@@ -150,10 +151,12 @@ class ControllerWorker(object):
     def _get_all_loadbalancer(self, network_id):
         LOG.debug("Get load balancers from DB for network id: %s ",
                   network_id)
-        return self._loadbalancer_repo.get_all(
+        vips = self._vip_repo.get_all(
             db_apis.get_session(),
-            models.Vip.network_id.__eq__(network_id),
-            show_deleted=False)[0]
+            network_id=network_id)
+        return [self._loadbalancer_repo.get(
+            db_apis.get_session(),
+            id=vip.load_balancer_id) for vip in vips[0]]
 
     def _refresh(self, network_id):
         loadbalancers = self._get_all_loadbalancer(network_id)

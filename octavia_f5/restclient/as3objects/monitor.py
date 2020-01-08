@@ -38,7 +38,7 @@ def get_monitor(health_monitor):
     elif health_monitor.type == 'PING':
         args['monitorType'] = 'icmp'
     elif health_monitor.type == 'TCP':
-        args['monitorType'] = 'tcp'
+        args['monitorType'] = 'tcp-half-open'
     elif health_monitor.type == 'TLS-HELLO':
         args['monitorType'] = 'tcp'
     elif health_monitor.type == 'UDP-CONNECT':
