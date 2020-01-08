@@ -38,5 +38,5 @@ class TestAS3Classes(base.TestCase):
                   'label': 'test'}
 
         adc = as3classes.ADC(label='test', id=123)
-        adc.setTenant('my-tenant', Tenant())
+        adc.set_tenant('my-tenant', as3classes.Tenant())
         self.assertEqual(result, adc.to_dict())
