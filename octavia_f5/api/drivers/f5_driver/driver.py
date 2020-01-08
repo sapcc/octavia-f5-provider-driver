@@ -30,14 +30,6 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
     def __init__(self):
         super(F5ProviderDriver, self).__init__()
 
-    def loadbalancer_create(self, loadbalancer):
-        # Fetch default route domain
-        network_driver = utils.get_network_driver()
-        segmentation_id = network_driver.get_segmentation_id(loadbalancer.vip_network_id)
-        self.repositories.load_balancer.update(db_apis.get_session(),
-                                               id=loadbalancer.loadbalancer_id,
-                                               tags=[segmentation_id])
-
     def create_vip_port(self, loadbalancer_id, project_id, vip_dictionary):
         # Let Octavia create the port
         raise exceptions.NotImplementedError()
