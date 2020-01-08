@@ -27,10 +27,34 @@ class TestAS3Classes(base.TestCase):
         self.assertEqual(as3, as3classes.AS3().to_dict())
 
     def test_adc(self):
+        # erroneous creation
         self.assertRaises(as3exceptions.RequiredKeyMissingException, as3classes.ADC)
+
+        # creation
         adc = {'class': 'ADC', 'schemaVersion': '3.0.0',
                'id': 123, 'label': 'test', 'updateMode': 'selective'}
-        self.assertEqual(adc, as3classes.ADC(label='test', id=123).__dict__)
+        adc_obj = as3classes.ADC(label='test', id=123)
+        self.assertEqual(adc, adc_obj.to_dict())
+
+        # adding a tenant
+        tenant_name = 'test_tenant1'
+        adc[tenant_name] = {'class': 'Tenant'}
+        adc_obj.set_tenant(tenant_name, adc[tenant_name])
+        self.assertEqual(adc, adc_obj.to_dict())
+
+        # retrieving a tenant
+        tenant_name = 'test_tenant2'
+        adc[tenant_name] = {'class': 'Tenant'}
+        tenannt_obj = adc_obj.get_or_create_tenant(tenant_name)
+        self.assertIsInstance(tenannt_obj, as3classes.Tenant)
+        self.assertEqual(adc, adc_obj.to_dict())
+
+        adc = {'class': 'ADC', 'id': 123, 'updateMode': 'selective',
+                  'schemaVersion': '3.0.0', 'my-tenant': {'class': 'Tenant'},
+                  'label': 'test'}
+        adc_obj = as3classes.ADC(label='test', id=123)
+        adc_obj.set_tenant('my-tenant', as3classes.Tenant())
+        self.assertEqual(adc, adc_obj.to_dict())
 
     def test_tenant(self):
         tenant = {'class': 'Tenant'}
