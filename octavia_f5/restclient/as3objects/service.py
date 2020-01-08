@@ -20,6 +20,7 @@ from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import tls as m_tls
 from octavia_f5.restclient.as3objects import persist as m_persist
+from octavia_f5.restclient.as3objects import irule as m_irule
 from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
@@ -102,6 +103,13 @@ def get_service(listener):
     # HTTPS (non-terminated)
     elif listener.protocol == const.PROTOCOL_HTTPS:
         service_args['_servicetype'] = const.SERVICE_GENERIC
+    # Proxy
+    elif listener.protocol == const.PROTOCOL_PROXY:
+        service_args['_servicetype'] = const.SERVICE_HTTP
+        name, irule = m_irule.get_proxy_irule()
+        service_args['iRules'] = [name]
+        entities.append((name, irule))
+    # Terminated HTTPS
     elif listener.protocol == const.PROTOCOL_TERMINATED_HTTPS:
         service_args['_servicetype'] = const.SERVICE_HTTPS
         service_args['serverTLS'] = m_tls.get_name(listener.id)
