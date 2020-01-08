@@ -18,8 +18,13 @@ from octavia_f5.restclient import as3classes, as3exceptions
 
 class TestAS3Classes(base.TestCase):
     def test_as3(self):
+        # erroneous creation
+        self.assertRaises(as3exceptions.TypeNotSupportedException,
+                          as3classes.AS3, None, {'action': 'NONEXISTENT'})
+
+        # creation with default arguments
         as3 = {'action': 'deploy', 'class': 'AS3', 'persist': True}
-        self.assertEqual(as3, as3classes.AS3().__dict__)
+        self.assertEqual(as3, as3classes.AS3().to_dict())
 
     def test_adc(self):
         self.assertRaises(as3exceptions.RequiredKeyMissingException, as3classes.ADC)
