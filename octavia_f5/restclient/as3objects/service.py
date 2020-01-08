@@ -87,6 +87,9 @@ def get_service(listener):
         'persistenceMethods': [],
     }
 
+    if listener.description:
+        service_args['label'] = listener.description
+
     # Determine service type
     if listener.protocol == const.PROTOCOL_TCP:
         service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
@@ -112,12 +115,15 @@ def get_service(listener):
     if listener.connection_limit > 0:
         service_args['maxConnections'] = listener.connection_limit
 
-    # Add default pool and session persistence
-    if listener.default_pool_id and listener.default_pool.session_persistence:
+    # Add default pool
+    if listener.default_pool_id:
         default_pool = m_pool.get_name(listener.default_pool_id)
+        service_args['pool'] = default_pool
+
+    #  session persistence
+    if listener.default_pool_id and listener.default_pool.session_persistence:
         persistence = listener.default_pool.session_persistence
         lb_algorithm = listener.default_pool.lb_algorithm
-        service_args['pool'] = default_pool
 
         if persistence.type == 'APP_COOKIE':
             name, obj_persist = m_persist.get_app_cookie(persistence.cookie_name)

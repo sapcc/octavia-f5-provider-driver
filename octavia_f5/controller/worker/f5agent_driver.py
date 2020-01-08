@@ -118,7 +118,7 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
                     m_member.get_member(member))
 
             if pool.health_monitor:
-                if not _pending_delete(member):
+                if not _pending_delete(pool.health_monitor):
                     app.add_monitor(
                         m_monitor.get_name(pool.health_monitor.id),
                         m_monitor.get_monitor(pool.health_monitor))

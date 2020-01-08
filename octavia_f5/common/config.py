@@ -61,7 +61,9 @@ f5_agent_opts = [
                       "(e.g. /Common/custom_fastl4)")),
     cfg.StrOpt('profile_multiplex', default=None,
                help=_("Path to default multiplex (oneconnect) acceleration"
-                      " profile (e.g. /Common/custom_oneconnect)"))
+                      " profile (e.g. /Common/custom_oneconnect)")),
+    cfg.StrOpt('healthmonitor_receive', default='"HTTP/1.(0|1) 200',
+               help=_("Default HTTP health monitor receive string")),
 ]
 
 f5_networking_opts = [
