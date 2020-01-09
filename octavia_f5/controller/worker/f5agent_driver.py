@@ -88,14 +88,11 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
                 if esd:
                     profiles.update(m_service.process_esd(esd))
                 else:
-                    app.add_policy_endpoint(
+                    app.add_endpoint_policy(
                         m_policy.get_name(l7policy.id),
                         m_policy.get_endpoint_policy(l7policy)
                     )
-            app.add_service(
-                m_service.get_name(listener.id),
-                m_service.get_service(listener)
-            )
+            app.add_entities(m_service.get_service(listener))
 
             if listener.tls_certificate_id:
                 certificates = m_cert.get_certificates(listener, cert_manager)
@@ -121,7 +118,7 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
                     m_member.get_member(member))
 
             if pool.health_monitor:
-                if not _pending_delete(member):
+                if not _pending_delete(pool.health_monitor):
                     app.add_monitor(
                         m_monitor.get_name(pool.health_monitor.id),
                         m_monitor.get_monitor(pool.health_monitor))

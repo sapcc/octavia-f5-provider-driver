@@ -16,7 +16,9 @@
 from octavia_f5.common import constants
 from oslo_log import log as logging
 from octavia_f5.restclient.as3classes import Monitor
+from oslo_config import cfg
 
+CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
 
@@ -36,7 +38,7 @@ def get_monitor(health_monitor):
     elif health_monitor.type == 'PING':
         args['monitorType'] = 'icmp'
     elif health_monitor.type == 'TCP':
-        args['monitorType'] = 'tcp'
+        args['monitorType'] = 'tcp-half-open'
     elif health_monitor.type == 'TLS-HELLO':
         args['monitorType'] = 'tcp'
     elif health_monitor.type == 'UDP-CONNECT':
@@ -59,11 +61,15 @@ def get_monitor(health_monitor):
         return {}
 
     if health_monitor.type == 'HTTP' or health_monitor.type == 'HTTPS':
+        http_version = '1.0'
+        if health_monitor.http_version:
+            http_version = health_monitor.http_version
         send = "{} {} HTTP/{}\\r\\n".format(
             health_monitor.http_method,
             health_monitor.url_path,
-            health_monitor.http_version)
-        if hasattr(health_monitor, 'domain_name'):
+            http_version
+            )
+        if health_monitor.domain_name:
             send += "Host: {}\\r\\n\\r\\n".format(
                 health_monitor.domain_name)
         else:
@@ -87,42 +93,29 @@ def get_monitor(health_monitor):
 
 
 def _get_recv_text(healthmonitor):
-    if hasattr(healthmonitor, 'expected_codes'):
-        try:
-            if healthmonitor.expected_codes.find(",") > 0:
-                status_codes = (
-                    healthmonitor.expected_codes.split(','))
-                recv_text = "HTTP/{:1.1f} (".format(
-                    healthmonitor.http_version)
-                for status in status_codes:
-                    int(status)
-                    recv_text += status + "|"
-                recv_text = recv_text[:-1]
-                recv_text += ")"
-            elif healthmonitor.expected_codes.find("-") > 0:
-                status_range = (
-                    healthmonitor.expected_codes.split('-'))
-                start_range = status_range[0]
-                stop_range = status_range[1]
-                recv_text = (
-                        "HTTP/{:1.1f} [{}-{}]".format(
-                            healthmonitor.http_version,
-                            start_range,
-                            stop_range
-                        )
-                )
-            else:
-                recv_text = "HTTP/{:1.1f} {}".format(
-                    healthmonitor.http_version,
-                    healthmonitor.expected_codes)
-        except Exception as exc:
-            LOG.error(
-                "invalid monitor expected_codes={}, http_version={}, defaulting to 'HTTP/1.0 200': {}".format(
-                healthmonitor.expected_codes, healthmonitor.http_version, exc))
-            recv_text = "HTTP/1.0 200"
-    else:
-        recv_text = "HTTP/1.0 200"
+    http_version = "1.(0|1)"
+    if healthmonitor.http_version:
+        http_version = "{:1.1f}".format(healthmonitor.http_version)
 
+    try:
+        if healthmonitor.expected_codes.find(",") > 0:
+            status_codes = healthmonitor.expected_codes.split(',')
+            recv_text = "HTTP/{} ({})".format(
+                http_version, "|".join(status_codes))
+        elif healthmonitor.expected_codes.find("-") > 0:
+            status_range = healthmonitor.expected_codes.split('-')
+            start_range = status_range[0]
+            stop_range = status_range[1]
+            recv_text = "HTTP/{} [{}-{}]".format(
+                        http_version, start_range, stop_range
+            )
+        else:
+            recv_text = "HTTP/{} {}".format(
+                http_version, healthmonitor.expected_codes)
+    except Exception as exc:
+        LOG.error(
+            "invalid monitor expected_codes=%s, http_version=%s, defaulting to '%s': %s",
+            healthmonitor.expected_codes, healthmonitor.http_version,
+            CONF.f5_agent.healthmonitor_receive, exc)
+        recv_text = CONF.f5_agent.healthmonitor_receive
     return recv_text
-
-
