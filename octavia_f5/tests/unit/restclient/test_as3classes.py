@@ -14,6 +14,7 @@
 
 from octavia.tests.unit import base
 from octavia_f5.restclient import as3classes, as3exceptions
+from octavia_f5.restclient.as3classes import constants
 
 
 class TestAS3Classes(base.TestCase):
@@ -68,3 +69,109 @@ class TestAS3Classes(base.TestCase):
         # adding a duplicate application => no change
         tenant_obj.add_application(app_name, app[app_name])
         self.assertEqual(app[app_name], tenant_obj.to_dict()[app_name])
+
+    def test_application(self):
+        # application templates
+        error_msg = 'No supported application templates defined'
+        self.assertIsNotNone(constants.SUPPORTED_APPLICATION_TEMPLATES, message=error_msg)
+        self.assertIsNot(0, len(constants.SUPPORTED_APPLICATION_TEMPLATES), message=error_msg)
+
+        # erroneous creation
+        NON_EXISTENT_APPLICATION_CONSTANT = None
+        self.assertRaises(as3exceptions.TypeNotSupportedException,
+                          as3classes.Application, NON_EXISTENT_APPLICATION_CONSTANT)
+
+        # creation
+        application = {'class': 'Application',
+                       'template': 'generic'}
+        self.assertEqual(application['template'], constants.APPLICATION_GENERIC)
+        self.assertIn(constants.APPLICATION_GENERIC, constants.SUPPORTED_APPLICATION_TEMPLATES)
+        application_obj = as3classes.Application(constants.APPLICATION_GENERIC)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # set primary service
+        service = {'class': 'Service_Generic',
+                   'virtualAddresses': None,
+                   'virtualPort': None}
+        application['serviceMain'] = service
+        service_obj = as3classes.Service(constants.SERVICE_GENERIC)
+        application_obj.set_service_main(service_obj)
+        self.assertIsInstance(application_obj.serviceMain, as3classes.Service)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add pool
+        pool_name = 'test_pool'
+        pool = {'class': 'Pool'}
+        application[pool_name] = pool
+        pool_obj = as3classes.Pool()
+        application_obj.add_pool(pool_name, pool_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add duplicate pool
+        self.assertRaises(as3exceptions.DuplicatedKeyException,
+                          application_obj.add_pool, pool_name, pool_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add service
+        service_name = 'test_service'
+        application[service_name] = service
+        service_obj = as3classes.Service(service['class'])
+        application_obj.add_service(service_name, service_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add duplicate service
+        self.assertRaises(as3exceptions.DuplicatedKeyException,
+                          application_obj.add_service, service_name, service_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add monitor
+        monitor_name = 'test_monitor'
+        monitor = {'class': 'Monitor'}
+        application[monitor_name] = monitor
+        monitor_obj = as3classes.Monitor()
+        application_obj.add_monitor(monitor_name, monitor_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add duplicate monitor
+        self.assertRaises(as3exceptions.DuplicatedKeyException,
+                          application_obj.add_monitor, monitor_name, monitor_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add endpoint policy
+        ep_name = 'test_endpoint_policy'
+        ep = {'class': 'Endpoint_Policy',
+              'strategy': 'custom'}
+        application[ep_name] = ep
+        ep_obj = as3classes.Endpoint_Policy('custom')
+        application_obj.add_endpoint_policy(ep_name, ep_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add duplicate endpoint policy
+        self.assertRaises(as3exceptions.DuplicatedKeyException,
+                          application_obj.add_endpoint_policy, ep_name, ep_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add TLS server
+        tls_name = 'test_tls_server'
+        tls = {'class': 'TLS_Server'}
+        application[tls_name] = tls
+        tls_obj = as3classes.TLS_Server()
+        application_obj.add_tls_server(tls_name, tls_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add duplicate TLS server
+        application_obj.add_tls_server(tls_name, tls_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add certificate
+        cert_name = 'test_certificate'
+        cert = {'class': 'Certificate',
+                'certificate': 'certificate-content'}
+        application[cert_name] = cert
+        cert_obj = as3classes.Certificate(certificate=cert['certificate'])
+        application_obj.add_certificate(cert_name, cert_obj)
+        self.assertEqual(application, application_obj.to_dict())
+
+        # add duplicate certificate
+        application_obj.add_certificate(cert_name, cert_obj)
+        self.assertEqual(application, application_obj.to_dict())
