@@ -42,6 +42,10 @@ class TestAS3Classes(base.TestCase):
         adc_obj.set_tenant(tenant_name, adc[tenant_name])
         self.assertEqual(adc, adc_obj.to_dict())
 
+        # adding a duplicate tenant => no change
+        adc_obj.set_tenant(tenant_name, adc[tenant_name])
+        self.assertEqual(adc, adc_obj.to_dict())
+
         # retrieving a tenant
         tenant_name = 'test_tenant2'
         adc[tenant_name] = {'class': 'Tenant'}
@@ -61,3 +65,6 @@ class TestAS3Classes(base.TestCase):
         tenant_obj.add_application(app_name, app[app_name])
         self.assertEqual(app[app_name], tenant_obj.to_dict()[app_name])
 
+        # adding a duplicate application => no change
+        tenant_obj.add_application(app_name, app[app_name])
+        self.assertEqual(app[app_name], tenant_obj.to_dict()[app_name])
