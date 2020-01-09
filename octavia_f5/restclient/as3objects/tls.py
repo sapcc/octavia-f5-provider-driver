@@ -21,8 +21,20 @@ def get_name(listener_id):
                          listener_id.replace('-', '_'))
 
 
-def get_tls_server(certificate_ids):
+def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode='NONE'):
+    mode_map = {
+        'NONE': 'ignore',
+        'OPTIONAL': 'request',
+        'MANDATORY': 'require'
+    }
+
     service_args = {
         'certificates': [{'certificate': cert_id} for cert_id in certificate_ids]
     }
+
+    if authentication_ca:
+        service_args['authenticationTrustCA'] = authentication_ca
+        service_args['authenticationInviteCA'] = authentication_ca
+        service_args['authenticationMode'] = mode_map[authentication_mode]
+
     return TLS_Server(**service_args)

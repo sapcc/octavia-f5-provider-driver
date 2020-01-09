@@ -92,16 +92,7 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
                         m_policy.get_name(l7policy.id),
                         m_policy.get_endpoint_policy(l7policy)
                     )
-            app.add_entities(m_service.get_service(listener))
-
-            if listener.tls_certificate_id:
-                certificates = m_cert.get_certificates(listener, cert_manager)
-                app.add_tls_server(
-                    m_tls.get_name(listener.id),
-                    m_tls.get_tls_server([cert['id'] for cert in certificates])
-                )
-                for cert in certificates:
-                    app.add_certificate(cert['id'], cert['as3'])
+            app.add_entities(m_service.get_service(listener, cert_manager))
 
         # attach pools
         for pool in loadbalancer.pools:

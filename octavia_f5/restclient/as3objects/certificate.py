@@ -15,7 +15,7 @@ import base64
 import hashlib
 
 from octavia_f5.common import constants
-from octavia_f5.restclient.as3classes import Certificate
+from octavia_f5.restclient.as3classes import Certificate, CA_Bundle
 from octavia.common.tls_utils import cert_parser
 from oslo_context import context as oslo_context
 
@@ -94,3 +94,26 @@ def get_certificates(listener, cert_manager):
         })
 
     return certificates
+
+
+def load_secret(listener, cert_manager, secret_ref):
+    if not secret_ref:
+        return None
+    context = oslo_context.RequestContext(project_id=listener.project_id)
+    secret = cert_manager.get_secret(context, secret_ref)
+    try:
+        secret = secret.encode('utf-8')
+    except AttributeError:
+        pass
+    id = hashlib.sha1(secret).hexdigest()  # nosec
+
+    return 'secret_{}'.format(id), secret
+
+
+def get_ca_bundle(bundle, remark='', label=''):
+    service_args = {
+        'remark': remark,
+        'label': label,
+        'bundle': bundle.decode('utf-8').replace('\r',  '')
+    }
+    return CA_Bundle(**service_args)

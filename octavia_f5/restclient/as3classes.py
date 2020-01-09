@@ -257,8 +257,21 @@ class TLS_Server(BaseDescription):
         setattr(self, 'class', 'TLS_Server')
 
 
+class TLS_Client(BaseDescription):
+    def __init__(self, **kwargs):
+        super(TLS_Client, self).__init__(locals())
+        setattr(self, 'class', 'TLS_Client')
+
+
 class Certificate(BaseDescription):
     def __init__(self, **kwargs):
         super(Certificate, self).__init__(locals())
         setattr(self, 'class', 'Certificate')
         self.require('certificate')
+
+
+class CA_Bundle(BaseDescription):
+    def __init__(self, **kwargs):
+        super(CA_Bundle, self).__init__(locals())
+        setattr(self, 'class', 'CA_Bundle')
+        self.require('bundle')
