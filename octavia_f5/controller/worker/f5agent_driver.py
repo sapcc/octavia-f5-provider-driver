@@ -88,7 +88,7 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
                 if esd:
                     profiles.update(m_service.process_esd(esd))
                 else:
-                    app.add_policy_endpoint(
+                    app.add_endpoint_policy(
                         m_policy.get_name(l7policy.id),
                         m_policy.get_endpoint_policy(l7policy)
                     )

@@ -132,7 +132,7 @@ class Application(BaseDescription):
 
         setattr(self, name, monitor)
 
-    def add_policy_endpoint(self, name, policy_endpoint):
+    def add_endpoint_policy(self, name, policy_endpoint):
         if hasattr(self, name):
             raise DuplicatedKeyException
 
