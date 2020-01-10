@@ -251,3 +251,8 @@ class TestAS3Classes(base.TestCase):
                  'iRule': 'test_iRule'}
         irule_obj = as3classes.IRule(irule['iRule'])
         self.assertEqual(irule, irule_obj.to_dict())
+
+    def test_persist(self):
+        persist = {'class': 'Persist'}
+        persist_obj = as3classes.Persist()
+        self.assertEqual(persist, persist_obj.to_dict())
