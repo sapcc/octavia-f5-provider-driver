@@ -245,3 +245,9 @@ class TestAS3Classes(base.TestCase):
                   'egress': 'test_egress'}
         sgptcp_obj = as3classes.Service_Generic_profileTCP(sgptcp['ingress'], sgptcp['egress'])
         self.assertEqual(sgptcp, sgptcp_obj.to_dict())
+
+    def test_irule(self):
+        irule = {'class': 'iRule',
+                 'iRule': 'test_iRule'}
+        irule_obj = as3classes.IRule(irule['iRule'])
+        self.assertEqual(irule, irule_obj.to_dict())
