@@ -193,3 +193,19 @@ class TestAS3Classes(base.TestCase):
         self.assertIn(service['class'], constants.SUPPORTED_SERVICES)
         service_obj = as3classes.Service(service['class'])
         self.assertEqual(service, service_obj.to_dict())
+
+    def test_pool(self):
+        # creation
+        pool = {'class': 'Pool'}
+        pool_obj = as3classes.Pool()
+        self.assertEqual(pool, pool_obj.to_dict())
+
+        # add member
+        member = {'enable': True,
+                  'servicePort': 'test_servicePort',
+                  'serverAddresses': 'test_serverAddresses'}
+        pool['members'] = [member]
+        member_obj = as3classes.Member(servicePort=member['servicePort'],
+                                       serverAddresses=member['serverAddresses'])
+        pool_obj.add_member(member_obj)
+        self.assertEqual(pool, pool_obj.to_dict())
