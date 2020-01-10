@@ -43,6 +43,8 @@ def get_monitor(health_monitor):
         args['monitorType'] = 'tcp'
     elif health_monitor.type == 'UDP-CONNECT':
         args['monitorType'] = 'udp'
+        args['send'] = ''
+        args['receive'] = ''
 
     # F5 specific monitory types
     elif health_monitor.type == 'SIP':

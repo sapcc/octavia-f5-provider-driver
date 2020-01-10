@@ -114,24 +114,6 @@ class Application(BaseDescription):
         for name, entinty in entities:
             setattr(self, name, entinty)
 
-    def add_pool(self, name, pool):
-        if hasattr(self, name):
-            raise DuplicatedKeyException
-
-        setattr(self, name, pool)
-
-    def add_service(self, name, service):
-        if hasattr(self, name):
-            raise DuplicatedKeyException
-
-        setattr(self, name, service)
-
-    def add_monitor(self, name, monitor):
-        if hasattr(self, name):
-            raise DuplicatedKeyException
-
-        setattr(self, name, monitor)
-
     def add_endpoint_policy(self, name, policy_endpoint):
         if hasattr(self, name):
             raise DuplicatedKeyException
@@ -161,12 +143,6 @@ class Pool(BaseDescription):
         super(Pool, self).__init__(locals())
         setattr(self, 'class', 'Pool')
 
-    def add_member(self, member):
-        if not hasattr(self, 'members'):
-            setattr(self, 'members', [member])
-        else:
-            self.members.append(member)
-
 
 class Member(BaseDescription):
     def __init__(self, enable=True, **kwargs):
@@ -180,6 +156,12 @@ class Monitor(BaseDescription):
     def __init__(self, **kwargs):
         super(Monitor, self).__init__(locals())
         setattr(self, 'class', 'Monitor')
+
+    def set_target_address(self, address):
+        setattr(self, 'targetAddress', address)
+
+    def set_target_port(self, port):
+        setattr(self, 'targetPort', port)
 
 
 class BigIP(BaseDescription):

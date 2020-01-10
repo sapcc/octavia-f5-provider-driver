@@ -14,7 +14,6 @@
 
 from oslo_log import log as logging
 from octavia_f5.common import constants
-from octavia_f5.restclient.as3objects import tenant as m_part
 
 LOG = logging.getLogger(__name__)
 
@@ -22,8 +21,3 @@ LOG = logging.getLogger(__name__)
 def get_name(loadbalancer_id):
     return constants.PREFIX_LOADBALANCER + loadbalancer_id.\
         replace('/', '').replace('-', '_')
-
-
-def get_path(loadbalancer):
-    return '/' + m_part.get_name(loadbalancer.project_id) + \
-           '/' + get_name(loadbalancer.id)

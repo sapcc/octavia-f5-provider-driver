@@ -15,11 +15,17 @@
 from stevedore import driver
 from oslo_config import cfg
 from oslo_log import log as logging
+
+from octavia_f5.common import constants
 from octavia_lib.api.drivers import data_models
 
 CONF = cfg.CONF
 
 LOG = logging.getLogger(__name__)
+
+
+def pending_delete(obj):
+    return obj.provisioning_status == constants.PENDING_DELETE
 
 
 def get_network_driver():

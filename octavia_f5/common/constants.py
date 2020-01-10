@@ -29,6 +29,7 @@ PREFIX_LOADBALANCER = 'lb_'
 PREFIX_POLICY = 'l7policy_'
 PREFIX_NETWORK = 'net_'
 PREFIX_IRULE = 'irule_'
+PREFIX_MEMBER = 'member_'
 
 APPLICATION_TCP = 'tcp'
 APPLICATION_UDP = 'udp'

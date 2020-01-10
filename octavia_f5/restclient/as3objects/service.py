@@ -37,11 +37,6 @@ def get_name(listener_id):
            listener_id.replace('/', '').replace('-', '_')
 
 
-def get_path(listener):
-    return m_app.get_path(listener.load_balancer) + \
-            '/' + get_name(listener.id)
-
-
 def process_esd(servicetype, esd):
     service_args = {}
     irules = esd.get('lbaas_irule', None)
