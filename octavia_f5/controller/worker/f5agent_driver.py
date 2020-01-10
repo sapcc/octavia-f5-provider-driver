@@ -12,8 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 import uuid
-from collections import defaultdict
 
+from oslo_concurrency import lockutils
 from oslo_log import log as logging
 from requests import ConnectionError
 from tenacity import *
@@ -27,8 +27,6 @@ from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import tenant as m_part
-from octavia_f5.restclient.as3objects import tls as m_tls
-from octavia_f5.restclient.as3objects import certificate as m_cert
 from octavia_lib.common import constants as lib_consts
 
 LOG = logging.getLogger(__name__)

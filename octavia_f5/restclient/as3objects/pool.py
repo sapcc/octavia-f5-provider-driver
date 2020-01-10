@@ -41,7 +41,7 @@ def get_pool(pool):
         'remark': (pool.description or pool.id)[:64],
         'loadBalancingMode': lbmode,
     }
-    if pool.health_monitor:
+    if pool.health_monitor and pool.health_monitor.provisioning_status != constants.PENDING_DELETE:
         args['monitors'] = [Pointer(use=m_monitor.get_name(pool.health_monitor.id))]
 
     return Pool(**args)

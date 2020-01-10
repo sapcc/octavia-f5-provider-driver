@@ -130,8 +130,18 @@ def get_service(listener, cert_manager):
 
     # Add default pool
     if listener.default_pool_id:
-        default_pool = m_pool.get_name(listener.default_pool_id)
-        service_args['pool'] = default_pool
+        pool = listener.default_pool
+        if pool.provisioning_status != lib_consts.PENDING_DELETE:
+            default_pool = m_pool.get_name(listener.default_pool_id)
+            service_args['pool'] = default_pool
+
+            if pool.protocol == const.PROTOCOL_PROXY:
+                name, irule = m_irule.get_proxy_irule()
+                service_args['iRules'].append(name)
+                entities.append((name, irule))
+            elif pool.protocol == const.PROTOCOL_HTTPS:
+                # TODO: Implement Client_TLS profile for lb -> member TLS connection
+                pass
 
     # Insert header irules
     for name, irule in m_irule.get_header_irules(listener.insert_headers):

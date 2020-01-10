@@ -17,6 +17,7 @@ from collections import defaultdict
 
 import tenacity
 from futurist import periodics
+from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from sqlalchemy.orm import exc as db_exceptions
@@ -92,7 +93,8 @@ class ControllerWorker(object):
 
         super(ControllerWorker, self).__init__()
 
-    @periodics.periodic(10)
+    @periodics.periodic(120, run_immediately=True)
+    @lockutils.synchronized('tenant_refresh')
     def pending_sync(self):
         lbs = self._loadbalancer_repo.get_all(
             db_apis.get_session(),
@@ -154,9 +156,13 @@ class ControllerWorker(object):
         vips = self._vip_repo.get_all(
             db_apis.get_session(),
             network_id=network_id)
-        return [self._loadbalancer_repo.get(
-            db_apis.get_session(),
-            id=vip.load_balancer_id) for vip in vips[0]]
+        loadbalancers = []
+        for vip in vips[0]:
+            loadbalancers.append(self._loadbalancer_repo.get(
+                db_apis.get_session(),
+                show_deleted=False,
+                id=vip.load_balancer_id))
+        return [lb for lb in loadbalancers if lb]
 
     def _refresh(self, network_id):
         loadbalancers = self._get_all_loadbalancer(network_id)
@@ -221,6 +227,7 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    @lockutils.synchronized('tenant_refresh')
     def create_load_balancer(self, load_balancer_id, flavor=None):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
         """ We are retrying to fetch load-balancer since API could be still 
@@ -232,15 +239,17 @@ class ControllerWorker(object):
 
         self._refresh(lb.vip.network_id)
 
+    @lockutils.synchronized('tenant_refresh')
     def update_load_balancer(self, load_balancer_id, load_balancer_updates):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
         self._refresh(lb.vip.network_id)
 
     # TODO: Implement cascade
+    @lockutils.synchronized('tenant_refresh')
     def delete_load_balancer(self, load_balancer_id, cascade=False):
         lb = self._lb_repo.get(db_apis.get_session(),
                                id=load_balancer_id)
-        existing_lbs = [loadbalancer for loadbalancer in self._get_all_loadbalancer(lb.project_id)
+        existing_lbs = [loadbalancer for loadbalancer in self._get_all_loadbalancer(lb.vip.network_id)
                         if loadbalancer.id != lb.id]
 
         if not existing_lbs:
@@ -265,6 +274,7 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    @lockutils.synchronized('tenant_refresh')
     def create_listener(self, listener_id):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
@@ -276,12 +286,14 @@ class ControllerWorker(object):
         if not self._refresh(listener.load_balancer.vip.network_id):
             self._set_status_error(listener.id, lib_consts.LISTENERS)
 
+    @lockutils.synchronized('tenant_refresh')
     def update_listener(self, listener_id, listener_updates):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
         if not self._refresh(listener.load_balancer.vip.network_id):
             self._set_status_error(listener.id, lib_consts.LISTENERS)
 
+    @lockutils.synchronized('tenant_refresh')
     def delete_listener(self, listener_id):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
@@ -300,6 +312,7 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    @lockutils.synchronized('tenant_refresh')
     def create_pool(self, pool_id):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
@@ -311,12 +324,14 @@ class ControllerWorker(object):
         if not self._refresh(pool.load_balancer.vip.network_id):
             self._set_status_error(pool.id, lib_consts.POOLS)
 
+    @lockutils.synchronized('tenant_refresh')
     def update_pool(self, pool_id, pool_updates):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
         if not self._refresh(pool.load_balancer.vip.network_id):
             self._set_status_error(pool.id, lib_consts.POOLS)
 
+    @lockutils.synchronized('tenant_refresh')
     def delete_pool(self, pool_id):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
@@ -334,6 +349,7 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    @lockutils.synchronized('tenant_refresh')
     def create_member(self, member_id):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
@@ -345,6 +361,7 @@ class ControllerWorker(object):
         if not self._refresh(member.pool.load_balancer.vip.network_id):
             self._set_status_error(member.id, lib_consts.MEMBERS)
 
+    @lockutils.synchronized('tenant_refresh')
     def batch_update_members(self, old_member_ids, new_member_ids,
                              updated_members):
         member = self._member_repo.get(db_apis.get_session(),
@@ -352,12 +369,14 @@ class ControllerWorker(object):
         if not self._refresh(member.pool.load_balancer.vip.network_id):
             self._set_status_error(member.id, lib_consts.MEMBERS)
 
+    @lockutils.synchronized('tenant_refresh')
     def update_member(self, member_id, member_updates):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
         if not self._refresh(member.pool.load_balancer.vip.network_id):
             self._set_status_error(member.id, lib_consts.MEMBERS)
 
+    @lockutils.synchronized('tenant_refresh')
     def delete_member(self, member_id):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
@@ -369,7 +388,7 @@ class ControllerWorker(object):
     """
     Member
     """
-
+    @lockutils.synchronized('tenant_refresh')
     def create_health_monitor(self, health_monitor_id):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
                                                id=health_monitor_id)
@@ -383,6 +402,7 @@ class ControllerWorker(object):
         if not self._refresh(load_balancer.vip.network_id):
             self._set_status_error(health_mon.id, lib_consts.HEALTHMONITORS)
 
+    @lockutils.synchronized('tenant_refresh')
     def update_health_monitor(self, health_monitor_id, health_monitor_updates):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
                                                id=health_monitor_id)
@@ -391,6 +411,7 @@ class ControllerWorker(object):
         if not self._refresh(load_balancer.vip.network_id):
             self._set_status_error(health_mon.id, lib_consts.HEALTHMONITORS)
 
+    @lockutils.synchronized('tenant_refresh')
     def delete_health_monitor(self, health_monitor_id):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
                                                id=health_monitor_id)
@@ -410,6 +431,7 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    @lockutils.synchronized('tenant_refresh')
     def create_l7policy(self, l7policy_id):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
@@ -421,12 +443,14 @@ class ControllerWorker(object):
         if not self._refresh(l7policy.listener.load_balancer.vip.network_id):
             self._set_status_error(l7policy.id, lib_consts.L7POLICIES)
 
+    @lockutils.synchronized('tenant_refresh')
     def update_l7policy(self, l7policy_id, l7policy_updates):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
         if not self._refresh(l7policy.listener.load_balancer.vip.network_id):
             self._set_status_error(l7policy.id, lib_consts.L7POLICIES)
 
+    @lockutils.synchronized('tenant_refresh')
     def delete_l7policy(self, l7policy_id):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
@@ -444,6 +468,7 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    @lockutils.synchronized('tenant_refresh')
     def create_l7rule(self, l7rule_id):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
@@ -455,13 +480,14 @@ class ControllerWorker(object):
         if not self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id):
             self._set_status_error(l7rule.id, lib_consts.L7RULES)
 
-
+    @lockutils.synchronized('tenant_refresh')
     def update_l7rule(self, l7rule_id, l7rule_updates):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
         if not self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id):
             self._set_status_error(l7rule.id, lib_consts.L7RULES)
 
+    @lockutils.synchronized('tenant_refresh')
     def delete_l7rule(self, l7rule_id):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
