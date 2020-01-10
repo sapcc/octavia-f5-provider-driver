@@ -209,3 +209,22 @@ class TestAS3Classes(base.TestCase):
                                        serverAddresses=member['serverAddresses'])
         pool_obj.add_member(member_obj)
         self.assertEqual(pool, pool_obj.to_dict())
+
+    def test_member(self):
+        arg_servicePort = 'test_servicePort'
+        arg_serverAddresses = 'test_serverAddresses'
+        # erroneous creation
+        self.assertRaises(as3exceptions.RequiredKeyMissingException,
+                          as3classes.Member)
+        self.assertRaises(as3exceptions.RequiredKeyMissingException,
+                          as3classes.Member, servicePort=arg_servicePort)
+        self.assertRaises(as3exceptions.RequiredKeyMissingException,
+                          as3classes.Member, serverAddresses=arg_serverAddresses)
+
+        # creation
+        member = {'enable': True,
+                  'servicePort': arg_servicePort,
+                  'serverAddresses': arg_serverAddresses}
+        member_obj = as3classes.Member(servicePort=arg_servicePort,
+                                       serverAddresses=arg_serverAddresses)
+        self.assertEqual(member, member_obj.to_dict())
