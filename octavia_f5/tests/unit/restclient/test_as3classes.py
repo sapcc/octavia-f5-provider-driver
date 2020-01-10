@@ -239,3 +239,9 @@ class TestAS3Classes(base.TestCase):
         bigip = {'bigip': 'test_bigip'}
         bigip_obj = as3classes.BigIP(bigip['bigip'])
         self.assertEqual(bigip, bigip_obj.to_dict())
+
+    def test_servicegenericprofile_tcp(self):
+        sgptcp = {'ingress': 'test_ingress',
+                  'egress': 'test_egress'}
+        sgptcp_obj = as3classes.Service_Generic_profileTCP(sgptcp['ingress'], sgptcp['egress'])
+        self.assertEqual(sgptcp, sgptcp_obj.to_dict())
