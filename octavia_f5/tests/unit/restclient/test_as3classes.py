@@ -233,3 +233,9 @@ class TestAS3Classes(base.TestCase):
         monitor = {'class': 'Monitor'}
         monitor_obj = as3classes.Monitor()
         self.assertEqual(monitor, monitor_obj.to_dict())
+
+    def test_bigip(self):
+        # creation
+        bigip = {'bigip': 'test_bigip'}
+        bigip_obj = as3classes.BigIP(bigip['bigip'])
+        self.assertEqual(bigip, bigip_obj.to_dict())
