@@ -256,3 +256,14 @@ class TestAS3Classes(base.TestCase):
         persist = {'class': 'Persist'}
         persist_obj = as3classes.Persist()
         self.assertEqual(persist, persist_obj.to_dict())
+
+    def test_endpoint_policy(self):
+        # erroneous creation
+        self.assertRaises(as3exceptions.TypeNotSupportedException,
+                          as3classes.Endpoint_Policy, 'NONEXISTENT_POLICYTYPE')
+
+        # creation
+        ep = {'class': 'Endpoint_Policy',
+              'strategy': 'custom'}
+        ep_obj = as3classes.Endpoint_Policy('custom')
+        self.assertEqual(ep, ep_obj.to_dict())
