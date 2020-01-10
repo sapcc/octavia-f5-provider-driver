@@ -228,3 +228,8 @@ class TestAS3Classes(base.TestCase):
         member_obj = as3classes.Member(servicePort=arg_servicePort,
                                        serverAddresses=arg_serverAddresses)
         self.assertEqual(member, member_obj.to_dict())
+
+    def test_monitor(self):
+        monitor = {'class': 'Monitor'}
+        monitor_obj = as3classes.Monitor()
+        self.assertEqual(monitor, monitor_obj.to_dict())
