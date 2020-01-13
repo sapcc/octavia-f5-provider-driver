@@ -244,7 +244,6 @@ class ControllerWorker(object):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
         self._refresh(lb.vip.network_id)
 
-    # TODO: Implement cascade
     @lockutils.synchronized('tenant_refresh')
     def delete_load_balancer(self, load_balancer_id, cascade=False):
         lb = self._lb_repo.get(db_apis.get_session(),
@@ -262,8 +261,6 @@ class ControllerWorker(object):
 
         if ret.status_code < 400:
             self._set_status_deleted(lb.id, lib_consts.LOADBALANCERS)
-        else:
-            self._set_status_error(lb.id, lib_consts.LOADBALANCERS)
 
     """
     Listener
@@ -300,8 +297,6 @@ class ControllerWorker(object):
 
         if self._refresh(listener.load_balancer.vip.network_id):
             self._set_status_deleted(listener.id, lib_consts.LISTENERS)
-        else:
-            self._set_status_error(listener.id, lib_consts.LISTENERS)
 
     """
     Pool
@@ -337,8 +332,6 @@ class ControllerWorker(object):
                                    id=pool_id)
         if self._refresh(pool.load_balancer.vip.network_id):
             self._set_status_deleted(pool.id, lib_consts.POOLS)
-        else:
-            self._set_status_error(pool.id, lib_consts.POOLS)
 
     """
     Member
@@ -382,8 +375,6 @@ class ControllerWorker(object):
                                        id=member_id)
         if self._refresh(member.pool.load_balancer.vip.network_id):
             self._set_status_deleted(member.id, lib_consts.MEMBERS)
-        else:
-            self._set_status_error(member.id, lib_consts.MEMBERS)
 
     """
     Member
@@ -419,8 +410,6 @@ class ControllerWorker(object):
         load_balancer = pool.load_balancer
         if self._refresh(load_balancer.vip.network_id):
             self._set_status_deleted(health_mon.id, lib_consts.HEALTHMONITORS)
-        else:
-            self._set_status_error(health_mon.id, lib_consts.HEALTHMONITORS)
 
     """
     l7policy
@@ -456,8 +445,6 @@ class ControllerWorker(object):
                                            id=l7policy_id)
         if self._refresh(l7policy.listener.load_balancer.vip.network_id):
             self._set_status_deleted(l7policy.id, lib_consts.L7POLICIES)
-        else:
-            self._set_status_error(l7policy.id, lib_consts.L7POLICIES)
 
     """
     l7rule
@@ -493,8 +480,6 @@ class ControllerWorker(object):
                                        id=l7rule_id)
         if self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id):
             self._set_status_deleted(l7rule.id, lib_consts.L7RULES)
-        else:
-            self._set_status_error(l7rule.id, lib_consts.L7RULES)
 
     """
     Amphora
