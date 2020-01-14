@@ -267,3 +267,8 @@ class TestAS3Classes(base.TestCase):
               'strategy': 'custom'}
         ep_obj = as3classes.Endpoint_Policy('custom')
         self.assertEqual(ep, ep_obj.to_dict())
+
+    def test_endpoint_policy_rule(self):
+        epr = {}
+        epr_obj = as3classes.Endpoint_Policy_Rule()
+        self.assertEqual(epr, epr_obj.to_dict())
