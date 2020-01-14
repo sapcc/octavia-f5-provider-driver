@@ -175,3 +175,21 @@ class TestAS3Classes(base.TestCase):
         # add duplicate certificate
         application_obj.add_certificate(cert_name, cert_obj)
         self.assertEqual(application, application_obj.to_dict())
+
+    def test_service(self):
+        # service templates
+        error_msg = 'No supported application templates defined'
+        self.assertIsNotNone(constants.SUPPORTED_SERVICES, message=error_msg)
+        self.assertIsNot(0, len(constants.SUPPORTED_SERVICES), message=error_msg)
+
+        # erroneous creation
+        self.assertRaises(as3exceptions.TypeNotSupportedException,
+                          as3classes.Service, 'NONEXISTENT_SERVICETYPE')
+
+        # creation
+        service = {'class': 'Service_Generic',
+                   'virtualAddresses': None,
+                   'virtualPort': None}
+        self.assertIn(service['class'], constants.SUPPORTED_SERVICES)
+        service_obj = as3classes.Service(service['class'])
+        self.assertEqual(service, service_obj.to_dict())
