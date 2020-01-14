@@ -170,8 +170,7 @@ class StatusManager(object):
         """
         return {
             lib_consts.ID: obj.id,
-            lib_consts.PROVISIONING_STATUS: provisioning_status,
-            lib_consts.OPERATING_STATUS: lib_consts.ONLINE
+            lib_consts.PROVISIONING_STATUS: provisioning_status
         }
 
     @tenacity.retry(

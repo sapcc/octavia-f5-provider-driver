@@ -1,4 +1,4 @@
-# Copyright 2018, 2020 SAP SE
+# Copyright 2015 Hewlett-Packard Development Company, L.P.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -12,11 +12,16 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import octavia_f5.common.config
+from oslo_log import log as logging
+
+from octavia.network.drivers.noop_driver import driver
+
+LOG = logging.getLogger(__name__)
 
 
-def list_opts():
-    return [
-        ('f5_agent', octavia_f5.common.config.f5_agent_opts),
-    ]
+class NoopNetworkDriverF5(driver.NoopNetworkDriver):
+    def __init__(self):
+        super(NoopNetworkDriverF5, self).__init__()
 
+    def get_segmentation_id(self, network_id):
+        return 1234

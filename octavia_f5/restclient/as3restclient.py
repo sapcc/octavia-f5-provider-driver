@@ -29,6 +29,19 @@ AS3_TOKENS_PATH = '/mgmt/shared/authz/tokens/{}'
 AS3_DECLARE_PATH = '/mgmt/shared/appsvcs/declare'
 
 
+def authorized(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        response = func(self, *args, **kwargs)
+        if response.status_code == 401:
+            self.reauthorize()
+            return func(self, *args, **kwargs)
+        else:
+            return response
+
+    return wrapper
+
+
 class BigipAS3RestClient(object):
     def __init__(self, bigip_url, enable_verify=True, enable_token=True,
                  esd=None):
@@ -58,21 +71,6 @@ class BigipAS3RestClient(object):
         session.mount('https://', HTTPAdapter(max_retries=retry))
         session.verify = self.enable_verify
         return session
-
-    def _authorized(self, response):
-        if response.status_code == 401:
-            self.reauthorize()
-
-    def authorized(func):
-        @functools.wraps(func)
-        def wrapper(self, *args, **kwargs):
-            response = func(self, *args, **kwargs)
-            if response.status_code == 401:
-                self.reauthorize()
-                return func(self, *args, **kwargs)
-            else:
-                return response
-        return wrapper
 
     def reauthorize(self):
         # Login
@@ -114,7 +112,7 @@ class BigipAS3RestClient(object):
         params.update({'op': operation, 'path': path})
         response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
         if response.headers.get('Content-Type') == 'application/json':
-            LOG.debug(json.dumps(json.loads(response.text)['results'], indent=4, sort_keys=True))
+            LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
         else:
             LOG.debug(response.text)
         return response
