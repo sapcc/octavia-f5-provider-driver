@@ -272,3 +272,13 @@ class TestAS3Classes(base.TestCase):
         epr = {}
         epr_obj = as3classes.Endpoint_Policy_Rule()
         self.assertEqual(epr, epr_obj.to_dict())
+
+    def test_policy_condition(self):
+        # erroneous creation
+        self.assertRaises(as3exceptions.TypeNotSupportedException,
+                          as3classes.Policy_Condition, 'NONEXISTENT_POLICYTYPE')
+
+        # creation
+        pc = {'type': 'httpHeader'}
+        pc_obj = as3classes.Policy_Condition(pc['type'])
+        self.assertEqual(pc, pc_obj.to_dict())
