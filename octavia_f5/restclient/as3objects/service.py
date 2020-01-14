@@ -11,13 +11,13 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
 from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia.common import exceptions
 from octavia_f5.common import constants as const
 from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Pointer
-from octavia_f5.restclient.as3objects import application as m_app
 from octavia_f5.restclient.as3objects import certificate as m_cert
 from octavia_f5.restclient.as3objects import irule as m_irule
 from octavia_f5.restclient.as3objects import persist as m_persist
@@ -33,11 +33,22 @@ LOG = logging.getLogger(__name__)
 
 
 def get_name(listener_id):
+    """Return AS3 object name for type listener
+
+    :param listener_id: listener id
+    :return: AS3 object name
+    """
     return const.PREFIX_LISTENER + \
            listener_id.replace('/', '').replace('-', '_')
 
 
 def process_esd(servicetype, esd):
+    """ process legacy F5 ESDs (enhanced service definition)
+
+    :param servicetype: octavia listener type
+    :param esd: parsed ESD repository
+    :return: AS3 service flags according to ESD definition
+    """
     service_args = {}
     irules = esd.get('lbaas_irule', None)
     if irules:
@@ -79,8 +90,15 @@ def process_esd(servicetype, esd):
 
 
 def get_service(listener, cert_manager):
+    """ Map Octavia listener -> AS3 Service
+
+    :param listener: Octavia listener
+    :param cert_manager: cert_manager wrapper instance
+    :return: AS3 Service + additional AS3 application objects
+    """
     entities = []
     vip = listener.load_balancer.vip
+    project_id = listener.load_balancer.project_id
     service_args = {
         'virtualPort': listener.protocol_port,
         'virtualAddresses': [vip.ip_address],
@@ -112,8 +130,25 @@ def get_service(listener, cert_manager):
     # Terminated HTTPS
     elif listener.protocol == const.PROTOCOL_TERMINATED_HTTPS:
         service_args['_servicetype'] = const.SERVICE_HTTPS
-        service_args['serverTLS'] = m_tls.get_name(listener.id)
+        service_args['serverTLS'] = m_tls.get_listener_name(listener.id)
         service_args['redirect80'] = False
+
+        # Certificate Handling
+        auth_name = None
+        certificates = cert_manager.get_certificates(listener)
+        if listener.client_ca_tls_certificate_id and listener.client_authentication != 'NONE':
+            # Client Side Certificates
+            try:
+                auth_name, secret = cert_manager.load_secret(project_id, listener.client_ca_tls_certificate_id)
+                entities.append((auth_name, m_cert.get_ca_bundle(secret, auth_name, auth_name)))
+            except exceptions.CertificateRetrievalException as e:
+                LOG.error("Error fetching certificate: %s", e)
+
+        entities.append((
+            m_tls.get_listener_name(listener.id),
+            m_tls.get_tls_server([cert['id'] for cert in certificates], auth_name, listener.client_authentication)
+        ))
+        entities.extend([(cert['id'], cert['as3']) for cert in certificates])
 
     if CONF.f5_agent.profile_l4:
         service_args['profileL4'] = BigIP(CONF.f5_agent.profile_l4)
@@ -130,34 +165,48 @@ def get_service(listener, cert_manager):
             default_pool = m_pool.get_name(listener.default_pool_id)
             service_args['pool'] = default_pool
 
+            # only consider Proxy pool, everything else is determined by listener type
             if pool.protocol == const.PROTOCOL_PROXY:
                 name, irule = m_irule.get_proxy_irule()
                 service_args['iRules'].append(name)
                 entities.append((name, irule))
-            elif pool.protocol == const.PROTOCOL_HTTPS:
-                # TODO: Implement Client_TLS profile for lb -> member TLS connection
+
+        # Pool member certificate handling (TLS backends)
+        if pool.tls_enabled:
+            client_cert = None
+            trust_ca = None
+            crl_file = None
+
+            service_args['clientTLS'] = m_tls.get_pool_name(pool.id)
+            certificates = cert_manager.get_certificates(pool)
+            if len(certificates) == 1:
+                cert = certificates.pop()
+                entities.append((cert['id'], cert['as3']))
+                client_cert = cert['id']
+
+            if pool.ca_tls_certificate_id:
+                trust_ca, secret = cert_manager.load_secret(
+                    project_id, pool.ca_tls_certificate_id)
+                entities.append((trust_ca, m_cert.get_ca_bundle(
+                    secret, trust_ca, trust_ca)))
+
+            if pool.crl_container_id:
+                # TODO: CRL currently not supported
                 pass
+
+            entities.append((
+                m_tls.get_pool_name(pool.id),
+                m_tls.get_tls_client(
+                    trust_ca=trust_ca,
+                    client_cert=client_cert,
+                    crl_file=crl_file
+                )
+            ))
 
     # Insert header irules
     for name, irule in m_irule.get_header_irules(listener.insert_headers):
         service_args['iRules'].append(name)
         entities.append((name, irule))
-
-    if listener.tls_certificate_id:
-        auth_name = None
-        certificates = m_cert.get_certificates(listener, cert_manager)
-        if listener.client_ca_tls_certificate_id and listener.client_authentication != 'NONE':
-            try:
-                auth_name, secret = m_cert.load_secret(listener, cert_manager, listener.client_ca_tls_certificate_id)
-                entities.append((auth_name, m_cert.get_ca_bundle(secret, auth_name, auth_name)))
-            except exceptions.CertificateRetrievalException as e:
-                LOG.error("Error fetching certificate: %s", e)
-
-        entities.append((
-            m_tls.get_name(listener.id),
-            m_tls.get_tls_server([cert['id'] for cert in certificates], auth_name, listener.client_authentication)
-        ))
-        entities.extend([(cert['id'], cert['as3']) for cert in certificates])
 
     # session persistence
     if listener.default_pool_id and listener.default_pool.session_persistence:
