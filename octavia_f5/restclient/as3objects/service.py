@@ -12,18 +12,22 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 from oslo_config import cfg
+from oslo_log import log as logging
 
+from octavia.common import exceptions
 from octavia_f5.common import constants as const
-from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Persist, Pointer
+from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Pointer
 from octavia_f5.restclient.as3objects import application as m_app
+from octavia_f5.restclient.as3objects import certificate as m_cert
+from octavia_f5.restclient.as3objects import irule as m_irule
+from octavia_f5.restclient.as3objects import persist as m_persist
 from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import tls as m_tls
-from octavia_f5.restclient.as3objects import persist as m_persist
-from octavia_f5.restclient.as3objects import irule as m_irule
 from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
+LOG = logging.getLogger(__name__)
 
 """ Maps listener to AS3 service """
 
@@ -31,11 +35,6 @@ CONF = cfg.CONF
 def get_name(listener_id):
     return const.PREFIX_LISTENER + \
            listener_id.replace('/', '').replace('-', '_')
-
-
-def get_path(listener):
-    return m_app.get_path(listener.load_balancer) + \
-            '/' + get_name(listener.id)
 
 
 def process_esd(servicetype, esd):
@@ -79,13 +78,14 @@ def process_esd(servicetype, esd):
     return service_args
 
 
-def get_service(listener):
+def get_service(listener, cert_manager):
     entities = []
     vip = listener.load_balancer.vip
     service_args = {
         'virtualPort': listener.protocol_port,
         'virtualAddresses': [vip.ip_address],
         'persistenceMethods': [],
+        'iRules': []
     }
 
     if listener.description:
@@ -107,7 +107,7 @@ def get_service(listener):
     elif listener.protocol == const.PROTOCOL_PROXY:
         service_args['_servicetype'] = const.SERVICE_HTTP
         name, irule = m_irule.get_proxy_irule()
-        service_args['iRules'] = [name]
+        service_args['iRules'].append(name)
         entities.append((name, irule))
     # Terminated HTTPS
     elif listener.protocol == const.PROTOCOL_TERMINATED_HTTPS:
@@ -125,10 +125,41 @@ def get_service(listener):
 
     # Add default pool
     if listener.default_pool_id:
-        default_pool = m_pool.get_name(listener.default_pool_id)
-        service_args['pool'] = default_pool
+        pool = listener.default_pool
+        if pool.provisioning_status != lib_consts.PENDING_DELETE:
+            default_pool = m_pool.get_name(listener.default_pool_id)
+            service_args['pool'] = default_pool
 
-    #  session persistence
+            if pool.protocol == const.PROTOCOL_PROXY:
+                name, irule = m_irule.get_proxy_irule()
+                service_args['iRules'].append(name)
+                entities.append((name, irule))
+            elif pool.protocol == const.PROTOCOL_HTTPS:
+                # TODO: Implement Client_TLS profile for lb -> member TLS connection
+                pass
+
+    # Insert header irules
+    for name, irule in m_irule.get_header_irules(listener.insert_headers):
+        service_args['iRules'].append(name)
+        entities.append((name, irule))
+
+    if listener.tls_certificate_id:
+        auth_name = None
+        certificates = m_cert.get_certificates(listener, cert_manager)
+        if listener.client_ca_tls_certificate_id and listener.client_authentication != 'NONE':
+            try:
+                auth_name, secret = m_cert.load_secret(listener, cert_manager, listener.client_ca_tls_certificate_id)
+                entities.append((auth_name, m_cert.get_ca_bundle(secret, auth_name, auth_name)))
+            except exceptions.CertificateRetrievalException as e:
+                LOG.error("Error fetching certificate: %s", e)
+
+        entities.append((
+            m_tls.get_name(listener.id),
+            m_tls.get_tls_server([cert['id'] for cert in certificates], auth_name, listener.client_authentication)
+        ))
+        entities.extend([(cert['id'], cert['as3']) for cert in certificates])
+
+    # session persistence
     if listener.default_pool_id and listener.default_pool.session_persistence:
         persistence = listener.default_pool.session_persistence
         lb_algorithm = listener.default_pool.lb_algorithm

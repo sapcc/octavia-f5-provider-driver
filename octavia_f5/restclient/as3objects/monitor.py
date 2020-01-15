@@ -20,7 +20,7 @@ from oslo_config import cfg
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
-
+UDP_CHECK = "#!/bin/sh\n/usr/bin/nc -uzv -w1 $1 $2 > /dev/null && echo up"
 
 def get_name(healthmonitor_id):
     return constants.PREFIX_HEALTH_MONITOR + \
@@ -42,7 +42,9 @@ def get_monitor(health_monitor):
     elif health_monitor.type == 'TLS-HELLO':
         args['monitorType'] = 'tcp'
     elif health_monitor.type == 'UDP-CONNECT':
-        args['monitorType'] = 'udp'
+        args['monitorType'] = 'external'
+        args['script'] = UDP_CHECK
+        args['receive'] = 'up'
 
     # F5 specific monitory types
     elif health_monitor.type == 'SIP':

@@ -99,44 +99,6 @@ class TestAS3Classes(base.TestCase):
         self.assertIsInstance(application_obj.serviceMain, as3classes.Service)
         self.assertEqual(application, application_obj.to_dict())
 
-        # add pool
-        pool_name = 'test_pool'
-        pool = {'class': 'Pool'}
-        application[pool_name] = pool
-        pool_obj = as3classes.Pool()
-        application_obj.add_pool(pool_name, pool_obj)
-        self.assertEqual(application, application_obj.to_dict())
-
-        # add duplicate pool
-        self.assertRaises(as3exceptions.DuplicatedKeyException,
-                          application_obj.add_pool, pool_name, pool_obj)
-        self.assertEqual(application, application_obj.to_dict())
-
-        # add service
-        service_name = 'test_service'
-        application[service_name] = service
-        service_obj = as3classes.Service(service['class'])
-        application_obj.add_service(service_name, service_obj)
-        self.assertEqual(application, application_obj.to_dict())
-
-        # add duplicate service
-        self.assertRaises(as3exceptions.DuplicatedKeyException,
-                          application_obj.add_service, service_name, service_obj)
-        self.assertEqual(application, application_obj.to_dict())
-
-        # add monitor
-        monitor_name = 'test_monitor'
-        monitor = {'class': 'Monitor'}
-        application[monitor_name] = monitor
-        monitor_obj = as3classes.Monitor()
-        application_obj.add_monitor(monitor_name, monitor_obj)
-        self.assertEqual(application, application_obj.to_dict())
-
-        # add duplicate monitor
-        self.assertRaises(as3exceptions.DuplicatedKeyException,
-                          application_obj.add_monitor, monitor_name, monitor_obj)
-        self.assertEqual(application, application_obj.to_dict())
-
         # add endpoint policy
         ep_name = 'test_endpoint_policy'
         ep = {'class': 'Endpoint_Policy',
@@ -198,16 +160,6 @@ class TestAS3Classes(base.TestCase):
         # creation
         pool = {'class': 'Pool'}
         pool_obj = as3classes.Pool()
-        self.assertEqual(pool, pool_obj.to_dict())
-
-        # add member
-        member = {'enable': True,
-                  'servicePort': 'test_servicePort',
-                  'serverAddresses': 'test_serverAddresses'}
-        pool['members'] = [member]
-        member_obj = as3classes.Member(servicePort=member['servicePort'],
-                                       serverAddresses=member['serverAddresses'])
-        pool_obj.add_member(member_obj)
         self.assertEqual(pool, pool_obj.to_dict())
 
     def test_member(self):

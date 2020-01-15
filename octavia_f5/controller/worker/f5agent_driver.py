@@ -12,7 +12,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 import uuid
-from collections import defaultdict
 
 from oslo_log import log as logging
 from requests import ConnectionError
@@ -27,19 +26,13 @@ from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import tenant as m_part
-from octavia_f5.restclient.as3objects import tls as m_tls
-from octavia_f5.restclient.as3objects import certificate as m_cert
-from octavia_lib.common import constants as lib_consts
+from octavia_f5.utils import driver_utils as utils
 
 LOG = logging.getLogger(__name__)
 RETRY_ATTEMPTS = 15
 RETRY_INITIAL_DELAY = 1
 RETRY_BACKOFF = 1
 RETRY_MAX = 5
-
-
-def _pending_delete(obj):
-    return obj.provisioning_status == lib_consts.PENDING_DELETE
 
 
 @retry(
@@ -67,7 +60,7 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
     )
 
     for loadbalancer in loadbalancers:
-        if _pending_delete(loadbalancer):
+        if utils.pending_delete(loadbalancer):
             continue
 
         # Create generic application
@@ -76,12 +69,12 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
 
         # attach listeners with ESDs / L7Policies
         for listener in loadbalancer.listeners:
-            if _pending_delete(listener):
+            if utils.pending_delete(listener):
                 continue
 
             profiles = {}
             for l7policy in listener.l7policies:
-                if _pending_delete(l7policy):
+                if utils.pending_delete(l7policy):
                     continue
 
                 esd = bigip.esd.get_esd(l7policy.name)
@@ -92,40 +85,14 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
                         m_policy.get_name(l7policy.id),
                         m_policy.get_endpoint_policy(l7policy)
                     )
-            app.add_entities(m_service.get_service(listener))
-
-            if listener.tls_certificate_id:
-                certificates = m_cert.get_certificates(listener, cert_manager)
-                app.add_tls_server(
-                    m_tls.get_name(listener.id),
-                    m_tls.get_tls_server([cert['id'] for cert in certificates])
-                )
-                for cert in certificates:
-                    app.add_certificate(cert['id'], cert['as3'])
+            app.add_entities(m_service.get_service(listener, cert_manager))
 
         # attach pools
         for pool in loadbalancer.pools:
-            if _pending_delete(pool):
+            if utils.pending_delete(pool):
                 continue
 
-            as3pool = m_pool.get_pool(pool)
-
-            for member in pool.members:
-                if _pending_delete(member):
-                    continue
-
-                as3pool.add_member(
-                    m_member.get_member(member))
-
-            if pool.health_monitor:
-                if not _pending_delete(pool.health_monitor):
-                    app.add_monitor(
-                        m_monitor.get_name(pool.health_monitor.id),
-                        m_monitor.get_monitor(pool.health_monitor))
-
-            app.add_pool(
-                m_pool.get_name(pool.id),
-                as3pool)
+            app.add_entities(m_pool.get_pool(pool))
 
         tenant.add_application(
             m_app.get_name(loadbalancer.id),

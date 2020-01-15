@@ -52,7 +52,7 @@ f5_agent_opts = [
     cfg.StrOpt('esd_dir',
                help=_('Directory of the esd files')),
 
-    cfg.StrOpt('tcp_service_type', default=constants.SERVICE_L4,
+    cfg.StrOpt('tcp_service_type', default=constants.SERVICE_TCP,
                choices=[constants.SERVICE_L4,
                         constants.SERVICE_TCP],
                help=_("Service type used for TCP listener")),
