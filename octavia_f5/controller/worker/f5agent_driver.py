@@ -25,6 +25,7 @@ from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import tenant as m_part
 from octavia_f5.utils import driver_utils as utils
+from octavia_f5.restclient.as3objects import pool_member as m_member
 
 LOG = logging.getLogger(__name__)
 RETRY_ATTEMPTS = 15
@@ -39,7 +40,12 @@ RETRY_MAX = 5
         RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
     stop=stop_after_attempt(RETRY_ATTEMPTS)
 )
-def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, action='deploy'):
+def tenant_update(bigip,
+                  cert_manager,
+                  tenant,
+                  loadbalancers,
+                  segmentation_id,
+                  action='deploy'):
     """Task to update F5s with all specified loadbalancers' configurations
        of a tenant (project).
 
@@ -121,3 +127,18 @@ def tenant_delete(bigip, tenant):
     """
     tenant = m_part.get_name(tenant)
     return bigip.delete(tenants=[tenant])
+
+
+def member_create(bigip, member):
+    """Patches new member into existing pool
+
+    :param bigip: bigip instance
+    :param member: octavia member object
+    """
+    path = '{}/{}/{}/members/-'.format(
+        m_part.get_name(member.pool.load_balancer.vip.network_id),
+        m_app.get_name(member.pool.load_balancer.id),
+        m_pool.get_name(member.pool.id)
+    )
+    return bigip.patch(operation='add', path=path,
+                       value=m_member.get_member(member).to_dict())

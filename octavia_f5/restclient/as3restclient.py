@@ -105,11 +105,10 @@ class BigipAS3RestClient(object):
         return response
 
     @authorized
-    def patch(self, operation, path, **kwargs):
-        LOG.debug("Calling PATCH %s with path %s", operation, path)
-        params = kwargs.copy()
-
-        params.update({'op': operation, 'path': path})
+    def patch(self, operation, path, value):
+        LOG.debug("Calling PATCH %s with path %s: \n%s", operation, path,
+                  json.dumps(value, indent=4, sort_keys=True))
+        params = {'op': operation, 'path': path, 'value': value}
         response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
         if response.headers.get('Content-Type') == 'application/json':
             LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
