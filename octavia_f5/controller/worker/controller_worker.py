@@ -285,12 +285,23 @@ class ControllerWorker(object):
     @lockutils.synchronized('tenant_refresh')
     def batch_update_members(self, old_member_ids, new_member_ids,
                              updated_members):
-        member = self._member_repo.get(db_apis.get_session(),
-                                       id=old_member_ids[0])
-        if self._refresh(member.pool.load_balancer.vip.network_id).ok:
-            self.status.set_active(member)
+        old_members = [self._member_repo.get(db_apis.get_session(), id=mid)
+                       for mid in old_member_ids]
+        new_members = [self._member_repo.get(db_apis.get_session(), id=mid)
+                       for mid in new_member_ids]
+        updated_members = [
+            (self._member_repo.get(db_apis.get_session(), id=m.get('id')), m)
+            for m in updated_members]
+        if old_members:
+            pool = old_members[0].pool
+        elif new_members:
+            pool = new_members[0].pool
         else:
-            self.status.set_error(member)
+            pool = updated_members[0][0].pool
+        load_balancer = pool.load_balancer
+        network_id = load_balancer.vip.network_id
+        if self._refresh(network_id).ok:
+            self.status.update_status([load_balancer])
 
     @lockutils.synchronized('tenant_refresh')
     def update_member(self, member_id, member_updates):
