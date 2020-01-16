@@ -11,9 +11,10 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-import json
 
 import functools
+import json
+
 import requests
 from oslo_log import log as logging
 from requests.adapters import HTTPAdapter
@@ -99,19 +100,21 @@ class BigipAS3RestClient(object):
         response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
         LOG.debug("POST finished with %d", response.status_code)
         if response.headers.get('Content-Type') == 'application/json':
-            LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
+            LOG.debug(json.dumps(json.loads(response.text)['results'], indent=4, sort_keys=True))
         else:
             LOG.debug(response.text)
         return response
 
     @authorized
-    def patch(self, operation, path, value):
-        LOG.debug("Calling PATCH %s with path %s: \n%s", operation, path,
-                  json.dumps(value, indent=4, sort_keys=True))
-        params = {'op': operation, 'path': path, 'value': value}
+    def patch(self, operation, path, **kwargs):
+        LOG.debug("Calling PATCH %s with path %s", operation, path)
+        if 'value' in kwargs:
+            LOG.debug(json.dumps(kwargs['value'], indent=4, sort_keys=True))
+        params = kwargs.copy()
+        params.update({'op': operation, 'path': path})
         response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
         if response.headers.get('Content-Type') == 'application/json':
-            LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
+            LOG.debug(json.dumps(json.loads(response.text)['results'], indent=4, sort_keys=True))
         else:
             LOG.debug(response.text)
         return response
@@ -127,7 +130,7 @@ class BigipAS3RestClient(object):
         response = self.session.delete(self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants))))
         LOG.debug("DELETE finished with %d", response.status_code)
         if response.headers.get('Content-Type') == 'application/json':
-            LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
+            LOG.debug(json.dumps(json.loads(response.text)['results'], indent=4, sort_keys=True))
         else:
             LOG.debug(response.text)
         return response
