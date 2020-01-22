@@ -56,12 +56,17 @@ def get_pool(pool):
             service_args['members'].append(
                 m_member.get_member(member))
 
-    if pool.health_monitor and not utils.pending_delete(
-            pool.health_monitor):
+    #if pool.health_monitor and not utils.pending_delete(
+    #        pool.health_monitor):
+    # Workaround for Monitor deletion bug in AS3, dereference but remain HM
+    if pool.health_monitor:
         name = m_monitor.get_name(pool.health_monitor.id)
         hm = m_monitor.get_monitor(pool.health_monitor)
         entities.append((name, hm))
-        service_args['monitors'] = [Pointer(use=name)]
+
+        # Part of the workaround
+        if not utils.pending_delete(pool.health_monitor):
+            service_args['monitors'] = [Pointer(use=name)]
 
         for member in pool.members:
             # Custom member address
@@ -73,6 +78,8 @@ def get_pool(pool):
                     member_hm.set_target_port(member.monitor_port)
                 name = m_member.get_name(member.id)
                 entities.append((name, member_hm))
+                if not utils.pending_delete(member):
+                    service_args['monitors'].append(Pointer(use=name))
 
     entities.append((get_name(pool.id), Pool(**service_args)))
     return entities
