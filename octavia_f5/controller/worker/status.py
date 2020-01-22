@@ -60,52 +60,42 @@ class StatusManager(object):
 
     def update_status(self, loadbalancers):
         """Set provisioning_state of loadbalancers and all it's
-        childs to ACTIVE if PENDING_UPDATE or PENDING_CREATE, else
+        children to ACTIVE if PENDING_UPDATE or PENDING_CREATE, else
         DELETED for PENDING_DELETED.
 
         :param loadbalancers: octavia loadbalancers list
         """
-        for loadbalancer in loadbalancers:
-            if utils.pending_delete(loadbalancer):
-                self.set_deleted(loadbalancer)
+
+        def _set_deleted_or_active(obj):
+            """Sets octavia object to deleted if status was PENDING_DELETE
+
+            :param obj: octavia object
+            """
+            if utils.pending_delete(obj):
+                self.set_deleted(obj)
             else:
-                self.set_active(loadbalancer)
+                self.set_active(obj)
+
+        for loadbalancer in loadbalancers:
+            _set_deleted_or_active(loadbalancer)
 
             for listener in loadbalancer.listeners:
-                if utils.pending_delete(listener):
-                    self.set_deleted(listener)
-                else:
-                    self.set_active(listener)
+                _set_deleted_or_active(listener)
 
                 for l7policy in listener.l7policies:
-                    if utils.pending_delete(l7policy):
-                        self.set_deleted(l7policy)
-                    else:
-                        self.set_active(l7policy)
+                    _set_deleted_or_active(l7policy)
 
                     for l7rule in l7policy.l7rules:
-                        if utils.pending_delete(l7rule):
-                            self.set_deleted(l7rule)
-                        else:
-                            self.set_active(l7rule)
+                        _set_deleted_or_active(l7rule)
 
             for pool in loadbalancer.pools:
-                if utils.pending_delete(pool):
-                    self.set_deleted(pool)
-                else:
-                    self.set_active(pool)
+                _set_deleted_or_active(pool)
 
                 for member in pool.members:
-                    if utils.pending_delete(member):
-                        self.set_deleted(member)
-                    else:
-                        self.set_active(member)
+                    _set_deleted_or_active(member)
 
                 if pool.health_monitor:
-                    if utils.pending_delete(pool.health_monitor):
-                        self.set_deleted(pool.health_monitor)
-                    else:
-                        self.set_active(pool.health_monitor)
+                    _set_deleted_or_active(pool.health_monitor)
 
     def _set_obj_and_ancestors(self, obj, state=lib_consts.ACTIVE):
         """Set provisioning_state of octavia object to state and set all ancestors
@@ -172,6 +162,12 @@ class StatusManager(object):
     @staticmethod
     def _status_obj(obj,
                     provisioning_status=lib_consts.ACTIVE):
+        """Return status object for statup update api consumption
+
+        :param obj: octavia object containing ID
+        :param provisioning_status: provisioning status
+        :return: status object
+        """
         return {
             lib_consts.ID: obj.id,
             lib_consts.PROVISIONING_STATUS: provisioning_status,
