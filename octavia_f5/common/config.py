@@ -64,6 +64,14 @@ f5_agent_opts = [
                       " profile (e.g. /Common/custom_oneconnect)")),
     cfg.StrOpt('healthmonitor_receive', default='"HTTP/1.(0|1) 200',
                help=_("Default HTTP health monitor receive string")),
+    cfg.StrOpt('sync_to_group', default='',
+               help=_("Name (like /Common/my_dg) of the config-sync "
+                      "group TO which the system should synchronize the "
+                      "targetHost configuration after (and only if) "
+                      "this request deploys any changes."
+                      "When empty (default) this request will not affect "
+                      "config-sync at all.")),
+
 ]
 
 f5_networking_opts = [

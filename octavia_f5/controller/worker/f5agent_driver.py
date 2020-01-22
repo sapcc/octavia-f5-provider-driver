@@ -11,8 +11,10 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
 import uuid
 
+from oslo_config import cfg
 from oslo_log import log as logging
 from requests import ConnectionError
 from tenacity import *
@@ -22,11 +24,12 @@ from octavia_f5.restclient.as3classes import ADC, AS3, Application
 from octavia_f5.restclient.as3objects import application as m_app
 from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
+from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import tenant as m_part
 from octavia_f5.utils import driver_utils as utils
-from octavia_f5.restclient.as3objects import pool_member as m_member
 
+CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 RETRY_ATTEMPTS = 15
 RETRY_INITIAL_DELAY = 1
@@ -60,7 +63,9 @@ def tenant_update(bigip,
     """
     decl = AS3(
         persist=True,
-        action=action)
+        action=action,
+        syncToGroup=CONF.f5_agent.sync_to_group,
+        _log_level=LOG.logger.level)
     adc = ADC(
         id="urn:uuid:{}".format(uuid.uuid4()),
         label="F5 BigIP Octavia Provider")

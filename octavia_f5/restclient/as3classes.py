@@ -60,13 +60,25 @@ class BaseDescription(object):
 
 class AS3(BaseDescription):
     ACTIONS = ['deploy', 'dry-run', 'patch', 'redeploy', 'retrieve', 'remove']
+    LOG_MAP = {
+        logging.CRITICAL: 'critical',
+        logging.FATAL: 'emergency',
+        logging.ERROR: 'error',
+        logging.WARNING: 'warning',
+        logging.INFO: 'info',
+        logging.DEBUG: 'debug',
+        logging.NOTSET: 'warning',
+        logging.TRACE: 'debug'
+    }
 
-    def __init__(self, persist=True, action='deploy'):
+    def __init__(self, persist=True, action='deploy', _log_level=logging.WARNING, **kwargs):
         if action not in self.ACTIONS:
             raise as3exceptions.TypeNotSupportedException
 
         super(AS3, self).__init__(locals())
         setattr(self, 'class', 'AS3')
+        setattr(self, 'logLevel', self.LOG_MAP.get(_log_level, 'warning'))
+        setattr(self, 'trace', _log_level == logging.TRACE)
 
     def set_adc(self, adc):
         setattr(self, 'declaration', adc)
