@@ -13,15 +13,37 @@
 # under the License.
 
 from octavia_f5.common import constants
-from octavia_f5.restclient.as3classes import TLS_Server
+from octavia_f5.restclient.as3classes import TLS_Server, TLS_Client, Pointer
 
 
-def get_name(listener_id):
+def get_listener_name(listener_id):
+    """Returns AS3 object name for TLS profiles related to listeners
+
+    :param listener_id: octavia listener id
+    :return: AS3 object name
+    """
     return "{}{}".format(constants.PREFIX_TLS_LISTENER,
                          listener_id.replace('-', '_'))
 
 
+def get_pool_name(pool_id):
+    """Returns AS3 object name for TLS profiles related to pools
+
+    :param pool_id: octavia pool id
+    :return: AS3 object name
+    """
+    return "{}{}".format(constants.PREFIX_TLS_POOL,
+                         pool_id.replace('-', '_'))
+
+
 def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode='NONE'):
+    """ returns AS3 TLS_Server
+
+    :param certificate_ids: reference ids to AS3 certificate objs
+    :param authentication_ca: reference id to AS3 auth-ca obj
+    :param authentication_mode: reference id to AS3 auth-mode
+    :return: TLS_Server
+    """
     mode_map = {
         'NONE': 'ignore',
         'OPTIONAL': 'request',
@@ -38,3 +60,23 @@ def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode=
         service_args['authenticationMode'] = mode_map[authentication_mode]
 
     return TLS_Server(**service_args)
+
+
+def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
+    """ returns AS3 TLS_Client
+
+    :param trust_ca: reference to AS3 trust_ca obj
+    :param client_cert: reference to AS3 client_cert
+    :param crl_file: reference to AS3 crl_file
+    :return: TLS_Client
+    """
+    service_args = dict()
+    if trust_ca:
+        service_args['trustCA'] = Pointer(trust_ca)
+        service_args['validateCertificate'] = True
+    if client_cert:
+        service_args['clientCertificate'] = client_cert
+    if crl_file:
+        service_args['crlFile'] = crl_file
+
+    return TLS_Client(**service_args)

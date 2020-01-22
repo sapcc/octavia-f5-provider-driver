@@ -20,10 +20,8 @@ from tenacity import *
 from octavia_f5.common import constants
 from octavia_f5.restclient.as3classes import ADC, AS3, Application
 from octavia_f5.restclient.as3objects import application as m_app
-from octavia_f5.restclient.as3objects import monitor as m_monitor
 from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
-from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import tenant as m_part
 from octavia_f5.utils import driver_utils as utils
@@ -44,6 +42,14 @@ RETRY_MAX = 5
 def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, action='deploy'):
     """Task to update F5s with all specified loadbalancers' configurations
        of a tenant (project).
+
+       :param bigip: bigip instance
+       :param cert_manager: CertManagerWrapper instance
+       :param tenant: tenant_id/project_id
+       :param loadbalancers: loadbalancer to update
+       :param segmentation_id: segmentation_id of the loadbalancers
+       :param action: AS3 action
+       :return: requests post result
 
     """
     decl = AS3(
@@ -91,7 +97,6 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
         for pool in loadbalancer.pools:
             if utils.pending_delete(pool):
                 continue
-
             app.add_entities(m_pool.get_pool(pool))
 
         tenant.add_application(
@@ -109,6 +114,10 @@ def tenant_update(bigip, cert_manager, tenant, loadbalancers, segmentation_id, a
 )
 def tenant_delete(bigip, tenant):
     """ Delete a Tenant
+
+    :param bigip: bigip instance
+    :param tenant: tenant/project id
+    :return: requests delete result
     """
     tenant = m_part.get_name(tenant)
     return bigip.delete(tenants=[tenant])

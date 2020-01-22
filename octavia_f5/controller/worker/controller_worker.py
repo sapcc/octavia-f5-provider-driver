@@ -21,9 +21,9 @@ from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from sqlalchemy.orm import exc as db_exceptions
-from stevedore import driver as stevedore_driver
 
 from octavia.db import repositories as repo, models
+from octavia_f5.utils import cert_manager
 from octavia_f5.controller.worker.f5agent_driver import tenant_update, tenant_delete
 from octavia_f5.db import api as db_apis
 from octavia_f5.restclient.as3restclient import BigipAS3RestClient
@@ -78,12 +78,8 @@ class ControllerWorker(object):
             enable_verify=CONF.f5_agent.bigip_verify,
             enable_token=CONF.f5_agent.bigip_token,
             esd=self._esd)
-        self.cert_manager = stevedore_driver.DriverManager(
-            namespace='octavia.cert_manager',
-            name=CONF.certificates.cert_manager,
-            invoke_on_load=True,
-        ).driver
         self.network_driver = driver_utils.get_network_driver()
+        self.cert_manager = cert_manager.CertManagerWrapper()
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None)]
         )

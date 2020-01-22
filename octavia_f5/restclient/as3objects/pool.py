@@ -1,4 +1,4 @@
-# Copyright 2018 SAP SE
+# Copyright 2018, 2019, 2020 SAP SE
 # Copyright (c) 2014-2018, F5 Networks, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -25,11 +25,21 @@ LOG = logging.getLogger(__name__)
 
 
 def get_name(pool_id):
+    """Return AS3 object name for type pool
+
+    :param pool_id: pool id
+    :return: AS3 object name
+    """
     return constants.PREFIX_POOL + \
            pool_id.replace('/', '').replace('-', '_')
 
 
 def get_pool(pool):
+    """Map Octavia Pool -> AS3 Pool object
+
+    :param pool: octavia pool object
+    :return: AS3 pool
+    """
     entities = []
     lbaas_lb_method = pool.lb_algorithm.upper()
     lbmode = _set_lb_method(lbaas_lb_method, pool.members)
@@ -70,6 +80,11 @@ def get_pool(pool):
 
 # from service_adpater.py f5_driver-agent
 def _get_lb_method(method):
+    """ Returns F5 load balancing mode for octavia pool lb-algorithm
+
+    :param method: Octavia lb-algorithm
+    :return: F5 load balancing mode
+    """
     lb_method = method.upper()
 
     if lb_method == constants.LB_ALGORITHM_LEAST_CONNECTIONS:
@@ -90,7 +105,12 @@ def _get_lb_method(method):
 
 # from service_adpater.py f5_driver-agent
 def _set_lb_method(lbaas_lb_method, members):
-    """Set pool lb method depending on member attributes."""
+    """Set pool lb method depending on member attributes.
+
+    :param lbaas_lb_method: octavia loadbalancing method
+    :param members: octavia members
+    :return: F5 load balancing method
+    """
     lb_method = _get_lb_method(lbaas_lb_method)
 
     if lb_method == 'SOURCE_IP':
@@ -98,8 +118,7 @@ def _set_lb_method(lbaas_lb_method, members):
 
     member_has_weight = False
     for member in members:
-        if hasattr(member, 'weight') and member.weight > 1 and \
-                member['provisioning_status'] != 'PENDING_DELETE':
+        if not utils.pending_delete(member) and member.weight > 1:
             member_has_weight = True
             break
 
