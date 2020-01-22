@@ -46,7 +46,7 @@ class CertManagerWrapper(object):
         if obj.tls_certificate_id:
             cert_dict['container_id'] += obj.tls_certificate_id.split('/')[-1]
         if hasattr(obj, 'sni_containers') and obj.sni_containers:
-            cert_dict['container_id'] += ', '.join(
+            cert_dict['container_id'] += ', ' + ', '.join(
                 [sni.tls_container_id.split('/')[-1] for sni in obj.sni_containers])
 
         # Note, the first cert is the TLS default cert
