@@ -42,19 +42,19 @@ class CertManagerWrapper(object):
         """
         certificates = []
         cert_dict = cert_parser.load_certificates_data(self.cert_manager, obj, context)
-        cert_dict['container_id'] = ''
+        cert_dict['container_id'] = []
         if obj.tls_certificate_id:
-            cert_dict['container_id'] += obj.tls_certificate_id.split('/')[-1]
+            cert_dict['container_id'].append(obj.tls_certificate_id.split('/')[-1])
         if hasattr(obj, 'sni_containers') and obj.sni_containers:
-            cert_dict['container_id'] += ', ' + ', '.join(
-                [sni.tls_container_id.split('/')[-1] for sni in obj.sni_containers])
+            cert_dict['container_id'].extend([sni.tls_container_id.split('/')[-1]
+                                              for sni in obj.sni_containers])
 
         # Note, the first cert is the TLS default cert
         if cert_dict['tls_cert'] is not None:
             certificates.append({
                 'id': '{}{}'.format(constants.PREFIX_CERTIFICATE, cert_dict['tls_cert'].id),
                 'as3': m_cert.get_certificate(
-                    'Container {}'.format(cert_dict['container_id']),
+                    'Container {}'.format(', '.join(cert_dict['container_id'])),
                     cert_dict['tls_cert'])
             })
 
@@ -62,7 +62,7 @@ class CertManagerWrapper(object):
             certificates.append({
                 'id': '{}{}'.format(constants.PREFIX_CERTIFICATE, sni_cert.id),
                 'as3': m_cert.get_certificate(
-                    'Container {}'.format(cert_dict['container_id']),
+                    'Container {}'.format(', '.join(cert_dict['container_id'])),
                     sni_cert)
             })
 
