@@ -75,6 +75,12 @@ class StatusManager(BigipAS3RestClient):
         }
 
     def heartbeat(self):
+        """Sents heartbeat and status information to running octavia healthmanager via UDP. The format can be seen in
+        octavia.amphorae.drivers.health.heartbeat_udp.UDPStatusGetter.dorecv.
+        Scraps Virtual, Pool and Pool Member statistics and status\.
+        Also updates listener_count for amphora database via update_listener_count() function. This is needed for
+        scheduling decisions.
+        """
         amphora_messages = {}
 
         def _get_lb_msg(lb_id):
@@ -142,7 +148,7 @@ class StatusManager(BigipAS3RestClient):
                     status = constants.NO_CHECK
                     if stats['status.enabledState'].get('description') == 'disabled':
                         status = constants.DRAIN
-                    if stats['monitorStatus'].get('description') == 'down':
+                    elif stats['monitorStatus'].get('description') == 'down':
                         status = constants.DOWN
                     elif stats['monitorStatus'].get('description') == 'up':
                         status = constants.UP
@@ -153,6 +159,10 @@ class StatusManager(BigipAS3RestClient):
             self.sender.dosend(msg)
 
     def update_listener_count(self, num_listeners):
+        """ updates listener count of bigip device (vrrp_priority column in amphora table)
+
+        :param num_listeners: number of listener for the bigip device
+        """
         lock_session = None
         try:
             lock_session = db_api.get_session(autocommit=False)
