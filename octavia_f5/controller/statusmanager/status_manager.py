@@ -32,9 +32,9 @@ LOG = logging.getLogger(__name__)
 
 class StatusManager(BigipAS3RestClient):
     def __init__(self, exit_event):
-        super().__init__(bigip_url=CONF.f5_agent.bigip_url,
-                         enable_verify=CONF.f5_agent.bigip_verify,
-                         enable_token=CONF.f5_agent.bigip_token)
+        super(StatusManager, self).__init__(bigip_url=CONF.f5_agent.bigip_url,
+                                            enable_verify=CONF.f5_agent.bigip_verify,
+                                            enable_token=CONF.f5_agent.bigip_token)
         self.amphora_id = None
         self.seq = 0
         self.dead = exit_event
@@ -143,7 +143,8 @@ class StatusManager(BigipAS3RestClient):
                 if 'description' in member:
                     member_id = member['description']
                     base_path = memberstats['selfLink'][:memberstats['selfLink'].find('/stats')]
-                    statobj = memberstats['entries']['{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))]
+                    statobj = memberstats['entries'][
+                        '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))]
                     stats = statobj['nestedStats']['entries']
                     status = constants.NO_CHECK
                     if stats['status.enabledState'].get('description') == 'disabled':
