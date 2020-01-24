@@ -47,8 +47,7 @@ def tenant_update(bigip,
                   cert_manager,
                   tenant,
                   loadbalancers,
-                  segmentation_id,
-                  action='deploy'):
+                  segmentation_id):
     """Task to update F5s with all specified loadbalancers' configurations
        of a tenant (project).
 
@@ -57,10 +56,13 @@ def tenant_update(bigip,
        :param tenant: tenant_id/project_id
        :param loadbalancers: loadbalancer to update
        :param segmentation_id: segmentation_id of the loadbalancers
-       :param action: AS3 action
        :return: requests post result
 
     """
+
+    action = 'deploy'
+    if CONF.f5_agent.dry_run:
+        action = 'dry-run'
     decl = AS3(
         persist=True,
         action=action,

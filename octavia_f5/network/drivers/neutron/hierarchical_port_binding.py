@@ -13,29 +13,33 @@
 # under the License.
 
 from neutronclient.common import exceptions as neutron_client_exceptions
-from oslo_log import log as logging
+from oslo_cache import core as cache
 from oslo_config import cfg
+from oslo_log import log as logging
 
+from octavia.db import api as db_apis
 from octavia.i18n import _
 from octavia.network import base
-from octavia.network.drivers.neutron import allowed_address_pairs
+from octavia.network.drivers.neutron import allowed_address_pairs as aap
 from octavia.network.drivers.neutron import utils
 from octavia_f5.common import constants
+from octavia_f5.db import repositories
 
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
-
 PROJECT_ID_ALIAS = 'project-id'
 
+cache.configure(CONF)
+cache_region = cache.create_region()
+MEMOIZE = cache.get_memoization_decorator(
+    CONF, cache_region, "networking")
+cache.configure_cache_region(CONF, cache_region)
 
-class HierachicalPortBindingDriver(allowed_address_pairs.AllowedAddressPairsDriver):
+
+class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
     def __init__(self):
         super(HierachicalPortBindingDriver, self).__init__()
-        cfg_physical = cfg.StrOpt('f5_network_segment_physical_network', default="",
-                                  help=_('Restrict discovery of network segmentation ID '
-                                         'to a specific physical network name.'))
-        CONF.register_opt(cfg_physical,
-                          group='networking')
+        self.amp_repo = repositories.AmphoraRepository()
 
     def allocate_vip(self, load_balancer):
         port_id = load_balancer.vip.port_id
@@ -55,6 +59,20 @@ class HierachicalPortBindingDriver(allowed_address_pairs.AllowedAddressPairsDriv
             project_id_key = 'project_id'
         else:
             project_id_key = 'tenant_id'
+
+        # select a candidate to schedule to
+        try:
+            session = db_apis.get_session()
+            candidate = self.amp_repo.get_candidates(session)[0]
+        except ValueError as e:
+            message = _('Scheduling failed, no ready candidates found')
+            LOG.exception(message)
+            raise base.AllocateVIPException(
+                message,
+                orig_msg=getattr(e, 'message', None),
+                orig_code=getattr(e, 'status_code', None),
+            )
+        LOG.debug("Found candidates for new LB %s: %s", load_balancer.id, candidate)
 
         # It can be assumed that network_id exists
         port = {'port': {'name': 'octavia-lb-{}'.format(load_balancer.id),
@@ -108,6 +126,17 @@ class HierachicalPortBindingDriver(allowed_address_pairs.AllowedAddressPairsDriv
             LOG.info("Port %s will not be deleted by Octavia as it was "
                      "not created by Octavia.", vip.port_id)
 
+    @MEMOIZE
+    def get_scheduled_host(self, port_id):
+        """ Returns binding host port has been scheduled
+
+        :param port_id: the neutron port id
+        :return: hostname of the binding host
+        """
+        res = self.neutron_client.show_port(port_id)
+        return res['port']['binding:host_id']
+
+    @MEMOIZE
     def get_segmentation_id(self, network_id):
         physical_network = CONF.networking.f5_network_segment_physical_network
         # List neutron ports associated with the Amphora
