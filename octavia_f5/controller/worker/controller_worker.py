@@ -1,3 +1,4 @@
+# Copyright 2019, 2020 SAP SE
 # Copyright 2015 Hewlett-Packard Development Company, L.P.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -49,7 +50,6 @@ class ControllerWorker(object):
         self._loadbalancer_repo = repo.LoadBalancerRepository()
         self._esd = esd_repo.EsdRepository()
         self._amphora_repo = repo.AmphoraRepository()
-        self._amphora_health_repo = repo.AmphoraHealthRepository()
         self._health_mon_repo = repo.HealthMonitorRepository()
         self._lb_repo = repo.LoadBalancerRepository()
         self._listener_repo = repo.ListenerRepository()
@@ -64,6 +64,7 @@ class ControllerWorker(object):
             enable_verify=CONF.f5_agent.bigip_verify,
             enable_token=CONF.f5_agent.bigip_token,
             esd=self._esd)
+
         self.network_driver = driver_utils.get_network_driver()
         self.cert_manager = cert_manager.CertManagerWrapper()
         self.status = status.StatusManager(self.bigip)
@@ -87,6 +88,9 @@ class ControllerWorker(object):
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_CREATE,
             show_deleted=False)[0])
+
+        for lb in lbs:
+            self.ensure_amphora_exists(lb.id)
 
         for network_id in set([lb.vip.network_id for lb in lbs]):
             LOG.info("Found pending tennant network %s, syncing...", network_id)
@@ -147,6 +151,7 @@ class ControllerWorker(object):
                         '60 seconds.', 'load_balancer', load_balancer_id)
             raise db_exceptions.NoResultFound
 
+        self.ensure_amphora_exists(lb.id)
         if self._refresh(lb.vip.network_id).ok:
             self.status.set_active(lb)
         else:
@@ -274,6 +279,8 @@ class ControllerWorker(object):
             LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
                         '60 seconds.', 'member', member_id)
             raise db_exceptions.NoResultFound
+
+        self.ensure_amphora_exists(member.pool.load_balancer.id)
 
         if member_create(self.bigip, member).ok:
             self.status.set_active(member)
@@ -439,12 +446,26 @@ class ControllerWorker(object):
     """
     Amphora
     """
+    def ensure_amphora_exists(self, load_balancer_id):
+        device_amp = self._amphora_repo.get(
+            db_apis.get_session(),
+            compute_flavor=self.bigip.bigip.hostname,
+            load_balancer_id=load_balancer_id)
+        if not device_amp:
+            self._amphora_repo.create(
+                db_apis.get_session(),
+                id=load_balancer_id,
+                load_balancer_id=load_balancer_id,
+                compute_flavor=self.bigip.bigip.hostname,
+                status=lib_consts.ACTIVE)
 
     def create_amphora(self):
         pass
 
     def delete_amphora(self, amphora_id):
-        pass
+        self._amphora_repo.delete(
+            db_apis.get_session(),
+            id=amphora_id)
 
     def failover_amphora(self, amphora_id):
         pass

@@ -26,11 +26,10 @@ def get_member(member):
     args['servicePort'] = member.protocol_port
     args['serverAddresses'] = [member.ip_address]
 
-    if hasattr(member, 'admin_state_up'):
-        if member.admin_state_up:
-            args['adminState'] = 'enable'
-        else:
-            args['adminState'] = 'disable'
+    if member.enabled:
+        args['adminState'] = 'enable'
+    else:
+        args['adminState'] = 'disable'
 
     if member.weight == 0:
         args['ratio'] = 1
@@ -38,4 +37,5 @@ def get_member(member):
     else:
         args['ratio'] = member.weight
 
+    args['remark'] = member.id
     return Member(**args)
