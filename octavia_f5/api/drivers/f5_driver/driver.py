@@ -16,9 +16,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia.api.drivers.amphora_driver import driver
-from octavia_f5.utils import driver_utils as utils
 from octavia_lib.api.drivers import exceptions
-from octavia.db import api as db_apis
 
 CONF = cfg.CONF
 CONF.import_group('oslo_messaging', 'octavia.common.config')
