@@ -1,4 +1,4 @@
-# Copyright 2018 SAP SE
+# Copyright 2018, 2020 SAP SE
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -12,19 +12,11 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import copy
-import itertools
-import operator
-
-from keystoneauth1 import loading as ks_loading
-from oslo_config import cfg
-
-import octavia.common.config
 import octavia_f5.common.config
-from octavia.common import constants
+
 
 def list_opts():
     return [
-        ('f5_provider', octavia_f5.common.config.f5_agent_opts),
+        ('f5_agent', octavia_f5.common.config.f5_agent_opts),
     ]
 
