@@ -53,31 +53,31 @@ class BigipAS3RestClient(object):
         self.session = self._create_session()
         self.esd = esd
 
-    _metric_request_post = prometheus.metrics.Counter(
-        'as3_request_post', 'The amount of POST requests sent by F5 provider driver')
-    _metric_request_post_time = prometheus.metrics.Summary(
-        'as3_request_post_time', 'Time it needs to send a POST request')
-    _metric_request_post_exceptions = prometheus.metrics.Counter(
-        'as3_request_post_exceptions', 'Number of exceptions at POST request')
-    _metric_request_patch = prometheus.metrics.Counter(
-        'as3_request_patch', 'The amount of PATCH requests sent by F5 provider driver')
-    _metric_request_patch_time = prometheus.metrics.Summary(
-        'as3_request_patch_time', 'Time it needs to send a PATCH request')
-    _metric_request_patch_exceptions = prometheus.metrics.Counter(
-        'as3_request_patch_exceptions', 'Number of exceptions at PATCH request')
-    _metric_request_delete = prometheus.metrics.Counter(
-        'as3_request_delete', 'The amount of DELETE requests sent by F5 provider driver')
-    _metric_request_delete_time = prometheus.metrics.Summary(
-        'as3_request_delete_time', 'Time it needs to send a DELETE request.')
-    _metric_request_delete_exceptions = prometheus.metrics.Counter(
-        'as3_request_delete_exceptions', 'Number of exceptions at DELETE request')
-    _metric_request_authorization = prometheus.metrics.Counter(
-        'as3_request_authorization',
+    _metric_post = prometheus.metrics.Counter(
+        'as3_post', 'The amount of POST requests sent by F5 provider driver')
+    _metric_post_time = prometheus.metrics.Summary(
+        'as3_post_time', 'Time it needs to send a POST request')
+    _metric_post_exceptions = prometheus.metrics.Counter(
+        'as3_post_exceptions', 'Number of exceptions at POST request')
+    _metric_patch = prometheus.metrics.Counter(
+        'as3_patch', 'The amount of PATCH requests sent by F5 provider driver')
+    _metric_patch_time = prometheus.metrics.Summary(
+        'as3_patch_time', 'Time it needs to send a PATCH request')
+    _metric_patch_exceptions = prometheus.metrics.Counter(
+        'as3_patch_exceptions', 'Number of exceptions at PATCH request')
+    _metric_delete = prometheus.metrics.Counter(
+        'as3_delete', 'The amount of DELETE requests sent by F5 provider driver')
+    _metric_delete_time = prometheus.metrics.Summary(
+        'as3_delete_time', 'Time it needs to send a DELETE request.')
+    _metric_delete_exceptions = prometheus.metrics.Counter(
+        'as3_delete_exceptions', 'Number of exceptions at DELETE request')
+    _metric_authorization = prometheus.metrics.Counter(
+        'as3_authorization',
         'How often the F5 provider driver had to (re)authorize before performing a request')
-    _metric_request_authorization_time = prometheus.metrics.Summary(
-        'as3_request_authorization_time', 'Time it needs to (re)authorize')
-    _metric_request_authorization_exceptions = prometheus.metrics.Counter(
-        'as3_request_authorization_exceptions', 'Number of exceptions at (re)authorization')
+    _metric_authorization_time = prometheus.metrics.Summary(
+        'as3_authorization_time', 'Time it needs to (re)authorize')
+    _metric_authorization_exceptions = prometheus.metrics.Counter(
+        'as3_authorization_exceptions', 'Number of exceptions at (re)authorization')
 
     def _url(self, path):
         return parse.urlunsplit(
@@ -99,10 +99,10 @@ class BigipAS3RestClient(object):
         session.verify = self.enable_verify
         return session
 
-    @_metric_request_authorization_exceptions.count_exceptions()
-    @_metric_request_authorization_time.time()
+    @_metric_authorization_exceptions.count_exceptions()
+    @_metric_authorization_time.time()
     def reauthorize(self):
-        self._metric_request_authorization.inc()
+        self._metric_authorization.inc()
         # Login
         credentials = {
             "username": self.bigip.username,
@@ -123,10 +123,10 @@ class BigipAS3RestClient(object):
         LOG.debug("Reauthorized!")
 
     @authorized
-    @_metric_request_post_exceptions.count_exceptions()
-    @_metric_request_post_time.time()
+    @_metric_post_exceptions.count_exceptions()
+    @_metric_post_time.time()
     def post(self, **kwargs):
-        self._metric_request_post.inc()
+        self._metric_post.inc()
         LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
         response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
         LOG.debug("POST finished with %d", response.status_code)
@@ -137,10 +137,10 @@ class BigipAS3RestClient(object):
         return response
 
     @authorized
-    @_metric_request_patch_exceptions.count_exceptions()
-    @_metric_request_patch_time.time()
+    @_metric_patch_exceptions.count_exceptions()
+    @_metric_patch_time.time()
     def patch(self, operation, path, **kwargs):
-        self._metric_request_patch.inc()
+        self._metric_patch.inc()
         LOG.debug("Calling PATCH %s with path %s", operation, path)
         if 'value' in kwargs:
             LOG.debug(json.dumps(kwargs['value'], indent=4, sort_keys=True))
@@ -154,10 +154,10 @@ class BigipAS3RestClient(object):
         return response
 
     @authorized
-    @_metric_request_delete_exceptions.count_exceptions()
-    @_metric_request_delete_time.time()
+    @_metric_delete_exceptions.count_exceptions()
+    @_metric_delete_time.time()
     def delete(self, **kwargs):
-        self._metric_request_delete.inc()
+        self._metric_delete.inc()
         tenants = kwargs.get('tenants', None)
         if not tenants:
             LOG.error("Delete called without tenant, would wipe all AS3 Declaration, ignoring!")
