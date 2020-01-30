@@ -71,6 +71,8 @@ f5_agent_opts = [
                       "this request deploys any changes."
                       "When empty (default) this request will not affect "
                       "config-sync at all.")),
+    cfg.BoolOpt('prometheus', default=True,
+                help=_("Enable prometheus metrics exporter")),
 
 ]
 

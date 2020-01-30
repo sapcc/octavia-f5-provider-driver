@@ -78,8 +78,9 @@ class ControllerWorker(object):
         t.daemon = True
         t.start()
 
-        LOG.debug('Starting Prometheus HTTP server on port {}'.format(PROMETHEUS_PORT))
-        prometheus.start_http_server(PROMETHEUS_PORT)
+        if cfg.CONF.f5_agent.prometheus:
+            LOG.debug('Starting Prometheus HTTP server on port {}'.format(PROMETHEUS_PORT))
+            prometheus.start_http_server(PROMETHEUS_PORT)
 
         super(ControllerWorker, self).__init__()
 
