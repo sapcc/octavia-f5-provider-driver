@@ -15,6 +15,7 @@
 import functools
 import json
 
+import prometheus_client as prometheus
 import requests
 from oslo_log import log as logging
 from requests.adapters import HTTPAdapter
@@ -52,6 +53,24 @@ class BigipAS3RestClient(object):
         self.session = self._create_session()
         self.esd = esd
 
+    _metric_request_post = prometheus.metrics.Counter(
+        'as3_request_post', 'The amount of POST requests sent by F5 provider driver')
+    _metric_request_post_exceptions = prometheus.metrics.Counter(
+        'as3_request_post_exceptions', 'Number of exceptions at POST request')
+    _metric_request_patch = prometheus.metrics.Counter(
+        'as3_request_patch', 'The amount of PATCH requests sent by F5 provider driver')
+    _metric_request_patch_exceptions = prometheus.metrics.Counter(
+        'as3_request_patch_exceptions', 'Number of exceptions at PATCH request')
+    _metric_request_delete = prometheus.metrics.Counter(
+        'as3_request_delete', 'The amount of DELETE requests sent by F5 provider driver')
+    _metric_request_delete_exceptions = prometheus.metrics.Counter(
+        'as3_request_delete_exceptions', 'Number of exceptions at DELETE request')
+    _metric_request_authorization = prometheus.metrics.Counter(
+        'as3_request_authorization',
+        'How often the F5 provider driver had to (re)authorize before performing a request')
+    _metric_request_authorization_exceptions = prometheus.metrics.Counter(
+        'as3_request_authorization_exceptions', 'Number of exceptions at (re)authorization')
+
     def _url(self, path):
         return parse.urlunsplit(
             parse.SplitResult(scheme=self.bigip.scheme,
@@ -72,7 +91,9 @@ class BigipAS3RestClient(object):
         session.verify = self.enable_verify
         return session
 
+    @_metric_request_authorization_exceptions.count_exceptions()
     def reauthorize(self):
+        self._metric_request_authorization.inc()
         # Login
         credentials = {
             "username": self.bigip.username,
@@ -93,7 +114,9 @@ class BigipAS3RestClient(object):
         LOG.debug("Reauthorized!")
 
     @authorized
+    @_metric_request_post_exceptions.count_exceptions()
     def post(self, **kwargs):
+        self._metric_request_post.inc()
         LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
         response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
         LOG.debug("POST finished with %d", response.status_code)
@@ -104,7 +127,9 @@ class BigipAS3RestClient(object):
         return response
 
     @authorized
+    @_metric_request_patch_exceptions.count_exceptions()
     def patch(self, operation, path, **kwargs):
+        self._metric_request_patch.inc()
         LOG.debug("Calling PATCH %s with path %s", operation, path)
         if 'value' in kwargs:
             LOG.debug(json.dumps(kwargs['value'], indent=4, sort_keys=True))
@@ -118,7 +143,9 @@ class BigipAS3RestClient(object):
         return response
 
     @authorized
+    @_metric_request_delete_exceptions.count_exceptions()
     def delete(self, **kwargs):
+        self._metric_request_delete.inc()
         tenants = kwargs.get('tenants', None)
         if not tenants:
             LOG.error("Delete called without tenant, would wipe all AS3 Declaration, ignoring!")
