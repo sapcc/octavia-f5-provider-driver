@@ -30,6 +30,8 @@ from octavia_f5.restclient.as3restclient import BigipAS3RestClient, authorized
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
+PROMETHEUS_PORT = 8000
+
 
 class StatusManager(BigipAS3RestClient):
     def __init__(self, exit_event):
@@ -44,6 +46,9 @@ class StatusManager(BigipAS3RestClient):
         self.amp_repo = repo.AmphoraRepository()
         self.amp_health_repo = repo.AmphoraHealthRepository()
         self.lb_repo = repo.LoadBalancerRepository()
+
+        LOG.info('Starting Prometheus HTTP server on port {}'.format(PROMETHEUS_PORT))
+        prometheus.start_http_server(PROMETHEUS_PORT)
 
     _metric_heartbeat = prometheus.metrics.Counter(
         'status_heartbeat', 'The amount of heartbeats sent')
