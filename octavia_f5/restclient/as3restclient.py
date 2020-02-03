@@ -54,26 +54,26 @@ class BigipAS3RestClient(object):
         self.esd = esd
 
     _metric_post = prometheus.metrics.Counter(
-        'as3_post', 'The amount of POST requests sent by F5 provider driver')
+        'as3_post', 'Amount of POST requests sent to AS3')
     _metric_post_time = prometheus.metrics.Summary(
-        'as3_post_time', 'Time it needs to send a POST request')
+        'as3_post_time', 'Time it needs to send a POST request to AS3')
     _metric_post_exceptions = prometheus.metrics.Counter(
-        'as3_post_exceptions', 'Number of exceptions at POST request')
+        'as3_post_exceptions', 'Number of exceptions at POST requests sent to AS3')
     _metric_patch = prometheus.metrics.Counter(
-        'as3_patch', 'The amount of PATCH requests sent by F5 provider driver')
+        'as3_patch', 'Amount of PATCH requests sent to AS3')
     _metric_patch_time = prometheus.metrics.Summary(
-        'as3_patch_time', 'Time it needs to send a PATCH request')
+        'as3_patch_time', 'Time it needs to send a PATCH request to AS3')
     _metric_patch_exceptions = prometheus.metrics.Counter(
-        'as3_patch_exceptions', 'Number of exceptions at PATCH request')
+        'as3_patch_exceptions', 'Number of exceptions at PATCH request sent to AS3')
     _metric_delete = prometheus.metrics.Counter(
-        'as3_delete', 'The amount of DELETE requests sent by F5 provider driver')
+        'as3_delete', 'Amount of DELETE requests  sent to AS3')
     _metric_delete_time = prometheus.metrics.Summary(
-        'as3_delete_time', 'Time it needs to send a DELETE request.')
+        'as3_delete_time', 'Time it needs to send a DELETE request to AS3')
     _metric_delete_exceptions = prometheus.metrics.Counter(
-        'as3_delete_exceptions', 'Number of exceptions at DELETE request')
+        'as3_delete_exceptions', 'Number of exceptions at DELETE request sent to AS3')
     _metric_authorization = prometheus.metrics.Counter(
         'as3_authorization',
-        'How often the F5 provider driver had to (re)authorize before performing a request')
+        'How often the F5 provider driver had to (re)authorize before performing an AS3 request')
     _metric_authorization_time = prometheus.metrics.Summary(
         'as3_authorization_time', 'Time it needs to (re)authorize')
     _metric_authorization_exceptions = prometheus.metrics.Counter(
