@@ -36,23 +36,23 @@ def _mutate_config(*args, **kwargs):
     CONF.mutate_config_files()
 
 
-def hm_status(exit_event):
-    hm = status_manager.StatusManager(exit_event)
+def sm_status_check(exit_event):
+    sm = status_manager.StatusManager(exit_event)
     signal.signal(signal.SIGHUP, _mutate_config)
 
     @periodics.periodic(CONF.health_manager.health_check_interval,
                         run_immediately=True)
     def periodic_status():
-        hm.heartbeat()
+        sm.heartbeat()
 
     status = periodics.PeriodicWorker(
         [(periodic_status, None, None)],
         schedule_strategy='aligned_last_finished')
 
-    def hm_exit(*args, **kwargs):
+    def sm_exit(*args, **kwargs):
         status.stop()
 
-    signal.signal(signal.SIGINT, hm_exit)
+    signal.signal(signal.SIGINT, sm_exit)
     status.start()
 
 
@@ -78,9 +78,9 @@ def main():
     processes = []
     exit_event = multiprocessing.Event()
 
-    hm_status_proc = multiprocessing.Process(name='HM_status',
-                                                   target=hm_status,
-                                                   args=(exit_event,))
+    hm_status_proc = multiprocessing.Process(name='SM_status_check',
+                                             target=sm_status_check,
+                                             args=(exit_event,))
     processes.append(hm_status_proc)
 
     LOG.info("Status Manager process starts:")
