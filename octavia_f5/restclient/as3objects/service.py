@@ -17,12 +17,13 @@ from oslo_log import log as logging
 
 from octavia.common import exceptions
 from octavia_f5.common import constants as const
-from octavia_f5.restclient.as3classes import Service, BigIP, Service_Generic_profileTCP, Pointer
+from octavia_f5.restclient import as3classes as as3
 from octavia_f5.restclient.as3objects import certificate as m_cert
 from octavia_f5.restclient.as3objects import irule as m_irule
 from octavia_f5.restclient.as3objects import persist as m_persist
 from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
+from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import tls as m_tls
 from octavia_lib.common import constants as lib_consts
 
@@ -53,7 +54,7 @@ def process_esd(servicetype, esd):
     irules = esd.get('lbaas_irule', None)
     if irules:
         service_args['iRules'] = [
-            BigIP('/Common/' + rule) for
+            as3.BigIP('/Common/' + rule) for
             rule in irules
         ]
 
@@ -64,12 +65,12 @@ def process_esd(servicetype, esd):
         stcp = esd.get('lbaas_stcp', None)
         if stcp and ctcp:
             # Server and Clientside profile defined
-            service_args['profileTCP'] = Service_Generic_profileTCP(
-                ingress=BigIP('/Common/' + ctcp),
-                egress=BigIP('/Common/' + stcp)
+            service_args['profileTCP'] = as3.Service_Generic_profileTCP(
+                ingress=as3.BigIP('/Common/' + ctcp),
+                egress=as3.BigIP('/Common/' + stcp)
             )
         elif ctcp:
-            service_args['profileTCP'] = BigIP('/Common/' + ctcp)
+            service_args['profileTCP'] = as3.BigIP('/Common/' + ctcp)
         else:
             service_args['profileTCP'] = 'normal'
 
@@ -77,13 +78,13 @@ def process_esd(servicetype, esd):
         # OneConnect (Multiplex) Profile
         oneconnect = esd.get('lbaas_one_connect', None)
         if oneconnect:
-            service_args['profileMultiplex'] = BigIP(
+            service_args['profileMultiplex'] = as3.BigIP(
                 '/Common/' + oneconnect)
 
         # HTTP Compression Profile
         compression = esd.get('lbaas_http_compression', None)
         if compression:
-            service_args['profileHTTPCompression'] = BigIP(
+            service_args['profileHTTPCompression'] = as3.BigIP(
                 '/Common/' + compression)
 
     return service_args
@@ -151,9 +152,9 @@ def get_service(listener, cert_manager):
         entities.extend([(cert['id'], cert['as3']) for cert in certificates])
 
     if CONF.f5_agent.profile_l4:
-        service_args['profileL4'] = BigIP(CONF.f5_agent.profile_l4)
+        service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)
     if CONF.f5_agent.profile_multiplex:
-        service_args['profileMultiplex'] = BigIP(CONF.f5_agent.profile_multiplex)
+        service_args['profileMultiplex'] = as3.BigIP(CONF.f5_agent.profile_multiplex)
 
     if listener.connection_limit > 0:
         service_args['maxConnections'] = listener.connection_limit
@@ -170,6 +171,14 @@ def get_service(listener, cert_manager):
                 name, irule = m_irule.get_proxy_irule()
                 service_args['iRules'].append(name)
                 entities.append((name, irule))
+
+            # Support of backup members (realized as fallback host via http_profile), pick the first one
+            backup_members = [member for member  in pool.members if member.backup]
+            if backup_members:
+                http_profile_name = m_member.get_name(backup_members[0].id)
+                http_profile = as3.HTTP_Profile(fallbackRedirect=backup_members[0].ip_address)
+                service_args['profileHTTP'] = as3.Pointer(http_profile_name)
+                entities.append((http_profile_name, http_profile))
 
         # Pool member certificate handling (TLS backends)
         if pool.tls_enabled:
@@ -215,7 +224,7 @@ def get_service(listener, cert_manager):
 
         if persistence.type == 'APP_COOKIE':
             name, obj_persist = m_persist.get_app_cookie(persistence.cookie_name)
-            service_args['persistenceMethods'] = [Pointer(name)]
+            service_args['persistenceMethods'] = [as3.Pointer(name)]
             entities.append((name, obj_persist))
             if lb_algorithm == 'SOURCE_IP':
                 service_args['fallbackPersistenceMethod'] = 'source-address'
@@ -228,7 +237,7 @@ def get_service(listener, cert_manager):
                     persistence.persistence_timeout,
                     persistence.persistence_granularity
                 )
-                service_args['persistenceMethods'] = [Pointer(name)]
+                service_args['persistenceMethods'] = [as3.Pointer(name)]
                 entities.append((name, obj_persist))
 
         elif persistence.type == 'HTTP_COOKIE':
@@ -242,6 +251,6 @@ def get_service(listener, cert_manager):
             if l7policy.provisioning_status != lib_consts.PENDING_DELETE
         ]
 
-    service = Service(**service_args)
+    service = as3.Service(**service_args)
     entities.append((get_name(listener.id), service))
     return entities

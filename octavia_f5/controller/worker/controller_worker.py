@@ -289,7 +289,7 @@ class ControllerWorker(object):
 
         self.ensure_amphora_exists(member.pool.load_balancer.id)
 
-        if member_create(self.bigip, member).ok:
+        if not member.backup and member_create(self.bigip, member).ok:
             self.status.set_active(member)
         elif self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_active(member)

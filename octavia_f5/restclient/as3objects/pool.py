@@ -52,7 +52,8 @@ def get_pool(pool):
     }
 
     for member in pool.members:
-        if not utils.pending_delete(member):
+        # Ignore backup members, will be handled by service
+        if not utils.pending_delete(member) and not member.backup:
             service_args['members'].append(
                 m_member.get_member(member))
 
