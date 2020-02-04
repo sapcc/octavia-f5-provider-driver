@@ -15,13 +15,14 @@
 
 import time
 
+import futurist
 import prometheus_client as prometheus
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
 from oslo_utils import excutils
+from stevedore import driver as stevedore_driver
 
-from octavia.amphorae.backends.health_daemon import health_sender
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
@@ -33,19 +34,39 @@ LOG = logging.getLogger(__name__)
 PROMETHEUS_PORT = 8000
 
 
+def update_health(obj):
+    handler = stevedore_driver.DriverManager(
+        namespace='octavia.amphora.health_update_drivers',
+        name=CONF.health_manager.health_update_driver,
+        invoke_on_load=True
+    ).driver
+    handler.update_health(obj, '127.0.0.1')
+
+
+def update_stats(obj):
+    handler = stevedore_driver.DriverManager(
+        namespace='octavia.amphora.stats_update_drivers',
+        name=CONF.health_manager.stats_update_driver,
+        invoke_on_load=True
+    ).driver
+    handler.update_stats(obj, '127.0.0.1')
+
+
 class StatusManager(BigipAS3RestClient):
-    def __init__(self, exit_event):
+    def __init__(self):
         super(StatusManager, self).__init__(bigip_url=CONF.f5_agent.bigip_url,
                                             enable_verify=CONF.f5_agent.bigip_verify,
                                             enable_token=CONF.f5_agent.bigip_token)
         self.amphora_id = None
         self.seq = 0
-        self.dead = exit_event
         LOG.info('Health Manager Sender starting.')
-        self.sender = health_sender.UDPStatusSender()
         self.amp_repo = repo.AmphoraRepository()
         self.amp_health_repo = repo.AmphoraHealthRepository()
         self.lb_repo = repo.LoadBalancerRepository()
+        self.health_executor = futurist.ThreadPoolExecutor(
+            max_workers=CONF.health_manager.health_update_threads)
+        self.stats_executor = futurist.ThreadPoolExecutor(
+            max_workers=CONF.health_manager.stats_update_threads)
 
         LOG.info('Starting Prometheus HTTP server on port {}'.format(PROMETHEUS_PORT))
         prometheus.start_http_server(PROMETHEUS_PORT)
@@ -174,7 +195,8 @@ class StatusManager(BigipAS3RestClient):
 
         for msg in amphora_messages.values():
             msg['recv_time'] = time.time()
-            self.sender.dosend(msg)
+            self.health_executor.submit(update_health, msg)
+            self.stats_executor.submit(update_stats, msg)
 
     def update_listener_count(self, num_listeners):
         """ updates listener count of bigip device (vrrp_priority column in amphora table)
