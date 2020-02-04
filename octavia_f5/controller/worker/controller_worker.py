@@ -15,6 +15,7 @@
 
 import threading
 
+import prometheus_client as prometheus
 import tenacity
 from futurist import periodics
 from oslo_concurrency import lockutils
@@ -41,6 +42,8 @@ RETRY_ATTEMPTS = 15
 RETRY_INITIAL_DELAY = 1
 RETRY_BACKOFF = 1
 RETRY_MAX = 5
+
+PROMETHEUS_PORT = 8000
 
 
 class ControllerWorker(object):
@@ -74,6 +77,10 @@ class ControllerWorker(object):
         t = threading.Thread(target=worker.start)
         t.daemon = True
         t.start()
+
+        if cfg.CONF.f5_agent.prometheus:
+            LOG.info('Starting Prometheus HTTP server on port {}'.format(PROMETHEUS_PORT))
+            prometheus.start_http_server(PROMETHEUS_PORT)
 
         super(ControllerWorker, self).__init__()
 

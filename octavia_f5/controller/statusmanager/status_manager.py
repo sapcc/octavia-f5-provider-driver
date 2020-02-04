@@ -15,6 +15,7 @@
 
 import time
 
+import prometheus_client as prometheus
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
@@ -28,6 +29,8 @@ from octavia_f5.restclient.as3restclient import BigipAS3RestClient, authorized
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
+
+PROMETHEUS_PORT = 8000
 
 
 class StatusManager(BigipAS3RestClient):
@@ -43,6 +46,16 @@ class StatusManager(BigipAS3RestClient):
         self.amp_repo = repo.AmphoraRepository()
         self.amp_health_repo = repo.AmphoraHealthRepository()
         self.lb_repo = repo.LoadBalancerRepository()
+
+        LOG.info('Starting Prometheus HTTP server on port {}'.format(PROMETHEUS_PORT))
+        prometheus.start_http_server(PROMETHEUS_PORT)
+
+    _metric_heartbeat = prometheus.metrics.Counter(
+        'status_heartbeat', 'The amount of heartbeats sent')
+    _metric_heartbeat_time = prometheus.metrics.Summary(
+        'status_heartbeat_time', 'Time it needs for one heartbeat')
+    _metric_heartbeat_exceptions = prometheus.metrics.Counter(
+        'status_heartbeat_exceptions', 'Number of exceptions at heartbeat')
 
     @authorized
     def get(self, **kwargs):
@@ -74,13 +87,17 @@ class StatusManager(BigipAS3RestClient):
             'name': pool
         }
 
+    @_metric_heartbeat_exceptions.count_exceptions()
+    @_metric_heartbeat_time.time()
     def heartbeat(self):
-        """Sents heartbeat and status information to running octavia healthmanager via UDP. The format can be seen in
+        """Sends heartbeat and status information to running octavia healthmanager via UDP. The format can be seen in
         octavia.amphorae.drivers.health.heartbeat_udp.UDPStatusGetter.dorecv.
-        Scraps Virtual, Pool and Pool Member statistics and status\.
+        Scrapes Virtual, Pool and Pool Member statistics and status\.
         Also updates listener_count for amphora database via update_listener_count() function. This is needed for
         scheduling decisions.
         """
+        self._metric_heartbeat.inc()
+
         amphora_messages = {}
 
         def _get_lb_msg(lb_id):

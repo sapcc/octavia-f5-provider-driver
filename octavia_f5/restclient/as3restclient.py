@@ -15,6 +15,7 @@
 import functools
 import json
 
+import prometheus_client as prometheus
 import requests
 from oslo_log import log as logging
 from requests.adapters import HTTPAdapter
@@ -52,6 +53,34 @@ class BigipAS3RestClient(object):
         self.session = self._create_session()
         self.esd = esd
 
+    _metric_httpstatus = prometheus.metrics.Counter(
+        'as3_httpstatus', 'Number of HTTP statuses in responses to AS3 requests', ['method', 'statuscode'])
+    _metric_post = prometheus.metrics.Counter(
+        'as3_post', 'Amount of POST requests sent to AS3')
+    _metric_post_duration = prometheus.metrics.Summary(
+        'as3_post_duration', 'Time it needs to send a POST request to AS3')
+    _metric_post_exceptions = prometheus.metrics.Counter(
+        'as3_post_exceptions', 'Number of exceptions at POST requests sent to AS3')
+    _metric_patch = prometheus.metrics.Counter(
+        'as3_patch', 'Amount of PATCH requests sent to AS3')
+    _metric_patch_duration = prometheus.metrics.Summary(
+        'as3_patch_duration', 'Time it needs to send a PATCH request to AS3')
+    _metric_patch_exceptions = prometheus.metrics.Counter(
+        'as3_patch_exceptions', 'Number of exceptions at PATCH request sent to AS3')
+    _metric_delete = prometheus.metrics.Counter(
+        'as3_delete', 'Amount of DELETE requests  sent to AS3')
+    _metric_delete_duration = prometheus.metrics.Summary(
+        'as3_delete_duration', 'Time it needs to send a DELETE request to AS3')
+    _metric_delete_exceptions = prometheus.metrics.Counter(
+        'as3_delete_exceptions', 'Number of exceptions at DELETE request sent to AS3')
+    _metric_authorization = prometheus.metrics.Counter(
+        'as3_authorization',
+        'How often the F5 provider driver had to (re)authorize before performing an AS3 request')
+    _metric_authorization_duration = prometheus.metrics.Summary(
+        'as3_authorization_duration', 'Time it needs to (re)authorize')
+    _metric_authorization_exceptions = prometheus.metrics.Counter(
+        'as3_authorization_exceptions', 'Number of exceptions at (re)authorization')
+
     def _url(self, path):
         return parse.urlunsplit(
             parse.SplitResult(scheme=self.bigip.scheme,
@@ -72,7 +101,10 @@ class BigipAS3RestClient(object):
         session.verify = self.enable_verify
         return session
 
+    @_metric_authorization_exceptions.count_exceptions()
+    @_metric_authorization_duration.time()
     def reauthorize(self):
+        self._metric_authorization.inc()
         # Login
         credentials = {
             "username": self.bigip.username,
@@ -82,6 +114,7 @@ class BigipAS3RestClient(object):
         basicauth = HTTPBasicAuth(self.bigip.username, self.bigip.password)
         r = self.session.post(self._url(AS3_LOGIN_PATH),
                               json=credentials, auth=basicauth)
+        self._metric_httpstatus.labels(method='post', statuscode=r.status_code).inc()
         self.token = r.json()['token']['token']
 
         self.session.headers.update({'X-F5-Auth-Token': self.token})
@@ -90,12 +123,17 @@ class BigipAS3RestClient(object):
             "timeout": "36000"
         }
         r = self.session.patch(self._url(AS3_TOKENS_PATH.format(self.token)), json=patch_timeout)
+        self._metric_httpstatus.labels(method='patch', statuscode=r.status_code).inc()
         LOG.debug("Reauthorized!")
 
+    @_metric_post_exceptions.count_exceptions()
     @authorized
+    @_metric_post_duration.time()
     def post(self, **kwargs):
+        self._metric_post.inc()
         LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
         response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
+        self._metric_httpstatus.labels(method='post', statuscode=response.status_code).inc()
         LOG.debug("POST finished with %d", response.status_code)
         if response.headers.get('Content-Type') == 'application/json':
             LOG.debug(json.dumps(json.loads(response.text)['results'], indent=4, sort_keys=True))
@@ -103,22 +141,29 @@ class BigipAS3RestClient(object):
             LOG.debug(response.text)
         return response
 
+    @_metric_patch_exceptions.count_exceptions()
     @authorized
+    @_metric_patch_duration.time()
     def patch(self, operation, path, **kwargs):
+        self._metric_patch.inc()
         LOG.debug("Calling PATCH %s with path %s", operation, path)
         if 'value' in kwargs:
             LOG.debug(json.dumps(kwargs['value'], indent=4, sort_keys=True))
         params = kwargs.copy()
         params.update({'op': operation, 'path': path})
         response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
+        self._metric_httpstatus.labels(method='patch', httpstatus=response.status_code).inc()
         if response.headers.get('Content-Type') == 'application/json':
             LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
         else:
             LOG.debug(response.text)
         return response
 
+    @_metric_delete_exceptions.count_exceptions()
     @authorized
+    @_metric_delete_duration.time()
     def delete(self, **kwargs):
+        self._metric_delete.inc()
         tenants = kwargs.get('tenants', None)
         if not tenants:
             LOG.error("Delete called without tenant, would wipe all AS3 Declaration, ignoring!")
@@ -126,6 +171,7 @@ class BigipAS3RestClient(object):
 
         LOG.debug("Calling DELETE for tenants %s", tenants)
         response = self.session.delete(self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants))))
+        self._metric_httpstatus.labels(method='delete', httpstatus=response.status_code).inc()
         LOG.debug("DELETE finished with %d", response.status_code)
         if response.headers.get('Content-Type') == 'application/json':
             LOG.debug(json.dumps(json.loads(response.text)['results'], indent=4, sort_keys=True))
