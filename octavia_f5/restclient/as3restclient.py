@@ -55,27 +55,27 @@ class BigipAS3RestClient(object):
 
     _metric_post = prometheus.metrics.Counter(
         'as3_post', 'Amount of POST requests sent to AS3')
-    _metric_post_time = prometheus.metrics.Summary(
-        'as3_post_time', 'Time it needs to send a POST request to AS3')
+    _metric_post_duration = prometheus.metrics.Summary(
+        'as3_post_duration', 'Time it needs to send a POST request to AS3')
     _metric_post_exceptions = prometheus.metrics.Counter(
         'as3_post_exceptions', 'Number of exceptions at POST requests sent to AS3')
     _metric_patch = prometheus.metrics.Counter(
         'as3_patch', 'Amount of PATCH requests sent to AS3')
-    _metric_patch_time = prometheus.metrics.Summary(
-        'as3_patch_time', 'Time it needs to send a PATCH request to AS3')
+    _metric_patch_duration = prometheus.metrics.Summary(
+        'as3_patch_duration', 'Time it needs to send a PATCH request to AS3')
     _metric_patch_exceptions = prometheus.metrics.Counter(
         'as3_patch_exceptions', 'Number of exceptions at PATCH request sent to AS3')
     _metric_delete = prometheus.metrics.Counter(
         'as3_delete', 'Amount of DELETE requests  sent to AS3')
-    _metric_delete_time = prometheus.metrics.Summary(
-        'as3_delete_time', 'Time it needs to send a DELETE request to AS3')
+    _metric_delete_duration = prometheus.metrics.Summary(
+        'as3_delete_duration', 'Time it needs to send a DELETE request to AS3')
     _metric_delete_exceptions = prometheus.metrics.Counter(
         'as3_delete_exceptions', 'Number of exceptions at DELETE request sent to AS3')
     _metric_authorization = prometheus.metrics.Counter(
         'as3_authorization',
         'How often the F5 provider driver had to (re)authorize before performing an AS3 request')
-    _metric_authorization_time = prometheus.metrics.Summary(
-        'as3_authorization_time', 'Time it needs to (re)authorize')
+    _metric_authorization_duration = prometheus.metrics.Summary(
+        'as3_authorization_duration', 'Time it needs to (re)authorize')
     _metric_authorization_exceptions = prometheus.metrics.Counter(
         'as3_authorization_exceptions', 'Number of exceptions at (re)authorization')
 
@@ -100,7 +100,7 @@ class BigipAS3RestClient(object):
         return session
 
     @_metric_authorization_exceptions.count_exceptions()
-    @_metric_authorization_time.time()
+    @_metric_authorization_duration.time()
     def reauthorize(self):
         self._metric_authorization.inc()
         # Login
@@ -124,7 +124,7 @@ class BigipAS3RestClient(object):
 
     @authorized
     @_metric_post_exceptions.count_exceptions()
-    @_metric_post_time.time()
+    @_metric_post_duration.time()
     def post(self, **kwargs):
         self._metric_post.inc()
         LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
@@ -138,7 +138,7 @@ class BigipAS3RestClient(object):
 
     @authorized
     @_metric_patch_exceptions.count_exceptions()
-    @_metric_patch_time.time()
+    @_metric_patch_duration.time()
     def patch(self, operation, path, **kwargs):
         self._metric_patch.inc()
         LOG.debug("Calling PATCH %s with path %s", operation, path)
@@ -155,7 +155,7 @@ class BigipAS3RestClient(object):
 
     @authorized
     @_metric_delete_exceptions.count_exceptions()
-    @_metric_delete_time.time()
+    @_metric_delete_duration.time()
     def delete(self, **kwargs):
         self._metric_delete.inc()
         tenants = kwargs.get('tenants', None)
