@@ -269,3 +269,9 @@ class CA_Bundle(BaseDescription):
         super(CA_Bundle, self).__init__(locals())
         setattr(self, 'class', 'CA_Bundle')
         self.require('bundle')
+
+
+class HTTP_Profile(BaseDescription):
+    def __init__(self, **kwargs):
+        super(HTTP_Profile, self).__init__(locals())
+        setattr(self, 'class', 'HTTP_Profile')
