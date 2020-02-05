@@ -12,11 +12,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import multiprocessing
 import os
 import signal
 import sys
-from functools import partial
+import threading
 
 from futurist import periodics
 from oslo_config import cfg
@@ -34,26 +33,6 @@ LOG = logging.getLogger(__name__)
 
 def _mutate_config(*args, **kwargs):
     CONF.mutate_config_files()
-
-
-def sm_status_check(exit_event):
-    sm = status_manager.StatusManager(exit_event)
-    signal.signal(signal.SIGHUP, _mutate_config)
-
-    @periodics.periodic(CONF.health_manager.health_check_interval,
-                        run_immediately=True)
-    def periodic_status():
-        sm.heartbeat()
-
-    status = periodics.PeriodicWorker(
-        [(periodic_status, None, None)],
-        schedule_strategy='aligned_last_finished')
-
-    def sm_exit(*args, **kwargs):
-        status.stop()
-
-    signal.signal(signal.SIGINT, sm_exit)
-    status.start()
 
 
 def _handle_mutate_config(listener_proc_pid, check_proc_pid, *args, **kwargs):
@@ -74,33 +53,33 @@ def _prepare_service(argv=None):
 def main():
     _prepare_service(sys.argv)
     gmr.TextGuruMeditation.setup_autorun(version)
+    sm = status_manager.StatusManager()
+    signal.signal(signal.SIGHUP, _mutate_config)
 
-    processes = []
-    exit_event = multiprocessing.Event()
+    @periodics.periodic(CONF.health_manager.health_check_interval,
+                        run_immediately=True)
+    def periodic_status():
+        sm.heartbeat()
 
-    hm_status_proc = multiprocessing.Process(name='SM_status_check',
-                                             target=sm_status_check,
-                                             args=(exit_event,))
-    processes.append(hm_status_proc)
+    status_check = periodics.PeriodicWorker(
+        [(periodic_status, None, None)],
+        schedule_strategy='aligned_last_finished')
 
-    LOG.info("Status Manager process starts:")
-    hm_status_proc.start()
+    hm_status_thread = threading.Thread(target=status_check.start)
+    hm_status_thread.daemon = True
+    LOG.info("Status Manager process starts")
+    hm_status_thread.start()
 
-    def process_cleanup(*args, **kwargs):
-        LOG.info("Status Manager exiting due to signal")
-        exit_event.set()
-        os.kill(hm_status_proc.pid, signal.SIGINT)
-        hm_status_proc.join()
+    def hm_exit(*args, **kwargs):
+        status_check.stop()
+        status_check.wait()
+        sm.stats_executor.shutdown()
+        sm.health_executor.shutdown()
+        LOG.info("Status Manager executors terminated")
+    signal.signal(signal.SIGINT, hm_exit)
 
-    signal.signal(signal.SIGTERM, process_cleanup)
-    signal.signal(signal.SIGHUP, partial(
-        _handle_mutate_config, hm_status_proc.pid))
-
-    try:
-        for process in processes:
-            process.join()
-    except KeyboardInterrupt:
-        process_cleanup()
+    hm_status_thread.join()
+    LOG.info("Status Manager terminated")
 
 
 if __name__ == "__main__":
