@@ -73,6 +73,8 @@ f5_agent_opts = [
                       "config-sync at all.")),
     cfg.BoolOpt('prometheus', default=True,
                 help=_("Enable prometheus metrics exporter")),
+    cfg.PortOpt('prometheus_port', default=8000,
+                help=_('Port for prometheus to expose, defaults to 8000.')),
 
 ]
 

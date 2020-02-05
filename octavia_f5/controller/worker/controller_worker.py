@@ -43,8 +43,6 @@ RETRY_INITIAL_DELAY = 1
 RETRY_BACKOFF = 1
 RETRY_MAX = 5
 
-PROMETHEUS_PORT = 8000
-
 
 class ControllerWorker(object):
     """Worker class to update load balancers."""
@@ -79,8 +77,9 @@ class ControllerWorker(object):
         t.start()
 
         if cfg.CONF.f5_agent.prometheus:
-            LOG.info('Starting Prometheus HTTP server on port {}'.format(PROMETHEUS_PORT))
-            prometheus.start_http_server(PROMETHEUS_PORT)
+            prometheus_port = CONF.f5_agent.prometheus_port
+            LOG.info('Starting Prometheus HTTP server on port {}'.format(prometheus_port))
+            prometheus.start_http_server(prometheus_port)
 
         super(ControllerWorker, self).__init__()
 
