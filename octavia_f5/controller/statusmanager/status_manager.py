@@ -72,11 +72,11 @@ class StatusManager(BigipAS3RestClient):
             prometheus.start_http_server(prometheus_port)
 
     _metric_heartbeat = prometheus.metrics.Counter(
-        'status_heartbeat', 'The amount of heartbeats sent')
+        'octavia_status_heartbeat', 'The amount of heartbeats sent')
     _metric_heartbeat_duration = prometheus.metrics.Summary(
-        'status_heartbeat_duration', 'Time it needs for one heartbeat')
+        'octavia_status_heartbeat_duration', 'Time it needs for one heartbeat')
     _metric_heartbeat_exceptions = prometheus.metrics.Counter(
-        'status_heartbeat_exceptions', 'Number of exceptions at heartbeat')
+        'octavia_status_heartbeat_exceptions', 'Number of exceptions at heartbeat')
 
     @authorized
     def get(self, **kwargs):

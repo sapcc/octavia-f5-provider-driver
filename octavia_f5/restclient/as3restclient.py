@@ -54,32 +54,32 @@ class BigipAS3RestClient(object):
         self.esd = esd
 
     _metric_httpstatus = prometheus.metrics.Counter(
-        'as3_httpstatus', 'Number of HTTP statuses in responses to AS3 requests', ['method', 'statuscode'])
+        'octavia_as3_httpstatus', 'Number of HTTP statuses in responses to AS3 requests', ['method', 'statuscode'])
     _metric_post = prometheus.metrics.Counter(
-        'as3_post', 'Amount of POST requests sent to AS3')
+        'octavia_as3_post', 'Amount of POST requests sent to AS3')
     _metric_post_duration = prometheus.metrics.Summary(
-        'as3_post_duration', 'Time it needs to send a POST request to AS3')
+        'octavia_as3_post_duration', 'Time it needs to send a POST request to AS3')
     _metric_post_exceptions = prometheus.metrics.Counter(
-        'as3_post_exceptions', 'Number of exceptions at POST requests sent to AS3')
+        'octavia_as3_post_exceptions', 'Number of exceptions at POST requests sent to AS3')
     _metric_patch = prometheus.metrics.Counter(
-        'as3_patch', 'Amount of PATCH requests sent to AS3')
+        'octavia_as3_patch', 'Amount of PATCH requests sent to AS3')
     _metric_patch_duration = prometheus.metrics.Summary(
-        'as3_patch_duration', 'Time it needs to send a PATCH request to AS3')
+        'octavia_as3_patch_duration', 'Time it needs to send a PATCH request to AS3')
     _metric_patch_exceptions = prometheus.metrics.Counter(
-        'as3_patch_exceptions', 'Number of exceptions at PATCH request sent to AS3')
+        'octavia_as3_patch_exceptions', 'Number of exceptions at PATCH request sent to AS3')
     _metric_delete = prometheus.metrics.Counter(
-        'as3_delete', 'Amount of DELETE requests  sent to AS3')
+        'octavia_as3_delete', 'Amount of DELETE requests  sent to AS3')
     _metric_delete_duration = prometheus.metrics.Summary(
-        'as3_delete_duration', 'Time it needs to send a DELETE request to AS3')
+        'octavia_as3_delete_duration', 'Time it needs to send a DELETE request to AS3')
     _metric_delete_exceptions = prometheus.metrics.Counter(
-        'as3_delete_exceptions', 'Number of exceptions at DELETE request sent to AS3')
+        'octavia_as3_delete_exceptions', 'Number of exceptions at DELETE request sent to AS3')
     _metric_authorization = prometheus.metrics.Counter(
-        'as3_authorization',
+        'octavia_as3_authorization',
         'How often the F5 provider driver had to (re)authorize before performing an AS3 request')
     _metric_authorization_duration = prometheus.metrics.Summary(
-        'as3_authorization_duration', 'Time it needs to (re)authorize')
+        'octavia_as3_authorization_duration', 'Time it needs to (re)authorize')
     _metric_authorization_exceptions = prometheus.metrics.Counter(
-        'as3_authorization_exceptions', 'Number of exceptions at (re)authorization')
+        'octavia_as3_authorization_exceptions', 'Number of exceptions at (re)authorization')
 
     def _url(self, path):
         return parse.urlunsplit(
