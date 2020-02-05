@@ -52,8 +52,8 @@ class StatusManager(BigipAS3RestClient):
 
     _metric_heartbeat = prometheus.metrics.Counter(
         'status_heartbeat', 'The amount of heartbeats sent')
-    _metric_heartbeat_time = prometheus.metrics.Summary(
-        'status_heartbeat_time', 'Time it needs for one heartbeat')
+    _metric_heartbeat_duration = prometheus.metrics.Summary(
+        'status_heartbeat_duration', 'Time it needs for one heartbeat')
     _metric_heartbeat_exceptions = prometheus.metrics.Counter(
         'status_heartbeat_exceptions', 'Number of exceptions at heartbeat')
 
@@ -88,7 +88,7 @@ class StatusManager(BigipAS3RestClient):
         }
 
     @_metric_heartbeat_exceptions.count_exceptions()
-    @_metric_heartbeat_time.time()
+    @_metric_heartbeat_duration.time()
     def heartbeat(self):
         """Sends heartbeat and status information to running octavia healthmanager via UDP. The format can be seen in
         octavia.amphorae.drivers.health.heartbeat_udp.UDPStatusGetter.dorecv.
