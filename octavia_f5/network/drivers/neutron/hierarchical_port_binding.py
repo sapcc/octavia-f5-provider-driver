@@ -63,7 +63,7 @@ class HierachicalPortBindingDriver(allowed_address_pairs.AllowedAddressPairsDriv
                          'device_id': 'lb-{0}'.format(load_balancer.id),
                          'device_owner': constants.DEVICE_OWNER_LISTENER,
                          # TODO: needs to be auto-scheduled by agent
-                         'binding:host_id': 'neutron-f5-f512-01',
+                         'binding:host_id': 'f512-01',
                          project_id_key: load_balancer.project_id}}
 
         if fixed_ip:
