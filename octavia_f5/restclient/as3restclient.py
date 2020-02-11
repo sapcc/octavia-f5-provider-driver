@@ -115,6 +115,7 @@ class BigipAS3RestClient(object):
         r = self.session.post(self._url(AS3_LOGIN_PATH),
                               json=credentials, auth=basicauth)
         self._metric_httpstatus.labels(method='post', statuscode=r.status_code).inc()
+        r.raise_for_status()
         self.token = r.json()['token']['token']
 
         self.session.headers.update({'X-F5-Auth-Token': self.token})
