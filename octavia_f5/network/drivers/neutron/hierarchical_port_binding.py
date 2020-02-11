@@ -38,10 +38,10 @@ class HierachicalPortBindingDriver(allowed_address_pairs.AllowedAddressPairsDriv
                           group='networking')
 
     def allocate_vip(self, load_balancer):
-        if load_balancer.vip.port_id:
-            LOG.info('Port %s already exists. Nothing to be done.',
-                     load_balancer.vip.port_id)
-            port = self.get_port(load_balancer.vip.port_id)
+        port_id = load_balancer.vip.port_id
+        if port_id:
+            LOG.info('Port %s already exists. Nothing to be done.', port_id)
+            port = self.get_port(port_id)
             return self._port_to_vip(port, load_balancer)
 
         fixed_ip = {}
@@ -57,7 +57,7 @@ class HierachicalPortBindingDriver(allowed_address_pairs.AllowedAddressPairsDriv
             project_id_key = 'tenant_id'
 
         # It can be assumed that network_id exists
-        port = {'port': {'name': 'octavia-lb-' + load_balancer.id,
+        port = {'port': {'name': 'octavia-lb-{}'.format(load_balancer.id),
                          'network_id': load_balancer.vip.network_id,
                          'admin_state_up': False,
                          'device_id': 'lb-{0}'.format(load_balancer.id),
