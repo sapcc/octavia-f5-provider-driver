@@ -68,7 +68,6 @@ def main():
         try:
             db_cleanup.cleanup_load_balancers()
         except Exception as e:
-            # TODO: So far we only log exceptions. But should we also handle them in a certain way?
+            LOG.error('Housekeeping caught the following exception: {}'.format(e))
             _metric_housekeeping_exceptions.inc()
-            LOG.debug('Housekeeping caught the following exception: {}'.format(e))
         time.sleep(interval)
