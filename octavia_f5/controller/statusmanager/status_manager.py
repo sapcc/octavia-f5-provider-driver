@@ -187,6 +187,8 @@ class StatusManager(BigipAS3RestClient):
                     status = constants.NO_CHECK
                     if stats['status.enabledState'].get('description') == 'disabled':
                         status = constants.DRAIN
+                    elif stats['monitorStatus'].get('description') == 'checking':
+                        status = constants.MAINT
                     elif stats['monitorStatus'].get('description') == 'down':
                         status = constants.DOWN
                     elif stats['monitorStatus'].get('description') == 'up':
