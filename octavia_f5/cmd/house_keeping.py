@@ -32,11 +32,8 @@ LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 PROMETHEUS_PORT = 8000
 
-_metric_housekeeping = prometheus.Counter('housekeeping', 'How often housekeeping has been run.')
-_metric_housekeeping_exceptions = prometheus.Counter('housekeeping_exceptions', 'How often housekeeping failed.')
-_metric_housekeeping_interval = prometheus.Gauge('housekeeping_interval', 'Time in seconds between housekeeping runs.')
-_metric_housekeeping_lb_expiry = prometheus.Gauge(
-    'housekeeping_lb_expiry', 'Time in seconds after which a deleted load balancer is removed from the database.')
+_metric_housekeeping = prometheus.Counter('octavia_housekeeping', 'How often housekeeping has been run.')
+_metric_housekeeping_exceptions = prometheus.Counter('octavia_housekeeping_exceptions', 'How often housekeeping failed.')
 
 
 def _mutate_config():
@@ -57,9 +54,7 @@ def main():
 
     # Read configuration
     interval = CONF.house_keeping.cleanup_interval
-    _metric_housekeeping_interval.set(interval)
     lb_expiry = CONF.house_keeping.load_balancer_expiry_age
-    _metric_housekeeping_lb_expiry.set(lb_expiry)
 
     # initialize
     prometheus.start_http_server(PROMETHEUS_PORT)
