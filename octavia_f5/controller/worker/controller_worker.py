@@ -49,7 +49,6 @@ class ControllerWorker(object):
 
     def __init__(self):
         self._loadbalancer_repo = repo.LoadBalancerRepository()
-        self._esd = esd_repo.EsdRepository()
         self._amphora_repo = repo.AmphoraRepository()
         self._health_mon_repo = repo.HealthMonitorRepository()
         self._lb_repo = repo.LoadBalancerRepository()
@@ -63,8 +62,7 @@ class ControllerWorker(object):
         self.bigip = BigipAS3RestClient(
             bigip_url=CONF.f5_agent.bigip_url,
             enable_verify=CONF.f5_agent.bigip_verify,
-            enable_token=CONF.f5_agent.bigip_token,
-            esd=self._esd)
+            enable_token=CONF.f5_agent.bigip_token)
 
         self.network_driver = driver_utils.get_network_driver()
         self.cert_manager = cert_manager.CertManagerWrapper()

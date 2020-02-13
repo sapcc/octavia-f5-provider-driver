@@ -44,14 +44,12 @@ def authorized(func):
 
 
 class BigipAS3RestClient(object):
-    def __init__(self, bigip_url, enable_verify=True, enable_token=True,
-                 esd=None):
+    def __init__(self, bigip_url, enable_verify=True, enable_token=True):
         self.bigip = parse.urlsplit(bigip_url, allow_fragments=False)
         self.enable_verify = enable_verify
         self.enable_token = enable_token
         self.token = None
         self.session = self._create_session()
-        self.esd = esd
 
     _metric_httpstatus = prometheus.metrics.Counter(
         'octavia_as3_httpstatus', 'Number of HTTP statuses in responses to AS3 requests', ['method', 'statuscode'])
