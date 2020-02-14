@@ -33,10 +33,34 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         raise exceptions.NotImplementedError()
 
     def loadbalancer_failover(self, loadbalancer_id):
+        """Performs a fail over of a load balancer.
+
+        :param loadbalancer_id (string): ID of the load balancer to failover.
+        :return: Nothing if the failover request was accepted.
+        :raises DriverError: An unexpected error occurred in the driver.
+        :raises: NotImplementedError if driver does not support request.
+        """
         raise exceptions.NotImplementedError()
 
     def get_supported_flavor_metadata(self):
         raise exceptions.NotImplementedError()
+        """Returns the valid flavor metadata keys and descriptions.
+
+        This extracts the valid flavor metadata keys and descriptions
+        from the JSON validation schema and returns it as a dictionary.
+
+        :return: Dictionary of flavor metadata keys and descriptions.
+        :raises DriverError: An unexpected error occurred.
+        """
 
     def validate_flavor(self, flavor_metadata):
+        """Validates if driver can support flavor as defined in flavor_metadata.
+
+        :param flavor_metadata (dict): Dictionary with flavor metadata.
+        :return: Nothing if the flavor is valid and supported.
+        :raises DriverError: An unexpected error occurred in the driver.
+        :raises NotImplementedError: The driver does not support flavors.
+        :raises UnsupportedOptionError: if driver does not
+              support one of the configuration options.
+        """
         raise exceptions.NotImplementedError()
