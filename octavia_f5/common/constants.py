@@ -67,3 +67,12 @@ DOWN = 'DOWN'
 DRAIN = 'DRAIN'
 NO_CHECK = 'no check'
 MAINT = 'MAINT'
+
+FLAVOR_COOKIE_ENCRYPTION = 'cookie_encryption'
+FLAVOR_HTTP_COMPRESSION = 'http_compression'
+FLAVOR_ONE_CONNECT = 'one_connect'
+FLAVOR_PROXY_PROTOCOL = 'proxy_protocol'
+SUPPORTED_PROXY_PROTOCOL_VERSIONS = (1, 2)
+FLAVOR_SSO = 'sso'
+FLAVOR_SSO_REQUIRED = 'sso_required'
+FLAVOR_STANDARD_TCP = 'standard_tcp'
