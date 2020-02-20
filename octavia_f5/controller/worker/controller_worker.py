@@ -150,8 +150,8 @@ class ControllerWorker(object):
     @lockutils.synchronized('tenant_refresh')
     def create_load_balancer(self, load_balancer_id, flavor=None):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
-        """ We are retrying to fetch load-balancer since API could be still 
-            busy inserting the LB into the database """
+        # We are retrying to fetch load-balancer since API could
+        # be still busy inserting the LB into the database.
         if not lb:
             LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
                         '60 seconds.', 'load_balancer', load_balancer_id)
@@ -453,6 +453,12 @@ class ControllerWorker(object):
     Amphora
     """
     def ensure_amphora_exists(self, load_balancer_id):
+        """
+        Octavia health manager makes some assumptions about the existence of amphorae.
+        That's why even the F5 provider driver has to care about amphora DB entries.
+
+        This function creates an amphora entry in the database, if it doesn't already exist.
+        """
         device_amp = self._amphora_repo.get(
             db_apis.get_session(),
             compute_flavor=self.bigip.bigip.hostname,

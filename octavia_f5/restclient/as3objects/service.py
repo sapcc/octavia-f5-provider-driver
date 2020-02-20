@@ -44,7 +44,8 @@ def get_name(listener_id):
 
 
 def process_esd(servicetype, esd):
-    """ process legacy F5 ESDs (enhanced service definition)
+    """
+    Translate F5 ESD (Enhanced Service Definition) into profile.
 
     :param servicetype: octavia listener type
     :param esd: parsed ESD repository
@@ -97,6 +98,8 @@ def get_service(listener, cert_manager):
     :param cert_manager: cert_manager wrapper instance
     :return: AS3 Service + additional AS3 application objects
     """
+    # Entities is a list of tuples, which each describe AS3 objects
+    # which may reference each other but do not form a hierarchy.
     entities = []
     vip = listener.load_balancer.vip
     project_id = listener.load_balancer.project_id

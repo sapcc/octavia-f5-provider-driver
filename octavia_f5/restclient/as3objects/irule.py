@@ -135,6 +135,10 @@ when HTTP_REQUEST {
 
 
 def get_proxy_irule():
+    """
+    Returns iRule for proxy protocol initiation.
+    :return: iRule entity (tuple with iRule name and definition)
+    """
     irule = IRule(PROXY_PROTOCOL_INITIATIOR,
                   remark="Insert Proxy Protocol Header V1")
     name = '{}proxy_protocol_initiator'.format(constants.PREFIX_IRULE)
@@ -142,6 +146,11 @@ def get_proxy_irule():
 
 
 def get_header_irules(insert_headers):
+    """
+    Translate Octavia listener header insertions into F5 iRules.
+    :param insert_headers: headers of listener (listener.insert_headers)
+    :return: List of iRule entities (tuples with iRule name and definition)
+    """
     entities = []
     if insert_headers.get('X-Forwarded-For', False):
         irule = IRule(X_FORWARDED_FOR,
