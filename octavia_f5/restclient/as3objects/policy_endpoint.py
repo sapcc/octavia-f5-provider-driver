@@ -23,6 +23,12 @@ COMPARE_TYPE_MAP = {
     'CONTAINS': 'contains',
     'EQUAL_TO': 'equals'
 }
+COMPARE_TYPE_INVERT_MAP = {
+    'STARTS_WITH': 'does-not-start-with',
+    'ENDS_WITH': 'does-not-end-with',
+    'CONTAINS': 'does-not-contain',
+    'EQUAL_TO': 'does-not-equal'
+}
 COND_TYPE_MAP = {
     'HOST_NAME': {'match_key': 'host', 'type': 'httpUri'},
     'PATH': {'match_key': 'path', 'type': 'httpUri'},
@@ -47,11 +53,12 @@ def _get_condition(l7rule):
         raise PolicyTypeNotSupported()
     if l7rule.compare_type not in COMPARE_TYPE_MAP:
         raise CompareTypeNotSupported()
-    if l7rule.invert:
-        raise PolicyRuleInvertNotSupported()
 
     args = dict()
-    operand = COMPARE_TYPE_MAP[l7rule.compare_type]
+    if l7rule.invert:
+        operand = COMPARE_TYPE_INVERT_MAP[l7rule.compare_type]
+    else:
+        operand = COMPARE_TYPE_MAP[l7rule.compare_type]
     condition = COND_TYPE_MAP[l7rule.type]
     compare_string = Policy_Compare_String(operand=operand, values=[l7rule.value])
     args[condition['match_key']] = compare_string
