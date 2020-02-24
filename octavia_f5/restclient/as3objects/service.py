@@ -43,9 +43,9 @@ def get_name(listener_id):
            listener_id.replace('/', '').replace('-', '_')
 
 
-def process_esd(servicetype, esd):
+def get_esd_entities(servicetype, esd):
     """
-    Translate F5 ESD (Enhanced Service Definition) into profile.
+    Map F5 ESD (Enhanced Service Definition) to service components.
 
     :param servicetype: octavia listener type
     :param esd: parsed ESD repository
@@ -91,13 +91,14 @@ def process_esd(servicetype, esd):
     return service_args
 
 
-def get_service(listener, cert_manager):
+def get_service(listener, cert_manager, esd_repository):
     """ Map Octavia listener -> AS3 Service
 
     :param listener: Octavia listener
     :param cert_manager: cert_manager wrapper instance
     :return: AS3 Service + additional AS3 application objects
     """
+
     # Entities is a list of tuples, which each describe AS3 objects
     # which may reference each other but do not form a hierarchy.
     entities = []
@@ -154,6 +155,7 @@ def get_service(listener, cert_manager):
         ))
         entities.extend([(cert['id'], cert['as3']) for cert in certificates])
 
+    # add profile
     if CONF.f5_agent.profile_l4:
         service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)
     if CONF.f5_agent.profile_multiplex:
@@ -254,6 +256,43 @@ def get_service(listener, cert_manager):
             if l7policy.provisioning_status != lib_consts.PENDING_DELETE
         ]
 
+    # Map listener tags to ESDs
+    for tag in listener.tags:
+
+        # get ESD of same name
+        esd = esd_repository.get_esd(tag)
+        if esd is None:
+            continue
+
+        # enrich service with iRules and other things defined in ESD
+        esd_entities = get_esd_entities(service_args['_servicetype'], esd)
+        for entity_name in esd_entities:
+            if entity_name == 'iRules':
+                service_args['iRules'].extend(esd_entities['iRules'])
+            else:
+                service_args[entity_name] = esd_entities[entity_name]
+
+    # Map special L7policies to ESDs
+    # TODO: Remove this as soon as all customers have migrated their scripts.
+    #  Triggering ESDs via L7policies is considered deprecated. Tags should be used instead. See the code above.
+    for policy in listener.l7policies:
+
+        # get ESD of same name
+        esd = esd_repository.get_esd(policy.name)
+        if esd is None:
+            continue
+
+        # enrich service with iRules and other things defined in ESD
+        esd_entities = get_esd_entities(service_args['_servicetype'], esd)
+        for entity_name in esd_entities:
+            if entity_name == 'iRules':
+                service_args['iRules'].extend(esd_entities['iRules'])
+            else:
+                service_args[entity_name] = esd_entities[entity_name]
+
+    # create service object and fill in additional fields
     service = as3.Service(**service_args)
+
+    # add service to entities and return
     entities.append((get_name(listener.id), service))
     return entities

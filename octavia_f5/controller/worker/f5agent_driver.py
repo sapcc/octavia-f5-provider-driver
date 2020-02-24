@@ -81,28 +81,25 @@ def tenant_update(bigip,
             continue
 
         # Create generic application
-        app = Application(constants.APPLICATION_GENERIC,
-                          label=loadbalancer.id)
+        app = Application(constants.APPLICATION_GENERIC, label=loadbalancer.id)
 
-        # attach listeners with ESDs / L7Policies
+        # Attach L7Policies and ESDs to listeners
         for listener in loadbalancer.listeners:
             if utils.pending_delete(listener):
                 continue
 
-            profiles = {}
+            # Translate L7policies to endpoint policies
             for l7policy in listener.l7policies:
                 if utils.pending_delete(l7policy):
                     continue
+                app.add_endpoint_policy(
+                    m_policy.get_name(l7policy.id),
+                    m_policy.get_endpoint_policy(l7policy)
+                )
 
-                esd = bigip.esd.get_esd(l7policy.name)
-                if esd:
-                    profiles.update(m_service.process_esd(esd))
-                else:
-                    app.add_endpoint_policy(
-                        m_policy.get_name(l7policy.id),
-                        m_policy.get_endpoint_policy(l7policy)
-                    )
-            app.add_entities(m_service.get_service(listener, cert_manager))
+            # add service
+            service_entities = m_service.get_service(listener, cert_manager, bigip.esd)
+            app.add_entities(service_entities)
 
         # attach pools
         for pool in loadbalancer.pools:
@@ -110,9 +107,8 @@ def tenant_update(bigip,
                 continue
             app.add_entities(m_pool.get_pool(pool))
 
-        tenant.add_application(
-            m_app.get_name(loadbalancer.id),
-            app)
+        # Attach newly created application
+        tenant.add_application(m_app.get_name(loadbalancer.id), app)
 
     return bigip.post(json=decl.to_json())
 
