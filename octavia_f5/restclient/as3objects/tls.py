@@ -51,7 +51,7 @@ def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode=
     }
 
     service_args = {
-        'certificates': [{'certificate': cert_id} for cert_id in certificate_ids]
+        'certificates': [{'certificate': cert_id} for cert_id in set(certificate_ids)]
     }
 
     if authentication_ca:
