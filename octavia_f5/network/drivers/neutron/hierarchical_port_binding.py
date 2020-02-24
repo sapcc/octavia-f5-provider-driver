@@ -75,13 +75,12 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
         LOG.debug("Found candidates for new LB %s: %s", load_balancer.id, candidate)
 
         # It can be assumed that network_id exists
-        port = {'port': {'name': 'octavia-lb-{}'.format(load_balancer.id),
+        port = {'port': {'name': 'loadbalancer-{}'.format(load_balancer.id),
                          'network_id': load_balancer.vip.network_id,
-                         'admin_state_up': False,
-                         'device_id': 'lb-{0}'.format(load_balancer.id),
+                         'admin_state_up': True,
+                         'device_id': load_balancer.id,
                          'device_owner': constants.DEVICE_OWNER_LISTENER,
-                         # TODO: needs to be auto-scheduled by agent
-                         'binding:host_id': 'f512-01',
+                         'binding:host_id': candidate,
                          project_id_key: load_balancer.project_id}}
 
         if fixed_ip:
