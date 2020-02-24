@@ -32,7 +32,7 @@ from octavia_f5.controller.worker.f5agent_driver import tenant_update
 from octavia_f5.db import api as db_apis
 from octavia_f5.restclient.as3restclient import BigipAS3RestClient
 from octavia_f5.utils import cert_manager
-from octavia_f5.utils import esd_repo, driver_utils
+from octavia_f5.utils import esd_repo, driver_utils, exceptions
 from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
@@ -113,8 +113,12 @@ class ControllerWorker(object):
 
         for lb in lbs:
             LOG.info("Found pending tenant network %s, syncing...", lb.vip.network_id)
-            if self._refresh(lb.vip.network_id).ok:
-                self.status.update_status([lb])
+            try:
+                if self._refresh(lb.vip.network_id).ok:
+                    self.status.update_status([lb])
+            except exceptions.AS3Exception as e:
+                LOG.error("AS3 exception while syncing LB %s: %s", lb.id, e)
+                self.status.set_error(lb)
 
         lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
@@ -472,7 +476,6 @@ class ControllerWorker(object):
         """
         device_amp = self._amphora_repo.get(
             db_apis.get_session(),
-            compute_flavor=CONF.host,
             load_balancer_id=load_balancer_id)
         if not device_amp:
             self._amphora_repo.create(
@@ -481,6 +484,11 @@ class ControllerWorker(object):
                 load_balancer_id=load_balancer_id,
                 compute_flavor=CONF.host,
                 status=lib_consts.ACTIVE)
+        if device_amp.compute_flavor != CONF.host:
+            self._amphora_repo.update(
+                db_apis.get_session(),
+                device_amp.id,
+                **{'compute_flavor': CONF.host})
 
     def create_amphora(self):
         pass
