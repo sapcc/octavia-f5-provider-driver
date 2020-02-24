@@ -13,6 +13,7 @@
 # under the License.
 
 from octavia_f5.common import constants
+from octavia_f5.restclient import as3types
 from octavia_f5.restclient.as3classes import Member
 
 
@@ -37,5 +38,5 @@ def get_member(member):
     else:
         args['ratio'] = member.weight
 
-    args['remark'] = member.id
+    args['remark'] = as3types.f5remark(member.id)
     return Member(**args)

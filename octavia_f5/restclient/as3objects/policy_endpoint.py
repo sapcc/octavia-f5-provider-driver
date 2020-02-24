@@ -11,7 +11,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-
+from octavia_f5.restclient import as3types
 from octavia_f5.restclient.as3classes import *
 from octavia_f5.utils.exceptions import *
 from octavia_f5.restclient.as3objects import pool
@@ -78,9 +78,9 @@ def _get_action(l7policy):
 def get_endpoint_policy(l7policy):
     args = dict()
     if l7policy.name:
-        args['label'] = l7policy.name
+        args['label'] = as3types.f5label(l7policy.name)
     if l7policy.description:
-        args['remark'] = l7policy.description
+        args['remark'] = as3types.f5remark(l7policy.description)
     args['rules'] = [Endpoint_Policy_Rule(
         name=get_name(l7policy.id),
         conditions=[_get_condition(l7rule) for l7rule in l7policy.l7rules],

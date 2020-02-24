@@ -15,6 +15,7 @@
 import base64
 
 from octavia_f5.common import constants
+from octavia_f5.restclient import as3types
 from octavia_f5.restclient.as3classes import Certificate, CA_Bundle
 
 
@@ -42,7 +43,7 @@ def get_certificate(remark, tlscontainer):
             return pem
 
     service_args = {
-        'remark': remark,
+        'remark': as3types.f5remark(remark),
         'certificate': _decode(tlscontainer.certificate)
     }
 
@@ -66,8 +67,8 @@ def get_ca_bundle(bundle, remark='', label=''):
     :return: AS3 CA_Bundle
     """
     service_args = {
-        'remark': remark,
-        'label': label,
+        'remark': as3types.f5remark(remark),
+        'label': as3types.f5label(label),
         'bundle': bundle.decode('utf-8').replace('\r',  '')
     }
     return CA_Bundle(**service_args)

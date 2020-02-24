@@ -13,20 +13,29 @@
 # under the License.
 
 
-class PolicyHasNoRules(Exception):
+class AS3Exception(Exception):
     pass
 
-class NoActionFoundForPolicy(Exception):
+
+class PolicyHasNoRules(AS3Exception):
     pass
 
-class CompareTypeNotSupported(Exception):
+
+class NoActionFoundForPolicy(AS3Exception):
     pass
 
-class PolicyTypeNotSupported(Exception):
+
+class CompareTypeNotSupported(AS3Exception):
     pass
 
-class PolicyRuleInvertNotSupported(Exception):
+
+class PolicyTypeNotSupported(AS3Exception):
     pass
 
-class PolicyActionNotSupported(Exception):
+
+class PolicyRuleInvertNotSupported(AS3Exception):
+    pass
+
+
+class PolicyActionNotSupported(AS3Exception):
     pass
