@@ -33,6 +33,7 @@ class TestF5Driver(base.TestRpc):
             mock.patch('octavia.db.api.get_session')
         ]
         conf.config(group="oslo_messaging", topic='foo_topic')
+        conf.config(group="controller_worker", network_driver='network_noop_driver_f5')
         self.amp_driver = driver.F5ProviderDriver()
         self.sample_data = sample_data_models.SampleDriverDataModels()
 
