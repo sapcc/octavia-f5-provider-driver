@@ -146,4 +146,5 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
                     return segment['provider:segmentation_id']
         except Exception as e:
             LOG.error('Error retrieving segmentation id for network "%s": %s', network_id, e)
-        return 0
+            raise e
+        raise base.NetworkException('No segmentation id for network "%s" found', network_id)
