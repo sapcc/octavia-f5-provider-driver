@@ -29,7 +29,12 @@ LOG = logging.getLogger(__name__)
 
 
 class F5ProviderDriver(driver.AmphoraProviderDriver):
-    """Octavia plugin for the F5 driver."""
+    """Octavia plugin for the F5 driver.
+
+    Callbacks need to be overwritten for setting the _server_ attribute
+    in RPC calls to specify the target rpc receiver (e.g. the scheduled
+    host)
+    """
 
     def __init__(self):
         super(F5ProviderDriver, self).__init__()
