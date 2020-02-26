@@ -172,7 +172,7 @@ class BigipAS3RestClient(object):
 
         LOG.debug("Calling DELETE for tenants %s", tenants)
         response = self.session.delete(self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants))))
-        self._metric_httpstatus.labels(method='delete', httpstatus=response.status_code).inc()
+        self._metric_httpstatus.labels(method='delete', statuscode=response.status_code).inc()
         LOG.debug("DELETE finished with %d", response.status_code)
         if response.headers.get('Content-Type') == 'application/json':
             LOG.debug(json.dumps(json.loads(response.text)['results'], indent=4, sort_keys=True))
