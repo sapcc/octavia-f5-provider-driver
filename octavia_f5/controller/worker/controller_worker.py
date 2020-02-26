@@ -90,7 +90,7 @@ class ControllerWorker(object):
         """ Reconciliation loop that pics up un-scheduled loadbalancers and
             schedules them to this worker.
         """
-        lbs = []
+        lbs = set()
         pending_create_lbs = self._loadbalancer_repo.get_all(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_CREATE,
@@ -99,17 +99,17 @@ class ControllerWorker(object):
             # bind to loadbalancer if scheduled to this host
             if CONF.host == self.network_driver.get_scheduled_host(lb.vip.port_id):
                 self.ensure_amphora_exists(lb.id)
-                lbs.append(lb)
+                lbs.add(lb)
 
-        lbs.extend(self._loadbalancer_repo.get_all_from_host(
+        lbs.update(self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_UPDATE))
 
         pools = self._pool_repo.get_pending_from_host(db_apis.get_session())
-        lbs.extend([pool.load_balancer for pool in pools])
+        lbs.update([pool.load_balancer for pool in pools])
 
         l7policies = self._l7policy_repo.get_pending_from_host(db_apis.get_session())
-        lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
+        lbs.update([l7policy.listener.load_balancer for l7policy in l7policies])
 
         for lb in lbs:
             LOG.info("Found pending tenant network %s, syncing...", lb.vip.network_id)
