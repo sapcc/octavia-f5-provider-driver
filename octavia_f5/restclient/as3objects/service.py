@@ -250,12 +250,6 @@ def get_service(listener, cert_manager, esd_repository):
             if lb_algorithm == 'SOURCE_IP':
                 service_args['fallbackPersistenceMethod'] = 'source-address'
 
-    if listener.l7policies:
-        service_args['policyEndpoint'] = [
-            m_policy.get_name(l7policy.id) for l7policy in listener.l7policies
-            if l7policy.provisioning_status != lib_consts.PENDING_DELETE
-        ]
-
     # Map listener tags to ESDs
     for tag in listener.tags:
 
@@ -275,20 +269,28 @@ def get_service(listener, cert_manager, esd_repository):
     # Map special L7policies to ESDs
     # TODO: Remove this as soon as all customers have migrated their scripts.
     #  Triggering ESDs via L7policies is considered deprecated. Tags should be used instead. See the code above.
+    service_args['policyEndpoint'] = []
     for policy in listener.l7policies:
 
         # get ESD of same name
         esd = esd_repository.get_esd(policy.name)
-        if esd is None:
-            continue
 
-        # enrich service with iRules and other things defined in ESD
-        esd_entities = get_esd_entities(service_args['_servicetype'], esd)
-        for entity_name in esd_entities:
-            if entity_name == 'iRules':
-                service_args['iRules'].extend(esd_entities['iRules'])
-            else:
-                service_args[entity_name] = esd_entities[entity_name]
+        # Add ESD or regular endpoint policy
+        if esd is not None:
+
+            # enrich service with iRules and other things defined in ESD
+            esd_entities = get_esd_entities(service_args['_servicetype'], esd)
+            for entity_name in esd_entities:
+                if entity_name == 'iRules':
+                    service_args['iRules'].extend(esd_entities['iRules'])
+                else:
+                    service_args[entity_name] = esd_entities[entity_name]
+
+        else:
+            # add a regular endpoint policy
+            if policy.provisioning_status != lib_consts.PENDING_DELETE:
+                service_args['policyEndpoint'].append(m_policy.get_name(policy.id))
+
 
     # create service object and fill in additional fields
     service = as3.Service(**service_args)
