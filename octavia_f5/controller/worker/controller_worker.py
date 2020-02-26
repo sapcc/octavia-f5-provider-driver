@@ -112,7 +112,7 @@ class ControllerWorker(object):
         lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
 
         for lb in lbs:
-            LOG.info("Found pending tennant network %s, syncing...", lb.vip.network_id)
+            LOG.info("Found pending tenant network %s, syncing...", lb.vip.network_id)
             if self._refresh(lb.vip.network_id).ok:
                 self.status.update_status([lb])
 

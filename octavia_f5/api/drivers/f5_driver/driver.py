@@ -40,6 +40,11 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         super(F5ProviderDriver, self).__init__()
 
     def _get_server(self, loadbalancer_id):
+        """ Get scheduled host of the loadbalancer.
+
+        :param loadbalancer_id: loadbalancer id
+        :return: scheduled host
+        """
         return getattr(
             self.repositories.amphora.get(
                 db_apis.get_session(),
