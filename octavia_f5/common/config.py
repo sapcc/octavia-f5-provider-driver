@@ -20,8 +20,8 @@ import sys
 
 from oslo_config import cfg
 from oslo_log import log as logging
-from octavia_f5.common import constants
 
+from octavia_f5.common import constants
 from octavia_lib.i18n import _
 
 LOG = logging.getLogger(__name__)
@@ -30,6 +30,7 @@ LOG = logging.getLogger(__name__)
 def init(args, **kwargs):
     cfg.CONF(args=args, project='octavia_f5',
              **kwargs)
+
 
 def setup_logging(conf):
     """Sets up the logging options for a log with supplied name.
@@ -75,10 +76,19 @@ f5_agent_opts = [
                 help=_("Enable prometheus metrics exporter")),
     cfg.PortOpt('prometheus_port', default=8000,
                 help=_('Port for prometheus to expose, defaults to 8000.')),
+    cfg.BoolOpt('dry_run', default=False,
+                help=_("Run in dry-run, do not realize AS3 definitions.")),
 
 ]
 
 f5_networking_opts = [
+    cfg.BoolOpt('caching', default=True,
+                help=_('Enable caching of segmentation ids and ports')),
+    cfg.IntOpt('cache_time', default=3600,
+               help=_('Caching time in seconds (default=3600)')),
+    cfg.StrOpt('f5_network_segment_physical_network', default="",
+               help=_('Restrict discovery of network segmentation ID '
+                      'to a specific physical network name.')),
 ]
 
 # Register the configuration options

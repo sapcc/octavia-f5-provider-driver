@@ -209,17 +209,17 @@ class StatusManager(BigipAS3RestClient):
         try:
             lock_session = db_api.get_session(autocommit=False)
             device_amp = self.amp_repo.get(lock_session,
-                                           compute_flavor=self.bigip.hostname,
+                                           compute_flavor=CONF.host,
                                            load_balancer_id=None)
             if not device_amp:
                 device_amp = self.amp_repo.create(
                     lock_session,
-                    compute_flavor=self.bigip.hostname,
-                    status=constants.ACTIVE,
+                    compute_flavor=CONF.host,
+                    status=constants.AMPHORA_READY,
                     vrrp_priority=num_listeners)
             else:
                 self.amp_repo.update(lock_session, device_amp.id,
-                                     status=constants.ACTIVE,
+                                     status=constants.AMPHORA_READY,
                                      vrrp_priority=num_listeners)
             self.amphora_id = device_amp.id
             lock_session.commit()

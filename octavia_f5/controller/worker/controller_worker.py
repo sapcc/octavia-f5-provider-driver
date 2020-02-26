@@ -24,6 +24,7 @@ from oslo_log import log as logging
 from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.db import repositories as repo
+from octavia_f5.db import repositories as f5_repos
 from octavia_f5.controller.worker import status
 from octavia_f5.controller.worker.f5agent_driver import member_create
 from octavia_f5.controller.worker.f5agent_driver import tenant_delete
@@ -48,15 +49,15 @@ class ControllerWorker(object):
     """Worker class to update load balancers."""
 
     def __init__(self):
-        self._loadbalancer_repo = repo.LoadBalancerRepository()
+        self._loadbalancer_repo = f5_repos.LoadBalancerRepository()
         self._esd = esd_repo.EsdRepository()
         self._amphora_repo = repo.AmphoraRepository()
         self._health_mon_repo = repo.HealthMonitorRepository()
         self._lb_repo = repo.LoadBalancerRepository()
         self._listener_repo = repo.ListenerRepository()
         self._member_repo = repo.MemberRepository()
-        self._pool_repo = repo.PoolRepository()
-        self._l7policy_repo = repo.L7PolicyRepository()
+        self._pool_repo = f5_repos.PoolRepository()
+        self._l7policy_repo = f5_repos.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
         self._flavor_repo = repo.FlavorRepository()
         self._vip_repo = repo.VipRepository()
@@ -86,28 +87,40 @@ class ControllerWorker(object):
     @periodics.periodic(120, run_immediately=True)
     @lockutils.synchronized('tenant_refresh')
     def pending_sync(self):
-        lbs = self._loadbalancer_repo.get_all(
-            db_apis.get_session(),
-            provisioning_status=lib_consts.PENDING_UPDATE,
-            show_deleted=False)[0]
-        lbs.extend(self._loadbalancer_repo.get_all(
+        """ Reconciliation loop that pics up un-scheduled loadbalancers and
+            schedules them to this worker.
+        """
+        lbs = set()
+        pending_create_lbs = self._loadbalancer_repo.get_all(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_CREATE,
-            show_deleted=False)[0])
+            show_deleted=False)[0]
+        for lb in pending_create_lbs:
+            # bind to loadbalancer if scheduled to this host
+            if CONF.host == self.network_driver.get_scheduled_host(lb.vip.port_id):
+                self.ensure_amphora_exists(lb.id)
+                lbs.add(lb)
+
+        lbs.update(self._loadbalancer_repo.get_all_from_host(
+            db_apis.get_session(),
+            provisioning_status=lib_consts.PENDING_UPDATE))
+
+        pools = self._pool_repo.get_pending_from_host(db_apis.get_session())
+        lbs.update([pool.load_balancer for pool in pools])
+
+        l7policies = self._l7policy_repo.get_pending_from_host(db_apis.get_session())
+        lbs.update([l7policy.listener.load_balancer for l7policy in l7policies])
 
         for lb in lbs:
-            self.ensure_amphora_exists(lb.id)
+            LOG.info("Found pending tenant network %s, syncing...", lb.vip.network_id)
+            if self._refresh(lb.vip.network_id).ok:
+                self.status.update_status([lb])
 
-        for network_id in set([lb.vip.network_id for lb in lbs]):
-            LOG.info("Found pending tennant network %s, syncing...", network_id)
-            if self._refresh(network_id).ok:
-                self.status.update_status(lbs)
-
-        lbs_to_delete = self._loadbalancer_repo.get_all(
+        lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
-            provisioning_status=lib_consts.PENDING_DELETE,
-            show_deleted=False)[0]
+            provisioning_status=lib_consts.PENDING_DELETE)
         for lb in lbs_to_delete:
+            LOG.info("Found pending deletion of lb %s", lb.id)
             self.delete_load_balancer(lb.id)
 
     @tenacity.retry(
@@ -116,8 +129,7 @@ class ControllerWorker(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
     def _get_all_loadbalancer(self, network_id):
-        LOG.debug("Get load balancers from DB for network id: %s ",
-                  network_id)
+        LOG.debug("Get load balancers from DB for network id: %s ", network_id)
         vips = self._vip_repo.get_all(
             db_apis.get_session(),
             network_id=network_id)
@@ -173,8 +185,7 @@ class ControllerWorker(object):
 
     @lockutils.synchronized('tenant_refresh')
     def delete_load_balancer(self, load_balancer_id, cascade=False):
-        lb = self._lb_repo.get(db_apis.get_session(),
-                               id=load_balancer_id)
+        lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
         existing_lbs = [loadbalancer for loadbalancer in self._get_all_loadbalancer(lb.vip.network_id)
                         if loadbalancer.id != lb.id]
 
@@ -461,14 +472,14 @@ class ControllerWorker(object):
         """
         device_amp = self._amphora_repo.get(
             db_apis.get_session(),
-            compute_flavor=self.bigip.bigip.hostname,
+            compute_flavor=CONF.host,
             load_balancer_id=load_balancer_id)
         if not device_amp:
             self._amphora_repo.create(
                 db_apis.get_session(),
                 id=load_balancer_id,
                 load_balancer_id=load_balancer_id,
-                compute_flavor=self.bigip.bigip.hostname,
+                compute_flavor=CONF.host,
                 status=lib_consts.ACTIVE)
 
     def create_amphora(self):

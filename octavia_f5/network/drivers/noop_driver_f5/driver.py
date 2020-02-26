@@ -12,16 +12,24 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia.network.drivers.noop_driver import driver
 
 LOG = logging.getLogger(__name__)
+CONF = cfg.CONF
 
 
 class NoopNetworkDriverF5(driver.NoopNetworkDriver):
     def __init__(self):
         super(NoopNetworkDriverF5, self).__init__()
+
+    def allocate_vip(self, load_balancer):
+        return super(NoopNetworkDriverF5, self).allocate_vip(load_balancer)
+
+    def get_scheduled_host(self, port_id):
+        return CONF.host
 
     def get_segmentation_id(self, network_id):
         return 1234
