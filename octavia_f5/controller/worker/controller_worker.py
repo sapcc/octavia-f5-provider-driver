@@ -90,16 +90,16 @@ class ControllerWorker(object):
         """ Reconciliation loop that pics up un-scheduled loadbalancers and
             schedules them to this worker.
         """
-        lbs = self._loadbalancer_repo.get_all(
+        lbs = []
+        pending_create_lbs = self._loadbalancer_repo.get_all(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_CREATE,
             show_deleted=False)[0]
-        for lb in lbs:
+        for lb in pending_create_lbs:
             # bind to loadbalancer if scheduled to this host
             if CONF.host == self.network_driver.get_scheduled_host(lb.vip.port_id):
                 self.ensure_amphora_exists(lb.id)
-            else:
-                lbs.remove(lb)
+                lbs.append(lb)
 
         lbs.extend(self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
