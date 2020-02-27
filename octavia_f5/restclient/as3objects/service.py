@@ -276,7 +276,7 @@ def get_service(listener, cert_manager, esd_repository):
         esd = esd_repository.get_esd(policy.name)
 
         # Add ESD or regular endpoint policy
-        if esd is not None:
+        if esd:
 
             # enrich service with iRules and other things defined in ESD
             esd_entities = get_esd_entities(service_args['_servicetype'], esd)
