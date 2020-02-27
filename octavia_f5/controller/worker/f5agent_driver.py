@@ -83,39 +83,16 @@ def tenant_update(bigip,
         # Create generic application
         app = Application(constants.APPLICATION_GENERIC, label=loadbalancer.id)
 
-        # Attach L7Policies and ESDs to listeners
+        # Attach Octavia listeners as AS3 service objects
         for listener in loadbalancer.listeners:
-            if utils.pending_delete(listener):
-                continue
+            if not utils.pending_delete(listener):
+                service_entities = m_service.get_service(listener, cert_manager, bigip.esd)
+                app.add_entities(service_entities)
 
-            # Translate L7policies to endpoint policies
-            for l7policy in listener.l7policies:
-
-                # Skip policies marked for deletion
-                if utils.pending_delete(l7policy):
-                    continue
-
-                # Skip ESD policies
-                # TODO: Remove this as soon as all customers have migrated their scripts.
-                #  Triggering ESDs via L7policies is considered deprecated. Tags should be used instead.
-                #  ESD tags are handled in octavia_f5/restclient/as3objects/service.py:279 so no need to do it here.
-                if bigip.esd.get_esd(l7policy.name):
-                    continue
-
-                app.add_endpoint_policy(
-                    m_policy.get_name(l7policy.id),
-                    m_policy.get_endpoint_policy(l7policy)
-                )
-
-            # add service
-            service_entities = m_service.get_service(listener, cert_manager, bigip.esd)
-            app.add_entities(service_entities)
-
-        # attach pools
+        # Attach pools
         for pool in loadbalancer.pools:
-            if utils.pending_delete(pool):
-                continue
-            app.add_entities(m_pool.get_pool(pool))
+            if not utils.pending_delete(pool):
+                app.add_entities(m_pool.get_pool(pool))
 
         # Attach newly created application
         tenant.add_application(m_app.get_name(loadbalancer.id), app)

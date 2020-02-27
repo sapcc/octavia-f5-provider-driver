@@ -286,11 +286,16 @@ def get_service(listener, cert_manager, esd_repository):
                 else:
                     service_args[entity_name] = esd_entities[entity_name]
 
-        else:
+        elif policy.provisioning_status != lib_consts.PENDING_DELETE:
             # add a regular endpoint policy
-            if policy.provisioning_status != lib_consts.PENDING_DELETE:
-                service_args['policyEndpoint'].append(m_policy.get_name(policy.id))
+            policy_name = m_policy.get_name(policy.id)
 
+            # make endpoint policy object
+            endpoint_policy = (policy_name, m_policy.get_endpoint_policy(policy))
+            entities.append(endpoint_policy)
+
+            # reference endpoint policy object in service
+            service_args['policyEndpoint'].append(policy_name)
 
     # create service object and fill in additional fields
     service = as3.Service(**service_args)
