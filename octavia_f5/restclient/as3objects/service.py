@@ -108,7 +108,8 @@ def get_service(listener, cert_manager, esd_repository):
         'virtualPort': listener.protocol_port,
         'virtualAddresses': [vip.ip_address],
         'persistenceMethods': [],
-        'iRules': []
+        'iRules': [],
+        'policyEndpoint': []
     }
 
     if listener.description:
@@ -269,7 +270,6 @@ def get_service(listener, cert_manager, esd_repository):
     # Map special L7policies to ESDs
     # TODO: Remove this as soon as all customers have migrated their scripts.
     #  Triggering ESDs via L7policies is considered deprecated. Tags should be used instead. See the code above.
-    service_args['policyEndpoint'] = []
     for policy in listener.l7policies:
 
         # get ESD of same name
