@@ -477,6 +477,8 @@ class ControllerWorker(object):
         device_amp = self._amphora_repo.get(
             db_apis.get_session(),
             load_balancer_id=load_balancer_id)
+
+        # create amphora mapping if missing
         if not device_amp:
             self._amphora_repo.create(
                 db_apis.get_session(),
@@ -484,11 +486,13 @@ class ControllerWorker(object):
                 load_balancer_id=load_balancer_id,
                 compute_flavor=CONF.host,
                 status=lib_consts.ACTIVE)
+
+        # update host if not updated yet
         if device_amp.compute_flavor != CONF.host:
             self._amphora_repo.update(
                 db_apis.get_session(),
-                device_amp.id,
-                **{'compute_flavor': CONF.host})
+                id=device_amp.id,
+                compute_flavor=CONF.host)
 
     def create_amphora(self):
         pass
