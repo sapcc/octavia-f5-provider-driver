@@ -137,7 +137,11 @@ class BigipAS3RestClient(object):
         self._metric_httpstatus.labels(method='post', statuscode=response.status_code).inc()
         LOG.debug("POST finished with %d", response.status_code)
         if response.headers.get('Content-Type') == 'application/json':
-            LOG.debug(json.dumps(json.loads(response.text)['results'], indent=4, sort_keys=True))
+            content = json.loads(response.text)
+            if 'results' in content:
+                LOG.debug(json.dumps(content['results'], indent=4, sort_keys=True))
+            else:
+                LOG.debug(json.dumps(content, indent=4, sort_keys=True))
         else:
             LOG.debug(response.text)
         return response
