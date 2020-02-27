@@ -22,11 +22,11 @@ def f5remark(remark):
                    if unicodedata.category(ch)[0] != "C")
 
     # Remove double-quote (“), and backslash (\), limit to 64 characters.
-    return re.sub('["]', '', nstr)[:63]
+    return re.sub('["]', '', nstr)[:64]
 
 
 def f5label(label):
     # Remove control characters and limit to 64 characters.
     nstr = "".join(ch for ch in label
                    if unicodedata.category(ch)[0] != "C")
-    return nstr[:63]
+    return nstr[:64]
