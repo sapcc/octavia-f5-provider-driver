@@ -33,9 +33,5 @@ class PolicyTypeNotSupported(AS3Exception):
     pass
 
 
-class PolicyRuleInvertNotSupported(AS3Exception):
-    pass
-
-
 class PolicyActionNotSupported(AS3Exception):
     pass
