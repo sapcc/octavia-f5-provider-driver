@@ -103,15 +103,14 @@ def get_service(listener, cert_manager):
     entities = []
     vip = listener.load_balancer.vip
     project_id = listener.load_balancer.project_id
+    label = as3types.f5label(listener.description or listener.id)
     service_args = {
         'virtualPort': listener.protocol_port,
         'virtualAddresses': [vip.ip_address],
         'persistenceMethods': [],
-        'iRules': []
+        'iRules': [],
+        'label': label
     }
-
-    if listener.description:
-        service_args['label'] = as3types.f5label(listener.description or listener.id)
 
     # Determine service type
     if listener.protocol == const.PROTOCOL_TCP:
