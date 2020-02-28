@@ -123,8 +123,8 @@ class Application(BaseDescription):
         self.serviceMain = service  # noqa
 
     def add_entities(self, entities):
-        for name, entinty in entities:
-            setattr(self, name, entinty)
+        for name, entity in entities:
+            setattr(self, name, entity)
 
     def add_endpoint_policy(self, name, policy_endpoint):
         if hasattr(self, name):
