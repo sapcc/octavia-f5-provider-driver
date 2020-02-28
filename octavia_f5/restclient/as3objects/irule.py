@@ -151,6 +151,9 @@ def get_header_irules(insert_headers):
     :param insert_headers: headers of listener (listener.insert_headers)
     :return: List of iRule entities (tuples with iRule name and definition)
     """
+
+    # Entities is a list of tuples, which each describe AS3 objects
+    # which may reference each other but do not form a hierarchy.
     entities = []
     if insert_headers.get('X-Forwarded-For', False):
         irule = IRule(X_FORWARDED_FOR,

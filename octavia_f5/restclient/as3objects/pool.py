@@ -41,6 +41,9 @@ def get_pool(pool):
     :param pool: octavia pool object
     :return: AS3 pool
     """
+
+    # Entities is a list of tuples, which each describe AS3 objects
+    # which may reference each other but do not form a hierarchy.
     entities = []
     lbaas_lb_method = pool.lb_algorithm.upper()
     lbmode = _set_lb_method(lbaas_lb_method, pool.members)

@@ -83,38 +83,21 @@ def tenant_update(bigip,
             continue
 
         # Create generic application
-        app = Application(constants.APPLICATION_GENERIC,
-                          label=loadbalancer.id)
+        app = Application(constants.APPLICATION_GENERIC, label=loadbalancer.id)
 
-        # attach listeners with ESDs / L7Policies
+        # Attach Octavia listeners as AS3 service objects
         for listener in loadbalancer.listeners:
-            if utils.pending_delete(listener):
-                continue
+            if not utils.pending_delete(listener):
+                service_entities = m_service.get_service(listener, cert_manager, bigip.esd)
+                app.add_entities(service_entities)
 
-            profiles = {}
-            for l7policy in listener.l7policies:
-                if utils.pending_delete(l7policy):
-                    continue
-
-                esd = bigip.esd.get_esd(l7policy.name)
-                if esd:
-                    profiles.update(m_service.process_esd(esd))
-                else:
-                    app.add_endpoint_policy(
-                        m_policy.get_name(l7policy.id),
-                        m_policy.get_endpoint_policy(l7policy)
-                    )
-            app.add_entities(m_service.get_service(listener, cert_manager))
-
-        # attach pools
+        # Attach pools
         for pool in loadbalancer.pools:
-            if utils.pending_delete(pool):
-                continue
-            app.add_entities(m_pool.get_pool(pool))
+            if not utils.pending_delete(pool):
+                app.add_entities(m_pool.get_pool(pool))
 
-        tenant.add_application(
-            m_app.get_name(loadbalancer.id),
-            app)
+        # Attach newly created application
+        tenant.add_application(m_app.get_name(loadbalancer.id), app)
 
     return bigip.post(json=decl.to_json())
 
