@@ -113,7 +113,7 @@ class StatusManager(BigipAS3RestClient):
     def heartbeat(self):
         """Sends heartbeat and status information to running octavia healthmanager via UDP. The format can be seen in
         octavia.amphorae.drivers.health.heartbeat_udp.UDPStatusGetter.dorecv.
-        Scrapes Virtual, Pool and Pool Member statistics and status\.
+        Scrapes Virtual, Pool and Pool Member statistics and status.
         Also updates listener_count for amphora database via update_listener_count() function. This is needed for
         scheduling decisions.
         """
