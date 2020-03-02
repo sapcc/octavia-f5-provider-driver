@@ -23,6 +23,8 @@ from requests.auth import HTTPBasicAuth
 from six.moves.urllib import parse
 from urllib3.util.retry import Retry
 
+from octavia_f5.utils import exceptions
+
 LOG = logging.getLogger(__name__)
 
 AS3_LOGIN_PATH = '/mgmt/shared/authn/login'
@@ -101,6 +103,20 @@ class BigipAS3RestClient(object):
         session.verify = self.enable_verify
         return session
 
+    @staticmethod
+    def _check_response(response):
+        if response.headers.get('Content-Type') == 'application/json':
+            text = response.json()
+            if not response.ok:
+                if 'errors' in text:
+                    raise exceptions.AS3Exception(text.get('errors'))
+                if 'message' in text:
+                    raise exceptions.AS3Exception(text.get('message'))
+            else:
+                LOG.debug(json.dumps(text.get('results'), indent=4, sort_keys=True))
+        else:
+            LOG.debug(response.text)
+
     @_metric_authorization_exceptions.count_exceptions()
     @_metric_authorization_duration.time()
     def reauthorize(self):
@@ -136,14 +152,7 @@ class BigipAS3RestClient(object):
         response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
         self._metric_httpstatus.labels(method='post', statuscode=response.status_code).inc()
         LOG.debug("POST finished with %d", response.status_code)
-        if response.headers.get('Content-Type') == 'application/json':
-            content = json.loads(response.text)
-            if 'results' in content:
-                LOG.debug(json.dumps(content['results'], indent=4, sort_keys=True))
-            else:
-                LOG.debug(json.dumps(content, indent=4, sort_keys=True))
-        else:
-            LOG.debug(response.text)
+        self._check_response(response)
         return response
 
     @_metric_patch_exceptions.count_exceptions()
@@ -158,10 +167,7 @@ class BigipAS3RestClient(object):
         params.update({'op': operation, 'path': path})
         response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
         self._metric_httpstatus.labels(method='patch', statuscode=response.status_code).inc()
-        if response.headers.get('Content-Type') == 'application/json':
-            LOG.debug(json.dumps(json.loads(response.text), indent=4, sort_keys=True))
-        else:
-            LOG.debug(response.text)
+        self._check_response(response)
         return response
 
     @_metric_delete_exceptions.count_exceptions()
@@ -178,8 +184,5 @@ class BigipAS3RestClient(object):
         response = self.session.delete(self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants))))
         self._metric_httpstatus.labels(method='delete', statuscode=response.status_code).inc()
         LOG.debug("DELETE finished with %d", response.status_code)
-        if response.headers.get('Content-Type') == 'application/json':
-            LOG.debug(json.dumps(json.loads(response.text)['results'], indent=4, sort_keys=True))
-        else:
-            LOG.debug(response.text)
+        self._check_response(response)
         return response

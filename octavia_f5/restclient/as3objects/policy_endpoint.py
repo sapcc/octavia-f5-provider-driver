@@ -12,40 +12,53 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from octavia_f5.restclient import as3types
 from octavia_f5.restclient.as3classes import *
-from octavia_f5.utils.exceptions import *
 from octavia_f5.restclient.as3objects import pool
+from octavia_f5.utils.exceptions import *
+
+COMPARE_TYPE_MAP = {
+    'STARTS_WITH': 'starts-with',
+    'ENDS_WITH': 'ends-with',
+    'CONTAINS': 'contains',
+    'EQUAL_TO': 'equals'
+}
+COMPARE_TYPE_INVERT_MAP = {
+    'STARTS_WITH': 'does-not-start-with',
+    'ENDS_WITH': 'does-not-end-with',
+    'CONTAINS': 'does-not-contain',
+    'EQUAL_TO': 'does-not-equal'
+}
+COND_TYPE_MAP = {
+    'HOST_NAME': {'match_key': 'host', 'type': 'httpUri'},
+    'PATH': {'match_key': 'path', 'type': 'httpUri'},
+    'FILE_TYPE': {'match_key': 'extension', 'type': 'httpUri'},
+    'HEADER': {'match_key': 'all', 'type': 'httpHeader'},
+    'SSL_DN_FIELD': {'match_key': 'serverName', 'type': 'sslExtension'}
+}
+SUPPORTED_ACTION_TYPE = [
+    'REDIRECT_TO_POOL',
+    'REDIRECT_TO_URL',
+    'REJECT'
+]
 
 
 def get_name(policy_id):
     return constants.PREFIX_POLICY + \
-           policy_id.replace('/', '').replace('-','_')
+           policy_id.replace('/', '').replace('-', '_')
 
 
 def _get_condition(l7rule):
-    COMPARE_TYPE_MAP = {
-        'STARTS_WITH': 'startsWith',
-        'ENDS_WITH': 'endsWith',
-        'CONTAINS': 'contains',
-        'EQUAL_TO': 'equals'
-    }
-    COND_TYPE_MAP = {
-        'HOST_NAME': {'match_key': 'host', 'type': 'httpUri'},
-        'PATH': {'match_key': 'path', 'type': 'httpUri'},
-        'FILE_TYPE': {'match_key': 'extension', 'type': 'httpUri'},
-        'HEADER': {'match_key': 'all', 'type': 'httpHeader'},
-        'SSL_DN_FIELD': {'match_key': 'serverName', 'type': 'sslExtension'}
-    }
-
     if l7rule.type not in COND_TYPE_MAP:
         raise PolicyTypeNotSupported()
     if l7rule.compare_type not in COMPARE_TYPE_MAP:
         raise CompareTypeNotSupported()
-    if l7rule.invert:
-        raise PolicyRuleInvertNotSupported()
 
     args = dict()
-    operand = COMPARE_TYPE_MAP[l7rule.compare_type]
+    if l7rule.invert:
+        operand = COMPARE_TYPE_INVERT_MAP[l7rule.compare_type]
+    else:
+        operand = COMPARE_TYPE_MAP[l7rule.compare_type]
     condition = COND_TYPE_MAP[l7rule.type]
     compare_string = Policy_Compare_String(operand=operand, values=[l7rule.value])
     args[condition['match_key']] = compare_string
@@ -55,7 +68,6 @@ def _get_condition(l7rule):
 
 def _get_action(l7policy):
     # TODO!!! REDIRECT_PREFIX (http://abc.de -> https://abc.de)
-    SUPPORTED_ACTION_TYPE = ['REDIRECT_TO_POOL', 'REDIRECT_TO_URL', 'REJECT']
     if l7policy.action not in SUPPORTED_ACTION_TYPE:
         raise PolicyActionNotSupported()
 
@@ -78,9 +90,9 @@ def _get_action(l7policy):
 def get_endpoint_policy(l7policy):
     args = dict()
     if l7policy.name:
-        args['label'] = l7policy.name
+        args['label'] = as3types.f5label(l7policy.name)
     if l7policy.description:
-        args['remark'] = l7policy.description
+        args['remark'] = as3types.f5remark(l7policy.description)
     args['rules'] = [Endpoint_Policy_Rule(
         name=get_name(l7policy.id),
         conditions=[_get_condition(l7rule) for l7rule in l7policy.l7rules],

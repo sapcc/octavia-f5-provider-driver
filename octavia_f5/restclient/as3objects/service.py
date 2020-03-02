@@ -17,7 +17,7 @@ from oslo_log import log as logging
 
 from octavia.common import exceptions
 from octavia_f5.common import constants as const
-from octavia_f5.restclient import as3classes as as3
+from octavia_f5.restclient import as3classes as as3, as3types
 from octavia_f5.restclient.as3objects import certificate as m_cert
 from octavia_f5.restclient.as3objects import irule as m_irule
 from octavia_f5.restclient.as3objects import persist as m_persist
@@ -104,16 +104,15 @@ def get_service(listener, cert_manager, esd_repository):
     entities = []
     vip = listener.load_balancer.vip
     project_id = listener.load_balancer.project_id
+    label = as3types.f5label(listener.description or listener.id)
     service_args = {
         'virtualPort': listener.protocol_port,
         'virtualAddresses': [vip.ip_address],
         'persistenceMethods': [],
         'iRules': [],
-        'policyEndpoint': []
+        'policyEndpoint': [],
+        'label': label
     }
-
-    if listener.description:
-        service_args['label'] = listener.description
 
     # Determine service type
     if listener.protocol == const.PROTOCOL_TCP:

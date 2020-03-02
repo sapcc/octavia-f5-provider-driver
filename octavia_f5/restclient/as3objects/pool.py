@@ -16,6 +16,7 @@
 from octavia_f5.common import constants
 from oslo_log import log as logging
 
+from octavia_f5.restclient import as3types
 from octavia_f5.restclient.as3classes import Pool, Pointer
 from octavia_f5.restclient.as3objects import monitor as m_monitor
 from octavia_f5.restclient.as3objects import pool_member as m_member
@@ -48,8 +49,8 @@ def get_pool(pool):
     lbmode = _set_lb_method(lbaas_lb_method, pool.members)
 
     service_args = {
-        'label': (pool.name or pool.id)[:64],
-        'remark': (pool.description or pool.id)[:64],
+        'label': as3types.f5label(pool.name or pool.id),
+        'remark': as3types.f5remark(pool.description or pool.id),
         'loadBalancingMode': lbmode,
         'members': [],
     }
