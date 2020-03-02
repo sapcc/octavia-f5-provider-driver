@@ -486,6 +486,9 @@ class ControllerWorker(object):
                 load_balancer_id=load_balancer_id,
                 compute_flavor=CONF.host,
                 status=lib_consts.ACTIVE)
+            device_amp = self._amphora_repo.get(
+                db_apis.get_session(),
+                load_balancer_id=load_balancer_id)
 
         # update host if not updated yet
         if device_amp.compute_flavor != CONF.host:
