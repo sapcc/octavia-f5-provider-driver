@@ -35,6 +35,15 @@ class BaseDescription(object):
                 continue
             self.__dict__.update({item: data[item]})
 
+    def __hash__(self):
+        return hash(frozenset(self.to_dict().items()))
+
+    def __eq__(self, other):
+        if isinstance(other, BaseDescription):
+            return self.to_dict() == other.to_dict()
+
+        return False
+
     def require(self, key):
         if getattr(self, key, None) is None:
             raise as3exceptions.RequiredKeyMissingException(key)
