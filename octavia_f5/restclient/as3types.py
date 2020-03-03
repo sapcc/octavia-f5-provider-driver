@@ -28,5 +28,5 @@ def f5remark(remark):
 def f5label(label):
     # Remove control characters and limit to 64 characters.
     nstr = "".join(ch for ch in label
-                   if unicodedata.category(ch)[0] != "C")
+                   if unicodedata.category(ch)[0] != "C" and ch != "&")
     return nstr[:64]
