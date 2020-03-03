@@ -14,13 +14,13 @@
 # under the License.
 
 import re
+import string
 import unicodedata
 
 
 def f5remark(remark):
     # Remove control characters.
-    nstr = "".join(ch for ch in remark
-                   if unicodedata.category(ch)[0] != "C")
+    nstr = "".join(ch for ch in remark if ch in string.printable)
 
     # Remove double-quote ("), and backslash (\), limit to 64 characters.
     return re.sub('["\\\\]', '', nstr)[:64]
@@ -28,6 +28,5 @@ def f5remark(remark):
 
 def f5label(label):
     # Remove control characters and limit to 64 characters.
-    nstr = "".join(ch for ch in label
-                   if unicodedata.category(ch)[0] != "C" and ch != "&")
+    nstr = "".join(ch for ch in label if ch in string.printable and ch != "&")
     return nstr[:64]
