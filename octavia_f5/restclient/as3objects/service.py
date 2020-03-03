@@ -296,6 +296,9 @@ def get_service(listener, cert_manager, esd_repository):
             # reference endpoint policy object in service
             service_args['policyEndpoint'].append(policy_name)
 
+    # Ensure no duplicate iRules
+    service_args['iRules'] = list(set(service_args['iRules']))
+
     # create service object and fill in additional fields
     service = as3.Service(**service_args)
 
