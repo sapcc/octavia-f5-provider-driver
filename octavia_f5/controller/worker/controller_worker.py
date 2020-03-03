@@ -12,7 +12,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-
+import collections
 import threading
 
 import prometheus_client as prometheus
@@ -22,14 +22,14 @@ from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from sqlalchemy.orm import exc as db_exceptions
-
+from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
-from octavia_f5.db import repositories as f5_repos
 from octavia_f5.controller.worker import status
 from octavia_f5.controller.worker.f5agent_driver import member_create
 from octavia_f5.controller.worker.f5agent_driver import tenant_delete
 from octavia_f5.controller.worker.f5agent_driver import tenant_update
 from octavia_f5.db import api as db_apis
+from octavia_f5.db import repositories as f5_repos
 from octavia_f5.restclient.as3restclient import BigipAS3RestClient
 from octavia_f5.utils import cert_manager
 from octavia_f5.utils import esd_repo, driver_utils, exceptions
@@ -90,7 +90,7 @@ class ControllerWorker(object):
         """ Reconciliation loop that pics up un-scheduled loadbalancers and
             schedules them to this worker.
         """
-        lbs = set()
+        lbs = []
         pending_create_lbs = self._loadbalancer_repo.get_all(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_CREATE,
@@ -99,26 +99,36 @@ class ControllerWorker(object):
             # bind to loadbalancer if scheduled to this host
             if CONF.host == self.network_driver.get_scheduled_host(lb.vip.port_id):
                 self.ensure_amphora_exists(lb.id)
-                lbs.add(lb)
+                lbs.append(lb)
 
-        lbs.update(self._loadbalancer_repo.get_all_from_host(
+        lbs.extend(self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_UPDATE))
 
         pools = self._pool_repo.get_pending_from_host(db_apis.get_session())
-        lbs.update([pool.load_balancer for pool in pools])
+        lbs.extend([pool.load_balancer for pool in pools])
 
         l7policies = self._l7policy_repo.get_pending_from_host(db_apis.get_session())
-        lbs.update([l7policy.listener.load_balancer for l7policy in l7policies])
+        lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
 
+        pending_networks = collections.defaultdict(list)
         for lb in lbs:
-            LOG.info("Found pending tenant network %s, syncing...", lb.vip.network_id)
+            if lb not in pending_networks[lb.vip.network_id]:
+                pending_networks[lb.vip.network_id].append(lb)
+
+        for network_id, loadbalancers in pending_networks:
+            LOG.info("Found pending tenant network %s, syncing...", network_id)
             try:
-                if self._refresh(lb.vip.network_id).ok:
-                    self.status.update_status([lb])
+                if self._refresh(network_id).ok:
+                    self.status.update_status(loadbalancers)
             except exceptions.AS3Exception as e:
-                LOG.error("AS3 exception while syncing LB %s: %s", lb.id, e)
-                self.status.set_error(lb)
+                LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
+                for lb in loadbalancers:
+                    self.status.set_error(lb)
+            except o_exceptions.CertificateRetrievalException as e:
+                LOG.error("Could not retrieve certificate for tenant %s: %s", network_id, e)
+                for lb in loadbalancers:
+                    self.status.set_error(lb)
 
         lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
