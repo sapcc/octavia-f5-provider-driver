@@ -116,7 +116,7 @@ class ControllerWorker(object):
             if lb not in pending_networks[lb.vip.network_id]:
                 pending_networks[lb.vip.network_id].append(lb)
 
-        for network_id, loadbalancers in pending_networks:
+        for network_id, loadbalancers in pending_networks.items():
             LOG.info("Found pending tenant network %s, syncing...", network_id)
             try:
                 if self._refresh(network_id).ok:
