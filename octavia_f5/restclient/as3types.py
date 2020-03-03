@@ -1,3 +1,4 @@
+# coding=utf-8
 # Copyright 2019, 2020 SAP SE
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -21,7 +22,7 @@ def f5remark(remark):
     nstr = "".join(ch for ch in remark
                    if unicodedata.category(ch)[0] != "C")
 
-    # Remove double-quote (“), and backslash (\), limit to 64 characters.
+    # Remove double-quote ("), and backslash (\), limit to 64 characters.
     return re.sub('["\\\\]', '', nstr)[:64]
 
 
