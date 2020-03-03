@@ -486,6 +486,7 @@ class ControllerWorker(object):
                 load_balancer_id=load_balancer_id,
                 compute_flavor=CONF.host,
                 status=lib_consts.ACTIVE)
+            return
 
         # update host if not updated yet
         if device_amp.compute_flavor != CONF.host:
