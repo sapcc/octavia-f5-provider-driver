@@ -17,6 +17,10 @@ class AS3Exception(Exception):
     pass
 
 
+class RetryException(Exception):
+    pass
+
+
 class PolicyHasNoRules(AS3Exception):
     pass
 

@@ -105,13 +105,25 @@ class BigipAS3RestClient(object):
 
     @staticmethod
     def _check_response(response):
+        def _check_for_errors(text):
+            if 'errors' in text:
+                raise exceptions.AS3Exception(text['errors'])
+            if 'message' in text:
+                if 'please try again' in text['message']:
+                    # BigIP busy, just throw retry-exception
+                    raise exceptions.RetryException(text['message'])
+                if 'the requested route-domain' in text.get('response'):
+                    # Self-IP not created yet, retry
+                    raise exceptions.RetryException(text['message'])
+                err = '{}: {}'.format(text['message'], text.get('response'))
+                raise exceptions.AS3Exception(err)
+
         if response.headers.get('Content-Type') == 'application/json':
             text = response.json()
             if not response.ok:
-                if 'errors' in text:
-                    raise exceptions.AS3Exception(text.get('errors'))
-                if 'message' in text:
-                    raise exceptions.AS3Exception(text.get('message'))
+                _check_for_errors(text)
+                if 'results' in text:
+                    _check_for_errors(text['results'][0])
             else:
                 LOG.debug(json.dumps(text.get('results'), indent=4, sort_keys=True))
         else:
