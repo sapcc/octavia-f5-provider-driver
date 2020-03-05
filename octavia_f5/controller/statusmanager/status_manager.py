@@ -86,16 +86,19 @@ class StatusManager(BigipAS3RestClient):
 
     @staticmethod
     def _listener_from_path(path):
+        """Extract the listener ID from a BigIP path"""
         listener = path.split('/')[-1]
         return listener.replace(constants.PREFIX_LISTENER, '').replace('_', '-')
 
     @staticmethod
     def _pool_from_path(path):
+        """Extract the pool ID from a BigIP path"""
         pool = path.split('/')[-1]
         return pool.replace(constants.PREFIX_POOL, '').replace('_', '-')
 
     @staticmethod
     def _loadbalancer_from_path(path):
+        """Extract the load balancer ID from a BigIP path"""
         pool = path.split('/')[2]
         return pool.replace(constants.PREFIX_LOADBALANCER, '').replace('_', '-')
 
