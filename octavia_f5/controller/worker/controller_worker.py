@@ -15,6 +15,7 @@
 import collections
 import threading
 
+import futurist
 import prometheus_client as prometheus
 import tenacity
 from futurist import periodics
@@ -22,6 +23,7 @@ from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from sqlalchemy.orm import exc as db_exceptions
+
 from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
 from octavia_f5.controller.worker import status
@@ -70,6 +72,7 @@ class ControllerWorker(object):
         self.network_driver = driver_utils.get_network_driver()
         self.cert_manager = cert_manager.CertManagerWrapper()
         self.status = status.StatusManager(self.bigip)
+        self.executor = futurist.ThreadPoolExecutor()
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None)]
         )
@@ -136,7 +139,7 @@ class ControllerWorker(object):
             provisioning_status=lib_consts.PENDING_DELETE)
         for lb in lbs_to_delete:
             LOG.info("Found pending deletion of lb %s", lb.id)
-            self.delete_load_balancer(lb.id)
+            self.executor.submit(self.delete_load_balancer, lb.id)
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
