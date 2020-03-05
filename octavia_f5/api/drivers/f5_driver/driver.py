@@ -18,7 +18,6 @@ from oslo_log import log as logging
 from octavia.api.drivers.amphora_driver import driver
 from octavia.common import constants as consts
 from octavia.db import api as db_apis
-from octavia_f5.common import constants as f5_consts
 from octavia_f5.utils import driver_utils
 from octavia_lib.api.drivers import data_models as driver_dm
 from octavia_lib.api.drivers import exceptions
@@ -41,16 +40,17 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
 
     def _get_server(self, loadbalancer_id):
         """ Get scheduled host of the loadbalancer.
-
         :param loadbalancer_id: loadbalancer id
         :return: scheduled host
         """
-        return getattr(
-            self.repositories.amphora.get(
-                db_apis.get_session(),
-                load_balancer_id=loadbalancer_id,
-                status=f5_consts.ACTIVE),
-            'compute_flavor', None)
+        loadbalancer = self.repositories.load_balancer.get(
+            db_apis.get_session(), id=loadbalancer_id)
+        if loadbalancer.server_group_id:
+            return loadbalancer.server_group_id
+        else:
+            # fetch scheduled server from VIP port
+            network_driver = driver_utils.get_network_driver()
+            return network_driver.get_scheduled_host(loadbalancer.vip_port_id)
 
     def loadbalancer_create(self, loadbalancer):
         if loadbalancer.flavor == driver_dm.Unset:

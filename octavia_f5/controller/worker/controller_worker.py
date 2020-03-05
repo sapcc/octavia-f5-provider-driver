@@ -98,6 +98,7 @@ class ControllerWorker(object):
         for lb in pending_create_lbs:
             # bind to loadbalancer if scheduled to this host
             if CONF.host == self.network_driver.get_scheduled_host(lb.vip.port_id):
+                self.ensure_host_set(lb)
                 self.ensure_amphora_exists(lb.id)
                 lbs.append(lb)
 
@@ -121,12 +122,12 @@ class ControllerWorker(object):
             try:
                 if self._refresh(network_id).ok:
                     self.status.update_status(loadbalancers)
+            except exceptions.RetryException as e:
+                LOG.warning("Device is busy, retrying with next sync: %s", e)
+            except o_exceptions.CertificateRetrievalException as e:
+                LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
             except exceptions.AS3Exception as e:
                 LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
-                for lb in loadbalancers:
-                    self.status.set_error(lb)
-            except o_exceptions.CertificateRetrievalException as e:
-                LOG.error("Could not retrieve certificate for tenant %s: %s", network_id, e)
                 for lb in loadbalancers:
                     self.status.set_error(lb)
 
@@ -184,6 +185,7 @@ class ControllerWorker(object):
             raise db_exceptions.NoResultFound
 
         self.ensure_amphora_exists(lb.id)
+        self.ensure_host_set(lb)
         if self._refresh(lb.vip.network_id).ok:
             self.status.set_active(lb)
         else:
@@ -524,3 +526,9 @@ class ControllerWorker(object):
 
     def update_amphora_agent_config(self, amphora_id):
         pass
+
+    def ensure_host_set(self, loadbalancer):
+        if CONF.host != loadbalancer.server_group_id:
+            self._loadbalancer_repo.update(db_apis.get_session(),
+                                           id=loadbalancer.id,
+                                           server_group_id=CONF.host[:36])

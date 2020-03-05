@@ -24,6 +24,7 @@ from sqlalchemy.orm import subqueryload
 from octavia.common import constants as consts
 from octavia.db import models
 from octavia.db import repositories
+from octavia_f5.utils import driver_utils
 from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
@@ -57,23 +58,14 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
         :param filters: Filters to decide which entities should be retrieved.
         :returns: [octavia.common.data_model]
         """
-        deleted = filters.pop('show_deleted', True)
-
-        # sub-query load the tables we need
-        # no-load (blank) the tables we don't need
         query_options = (
             subqueryload(models.LoadBalancer.vip),
-            subqueryload(models.LoadBalancer.amphorae),
+            subqueryload(models.LoadBalancer.pools),
+            subqueryload(models.LoadBalancer.listeners),
             noload('*'))
-
-        query = session.query(models.LoadBalancer).filter_by(**filters)
-        query = query.filter(models.Amphora.compute_flavor == host)
-        query = query.options(query_options)
-        if not deleted:
-            query = query.filter(
-                self.model_class.provisioning_status != consts.DELETED)
-
-        return [model.to_data_model() for model in query.all()]
+        filters.update(server_group_id=host)
+        return super(LoadBalancerRepository, self).get_all(
+            session, query_options=query_options, **filters)[0]
 
 
 class PoolRepository(repositories.PoolRepository):
@@ -86,7 +78,7 @@ class PoolRepository(repositories.PoolRepository):
         """
 
         query = session.query(models.Pool)
-        query = query.filter(models.Amphora.compute_flavor == host,
+        query = query.filter(models.LoadBalancer.server_group_id == host,
                              models.Pool.provisioning_status.in_([
                                  lib_consts.PENDING_UPDATE,
                                  lib_consts.PENDING_CREATE
@@ -105,7 +97,7 @@ class L7PolicyRepository(repositories.L7PolicyRepository):
         """
 
         query = session.query(models.L7Policy)
-        query = query.filter(models.Amphora.compute_flavor == host,
+        query = query.filter(models.LoadBalancer.server_group_id == host,
                              models.L7Policy.provisioning_status.in_([
                                  lib_consts.PENDING_UPDATE,
                                  lib_consts.PENDING_CREATE
