@@ -87,16 +87,26 @@ class ControllerWorker(object):
 
     @periodics.periodic(120, run_immediately=True)
     def pending_sync(self):
-        lbs_to_delete = self.get_lbs_to_delete()
+        """
+        Reconciliation loop that
+        - schedules unscheduled load balancers to this worker
+        - deletes load balancers that are PENDING_DELETE
+        """
+
+        # schedule unscheduled load balancers to this worker
+        self.schedule_lbs_to_worker()
+
+        # delete load balancers that are PENDING_DELETE
+        lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
+            db_apis.get_session(),
+            provisioning_status=lib_consts.PENDING_DELETE)
         for lb in lbs_to_delete:
             LOG.info("Found pending deletion of lb %s", lb.id)
             self.delete_load_balancer(lb.id)
 
     @lockutils.synchronized('tenant_refresh')
-    def get_lbs_to_delete(self):
-        """ Reconciliation loop that pics up un-scheduled loadbalancers and
-            schedules them to this worker.
-        """
+    def schedule_lbs_to_worker(self):
+        """Pick up unscheduled load balancers and schedule them to this worker"""
         lbs = []
         pending_create_lbs = self._loadbalancer_repo.get_all(
             db_apis.get_session(),
@@ -137,12 +147,6 @@ class ControllerWorker(object):
                 LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
                 for lb in loadbalancers:
                     self.status.set_error(lb)
-
-        lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
-            db_apis.get_session(),
-            provisioning_status=lib_consts.PENDING_DELETE)
-
-        return lbs_to_delete
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
