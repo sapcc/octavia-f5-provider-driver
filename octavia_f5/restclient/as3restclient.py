@@ -112,7 +112,7 @@ class BigipAS3RestClient(object):
                 if 'please try again' in text['message']:
                     # BigIP busy, just throw retry-exception
                     raise exceptions.RetryException(text['message'])
-                if 'the requested route-domain' in text.get('response'):
+                if 'the requested route-domain' in text.get('response', ''):
                     # Self-IP not created yet, retry
                     raise exceptions.RetryException(text['message'])
                 err = '{}: {}'.format(text['message'], text.get('response'))
