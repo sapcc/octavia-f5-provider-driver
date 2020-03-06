@@ -15,7 +15,6 @@
 import collections
 import threading
 
-import futurist
 import prometheus_client as prometheus
 import tenacity
 from futurist import periodics
@@ -72,7 +71,6 @@ class ControllerWorker(object):
         self.network_driver = driver_utils.get_network_driver()
         self.cert_manager = cert_manager.CertManagerWrapper()
         self.status = status.StatusManager(self.bigip)
-        self.executor = futurist.ThreadPoolExecutor()
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None)]
         )
@@ -88,8 +86,14 @@ class ControllerWorker(object):
         super(ControllerWorker, self).__init__()
 
     @periodics.periodic(120, run_immediately=True)
-    @lockutils.synchronized('tenant_refresh')
     def pending_sync(self):
+        lbs_to_delete = self.get_lbs_to_delete()
+        for lb in lbs_to_delete:
+            LOG.info("Found pending deletion of lb %s", lb.id)
+            self.delete_load_balancer(lb.id)
+
+    @lockutils.synchronized('tenant_refresh')
+    def get_lbs_to_delete(self):
         """ Reconciliation loop that pics up un-scheduled loadbalancers and
             schedules them to this worker.
         """
@@ -137,9 +141,8 @@ class ControllerWorker(object):
         lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_DELETE)
-        for lb in lbs_to_delete:
-            LOG.info("Found pending deletion of lb %s", lb.id)
-            self.executor.submit(self.delete_load_balancer, lb.id)
+
+        return lbs_to_delete
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
