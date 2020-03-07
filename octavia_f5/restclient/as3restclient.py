@@ -14,6 +14,8 @@
 
 import functools
 import json
+import os
+import signal
 
 import prometheus_client as prometheus
 import requests
@@ -30,6 +32,7 @@ LOG = logging.getLogger(__name__)
 AS3_LOGIN_PATH = '/mgmt/shared/authn/login'
 AS3_TOKENS_PATH = '/mgmt/shared/authz/tokens/{}'
 AS3_DECLARE_PATH = '/mgmt/shared/appsvcs/declare'
+AS3_INFO_PATH = '/mgmt/shared/appsvcs/info'
 
 
 def authorized(func):
@@ -54,6 +57,13 @@ class BigipAS3RestClient(object):
         self.token = None
         self.session = self._create_session()
         self.esd = esd
+        try:
+            info = self.info()
+            info.raise_for_status()
+        except requests.exceptions.HTTPError as e:
+            # Failed connecting to AS3 endpoint, gracefully terminate
+            LOG.error('Could not connect to AS3 endpoint: %s', e)
+            os.kill(os.getpid(), signal.SIGTERM)
 
     _metric_httpstatus = prometheus.metrics.Counter(
         'octavia_as3_httpstatus', 'Number of HTTP statuses in responses to AS3 requests', ['method', 'statuscode'])
@@ -139,9 +149,9 @@ class BigipAS3RestClient(object):
             "password": self.bigip.password,
             "loginProviderName": "tmos"
         }
-        basicauth = HTTPBasicAuth(self.bigip.username, self.bigip.password)
-        r = self.session.post(self._url(AS3_LOGIN_PATH),
-                              json=credentials, auth=basicauth)
+
+        self.session.headers.pop('X-F5-Auth-Token', None)
+        r = self.session.post(self._url(AS3_LOGIN_PATH), json=credentials)
         self._metric_httpstatus.labels(method='post', statuscode=r.status_code).inc()
         r.raise_for_status()
         self.token = r.json()['token']['token']
@@ -198,3 +208,8 @@ class BigipAS3RestClient(object):
         LOG.debug("DELETE finished with %d", response.status_code)
         self._check_response(response)
         return response
+
+    @authorized
+    def info(self):
+        return self.session.get(self._url(AS3_INFO_PATH))
+        pass
