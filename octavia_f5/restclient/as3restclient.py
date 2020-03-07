@@ -21,7 +21,6 @@ import prometheus_client as prometheus
 import requests
 from oslo_log import log as logging
 from requests.adapters import HTTPAdapter
-from requests.auth import HTTPBasicAuth
 from six.moves.urllib import parse
 from urllib3.util.retry import Retry
 
@@ -49,22 +48,6 @@ def authorized(func):
 
 
 class BigipAS3RestClient(object):
-    def __init__(self, bigip_url, enable_verify=True, enable_token=True,
-                 esd=None):
-        self.bigip = parse.urlsplit(bigip_url, allow_fragments=False)
-        self.enable_verify = enable_verify
-        self.enable_token = enable_token
-        self.token = None
-        self.session = self._create_session()
-        self.esd = esd
-        try:
-            info = self.info()
-            info.raise_for_status()
-        except requests.exceptions.HTTPError as e:
-            # Failed connecting to AS3 endpoint, gracefully terminate
-            LOG.error('Could not connect to AS3 endpoint: %s', e)
-            os.kill(os.getpid(), signal.SIGTERM)
-
     _metric_httpstatus = prometheus.metrics.Counter(
         'octavia_as3_httpstatus', 'Number of HTTP statuses in responses to AS3 requests', ['method', 'statuscode'])
     _metric_post = prometheus.metrics.Counter(
@@ -92,6 +75,25 @@ class BigipAS3RestClient(object):
         'octavia_as3_authorization_duration', 'Time it needs to (re)authorize')
     _metric_authorization_exceptions = prometheus.metrics.Counter(
         'octavia_as3_authorization_exceptions', 'Number of exceptions at (re)authorization')
+    _metric_version = prometheus.Info(
+        'octavia_as3_version', 'AS3 Version')
+
+    def __init__(self, bigip_url, enable_verify=True, enable_token=True,
+                 esd=None):
+        self.bigip = parse.urlsplit(bigip_url, allow_fragments=False)
+        self.enable_verify = enable_verify
+        self.enable_token = enable_token
+        self.token = None
+        self.session = self._create_session()
+        self.esd = esd
+        try:
+            info = self.info()
+            info.raise_for_status()
+            self._metric_version.info(info.json())
+        except requests.exceptions.HTTPError as e:
+            # Failed connecting to AS3 endpoint, gracefully terminate
+            LOG.error('Could not connect to AS3 endpoint: %s', e)
+            os.kill(os.getpid(), signal.SIGTERM)
 
     def _url(self, path):
         return parse.urlunsplit(
