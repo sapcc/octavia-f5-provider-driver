@@ -52,7 +52,7 @@ def update_stats(obj):
 
 class StatusManager(BigipAS3RestClient):
     def __init__(self):
-        super(StatusManager, self).__init__(bigip_url=CONF.f5_agent.bigip_url,
+        super(StatusManager, self).__init__(bigip_urls=(CONF.f5_agent.bigip_url_a, CONF.f5_agent.bigip_url_b),
                                             enable_verify=CONF.f5_agent.bigip_verify,
                                             enable_token=CONF.f5_agent.bigip_token)
         self.amphora_id = None

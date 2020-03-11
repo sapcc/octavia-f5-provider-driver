@@ -21,6 +21,10 @@ class RetryException(Exception):
     pass
 
 
+class FailoverException(Exception):
+    pass
+
+
 class PolicyHasNoRules(AS3Exception):
     pass
 
