@@ -38,7 +38,7 @@ def authorized(func):
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         response = func(self, *args, **kwargs)
-        if response.status_code == 401:
+        if response.status_code == 401 or 'X-F5-Auth-Token' not in self.session.headers:
             self.reauthorize()
             return func(self, *args, **kwargs)
         else:
