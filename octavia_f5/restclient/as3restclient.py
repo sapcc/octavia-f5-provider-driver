@@ -34,6 +34,38 @@ AS3_DECLARE_PATH = '/mgmt/shared/appsvcs/declare'
 AS3_INFO_PATH = '/mgmt/shared/appsvcs/info'
 
 
+def check_response(func):
+    def _check_for_errors(text):
+        if 'errors' in text:
+            raise exceptions.AS3Exception(text['errors'])
+        if 'message' in text:
+            if 'please try again' in text['message']:
+                # BigIP busy, just throw retry-exception
+                raise exceptions.RetryException(text['message'])
+            if 'the requested route-domain' in text.get('response', ''):
+                # Self-IP not created yet, retry
+                raise exceptions.RetryException(text['message'])
+            err = '{}: {}'.format(text['message'], text.get('response'))
+            raise exceptions.AS3Exception(err)
+
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        response = func(self, *args, **kwargs)
+        if response.headers.get('Content-Type') == 'application/json':
+            text = response.json()
+            if not response.ok:
+                _check_for_errors(text)
+                if 'results' in text:
+                    _check_for_errors(text['results'][0])
+            else:
+                LOG.debug(json.dumps(text.get('results'), indent=4, sort_keys=True))
+        else:
+            LOG.debug(response.text)
+        return response
+
+    return wrapper
+
+
 def authorized(func):
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
@@ -50,20 +82,14 @@ def authorized(func):
 class BigipAS3RestClient(object):
     _metric_httpstatus = prometheus.metrics.Counter(
         'octavia_as3_httpstatus', 'Number of HTTP statuses in responses to AS3 requests', ['method', 'statuscode'])
-    _metric_post = prometheus.metrics.Counter(
-        'octavia_as3_post', 'Amount of POST requests sent to AS3')
     _metric_post_duration = prometheus.metrics.Summary(
         'octavia_as3_post_duration', 'Time it needs to send a POST request to AS3')
     _metric_post_exceptions = prometheus.metrics.Counter(
         'octavia_as3_post_exceptions', 'Number of exceptions at POST requests sent to AS3')
-    _metric_patch = prometheus.metrics.Counter(
-        'octavia_as3_patch', 'Amount of PATCH requests sent to AS3')
     _metric_patch_duration = prometheus.metrics.Summary(
         'octavia_as3_patch_duration', 'Time it needs to send a PATCH request to AS3')
     _metric_patch_exceptions = prometheus.metrics.Counter(
         'octavia_as3_patch_exceptions', 'Number of exceptions at PATCH request sent to AS3')
-    _metric_delete = prometheus.metrics.Counter(
-        'octavia_as3_delete', 'Amount of DELETE requests  sent to AS3')
     _metric_delete_duration = prometheus.metrics.Summary(
         'octavia_as3_delete_duration', 'Time it needs to send a DELETE request to AS3')
     _metric_delete_exceptions = prometheus.metrics.Counter(
@@ -115,31 +141,14 @@ class BigipAS3RestClient(object):
         session.verify = self.enable_verify
         return session
 
-    @staticmethod
-    def _check_response(response):
-        def _check_for_errors(text):
-            if 'errors' in text:
-                raise exceptions.AS3Exception(text['errors'])
-            if 'message' in text:
-                if 'please try again' in text['message']:
-                    # BigIP busy, just throw retry-exception
-                    raise exceptions.RetryException(text['message'])
-                if 'the requested route-domain' in text.get('response', ''):
-                    # Self-IP not created yet, retry
-                    raise exceptions.RetryException(text['message'])
-                err = '{}: {}'.format(text['message'], text.get('response'))
-                raise exceptions.AS3Exception(err)
-
-        if response.headers.get('Content-Type') == 'application/json':
-            text = response.json()
-            if not response.ok:
-                _check_for_errors(text)
-                if 'results' in text:
-                    _check_for_errors(text['results'][0])
-            else:
-                LOG.debug(json.dumps(text.get('results'), indent=4, sort_keys=True))
-        else:
-            LOG.debug(response.text)
+    @check_response
+    @authorized
+    def _call_method(self, method, url, **kwargs):
+        meth = getattr(self.session, method)
+        response = meth(url, **kwargs)
+        self._metric_httpstatus.labels(method=method, statuscode=response.status_code).inc()
+        LOG.debug("%s finished with %d", method, response.status_code)
+        return response
 
     @_metric_authorization_exceptions.count_exceptions()
     @_metric_authorization_duration.time()
@@ -168,50 +177,32 @@ class BigipAS3RestClient(object):
         LOG.debug("Reauthorized!")
 
     @_metric_post_exceptions.count_exceptions()
-    @authorized
     @_metric_post_duration.time()
     def post(self, **kwargs):
-        self._metric_post.inc()
         LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
-        response = self.session.post(self._url(AS3_DECLARE_PATH), **kwargs)
-        self._metric_httpstatus.labels(method='post', statuscode=response.status_code).inc()
-        LOG.debug("POST finished with %d", response.status_code)
-        self._check_response(response)
-        return response
+        return self._call_method('post', self._url(AS3_DECLARE_PATH), **kwargs)
 
     @_metric_patch_exceptions.count_exceptions()
-    @authorized
     @_metric_patch_duration.time()
     def patch(self, operation, path, **kwargs):
-        self._metric_patch.inc()
         LOG.debug("Calling PATCH %s with path %s", operation, path)
         if 'value' in kwargs:
             LOG.debug(json.dumps(kwargs['value'], indent=4, sort_keys=True))
         params = kwargs.copy()
         params.update({'op': operation, 'path': path})
-        response = self.session.patch(self._url(AS3_DECLARE_PATH), json=[params])
-        self._metric_httpstatus.labels(method='patch', statuscode=response.status_code).inc()
-        self._check_response(response)
-        return response
+        return self._call_method('patch', self._url(AS3_DECLARE_PATH), json=[params])
 
     @_metric_delete_exceptions.count_exceptions()
-    @authorized
     @_metric_delete_duration.time()
     def delete(self, **kwargs):
-        self._metric_delete.inc()
         tenants = kwargs.get('tenants', None)
         if not tenants:
             LOG.error("Delete called without tenant, would wipe all AS3 Declaration, ignoring!")
             return None
 
         LOG.debug("Calling DELETE for tenants %s", tenants)
-        response = self.session.delete(self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants))))
-        self._metric_httpstatus.labels(method='delete', statuscode=response.status_code).inc()
-        LOG.debug("DELETE finished with %d", response.status_code)
-        self._check_response(response)
-        return response
+        url = self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants)))
+        return self._call_method('delete', url)
 
-    @authorized
     def info(self):
-        return self.session.get(self._url(AS3_INFO_PATH))
-        pass
+        return self._call_method('get', self._url(AS3_INFO_PATH))
