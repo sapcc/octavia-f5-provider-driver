@@ -22,9 +22,9 @@ CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 UDP_CHECK = "#!/bin/sh\n/usr/bin/nc -uzv -w1 $1 $2 > /dev/null && echo up"
 
+
 def get_name(healthmonitor_id):
-    return constants.PREFIX_HEALTH_MONITOR + \
-           healthmonitor_id.replace('/', '').replace('-', '_')
+    return "{}{}".format(constants.PREFIX_HEALTH_MONITOR, healthmonitor_id)
 
 
 def get_monitor(health_monitor):

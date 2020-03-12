@@ -18,8 +18,7 @@ from octavia_f5.restclient.as3classes import Member
 
 
 def get_name(member_id):
-    return constants.PREFIX_MEMBER + \
-           member_id.replace('/', '').replace('-', '_')
+    return "{}{}".format(constants.PREFIX_MEMBER, member_id)
 
 
 def get_member(member):
