@@ -94,7 +94,7 @@ class ControllerWorker(object):
         """
 
         # schedule unscheduled load balancers to this worker
-        self.schedule_lbs_to_worker()
+        self.sync_loadbalancers()
 
         # delete load balancers that are PENDING_DELETE
         lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
@@ -105,8 +105,8 @@ class ControllerWorker(object):
             self.delete_load_balancer(lb.id)
 
     @lockutils.synchronized('tenant_refresh')
-    def schedule_lbs_to_worker(self):
-        """Pick up unscheduled load balancers and schedule them to this worker"""
+    def sync_loadbalancers(self):
+        """Sync loadbalancers that are in a PENDING state"""
         lbs = []
         pending_create_lbs = self._loadbalancer_repo.get_all(
             db_apis.get_session(),
