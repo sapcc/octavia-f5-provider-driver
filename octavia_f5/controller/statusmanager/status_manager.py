@@ -120,8 +120,15 @@ class StatusManager(BigipAS3RestClient):
         Also updates listener_count for amphora database via update_listener_count() function. This is needed for
         scheduling decisions.
         """
-        self._metric_heartbeat.inc()
 
+        # Check for failover
+        device_json = self.get(path='/tm/cm/device').json()
+        for device in device_json['items']:
+            if device['name'] == self.active_bigip.hostname and device['failoverState'] != 'active':
+                self._failover()
+                return
+
+        self._metric_heartbeat.inc()
         amphora_messages = {}
 
         def _get_lb_msg(lb_id):
