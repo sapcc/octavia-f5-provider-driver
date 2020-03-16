@@ -137,6 +137,7 @@ class StatusManager(BigipAS3RestClient):
 
         vipstats = self.get(path='tm/ltm/virtual/stats').json()
         if 'entries' not in vipstats:
+            self.update_listener_count(0)
             return
 
         self.update_listener_count(len(vipstats['entries'].keys()))
