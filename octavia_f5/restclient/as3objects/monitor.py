@@ -13,10 +13,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from octavia_f5.common import constants
-from oslo_log import log as logging
-from octavia_f5.restclient.as3classes import Monitor
 from oslo_config import cfg
+from oslo_log import log as logging
+
+from octavia_f5.common import constants
+from octavia_f5.restclient.as3classes import Monitor
+from octavia_f5.utils import driver_utils as utils
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -27,7 +29,35 @@ def get_name(healthmonitor_id):
            healthmonitor_id.replace('/', '').replace('-', '_')
 
 
-def get_monitor(health_monitor):
+def get_monitors(health_monitor, members):
+    # Check if all members have a custom address/port, so we could just adapt the monitor
+    monitor_addresses = [member.monitor_address for member in members]
+    monitor_ports = [member.monitor_port for member in members]
+
+    ref_addr = monitor_addresses[0] or None
+    ref_port = monitor_ports[0] or None
+
+    if all(x == ref_addr for x in monitor_addresses) and all(x == ref_port for x in monitor_ports):
+        return [(get_name(health_monitor.id),
+                 get_monitor(health_monitor, ref_addr, ref_port))]
+
+    # Create the standard health monitor without custom addresses/ports
+    entities = [(get_name(health_monitor.id), get_monitor(health_monitor))]
+
+    # Create additional custom health monitors with custom addresses/ports
+    for member in members:
+        # Custom member address
+        if not utils.pending_delete(member) and (member.monitor_address or member.monitor_port):
+            member_hm = get_monitor(health_monitor,
+                                    member.monitor_address,
+                                    member.monitor_port)
+            name = get_name(member.id)
+            entities.append((name, member_hm))
+
+    return entities
+
+
+def get_monitor(health_monitor, target_address=None, target_port=None):
     args = dict()
 
     # Standard Octavia monitor types
@@ -80,16 +110,20 @@ def get_monitor(health_monitor):
         args['send'] = send
         args['receive'] = _get_recv_text(health_monitor)
 
-    if hasattr(health_monitor, 'delay'):
+    if health_monitor.delay:
         args["interval"] = health_monitor.delay
-    if hasattr(health_monitor, 'timeout'):
+    if health_monitor.timeout:
         timeout = (int(health_monitor.fall_threshold) *
                    int(health_monitor.timeout))
         args["timeout"] = timeout
-    if hasattr(health_monitor, 'rise_threshold'):
+    if health_monitor.rise_threshold:
         time_until_up = (int(health_monitor.rise_threshold) *
                          int(health_monitor.timeout))
         args["timeUntilUp"] = time_until_up
+    if target_address:
+        args["targetAddress"] = target_address
+    if target_port:
+        args["targetPort"] = target_port
 
     return Monitor(**args)
 
