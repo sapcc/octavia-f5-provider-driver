@@ -78,6 +78,20 @@ def authorized(func):
 
     return wrapper
 
+def failover_on_connection_error(func):
+    @functools.wraps(func)
+    def wrapper(self, *args, **kwargs):
+        old_bigip = self.active_bigip
+        # Failover until it works or all BigIPs have been tried
+        while True:
+            try:
+                return func(self, *args, **kwargs)
+            except requests.exceptions.ConnectionError as e:
+                self._failover()
+                if self.active_bigip == old_bigip:
+                    raise e # We've tried all possible BigIPs, so give up
+    return wrapper
+
 
 class BigipAS3RestClient(object):
     _metric_httpstatus = prometheus.metrics.Counter(
@@ -149,6 +163,7 @@ class BigipAS3RestClient(object):
 
     @check_response
     @authorized
+    @failover_on_connection_error
     def _call_method(self, method, url, **kwargs):
         meth = getattr(self.session, method)
         response = meth(url, **kwargs)
