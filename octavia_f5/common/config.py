@@ -48,8 +48,9 @@ f5_agent_opts = [
                 help=_('Use token authentication.')),
     cfg.BoolOpt('bigip_verify', default=False,
                 help=_('Verify AS3 endpoint TLS cert.')),
-    cfg.StrOpt('bigip_url_a', help=_('The URL to the bigip host device with AS3 endpoint')),
-    cfg.StrOpt('bigip_url_b', help=_('The URL to the bigip host device with AS3 endpoint')),
+    cfg.ListOpt('bigip_urls',
+                item_type=cfg.types.URI(schemes=['http', 'https']),
+                help=_('The URL to the bigip host device with AS3 endpoint')),
     cfg.StrOpt('esd_dir',
                help=_('Directory of the esd files')),
 
