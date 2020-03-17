@@ -39,8 +39,7 @@ def get_name(listener_id):
     :param listener_id: listener id
     :return: AS3 object name
     """
-    return const.PREFIX_LISTENER + \
-           listener_id.replace('/', '').replace('-', '_')
+    return "{}{}".format(const.PREFIX_LISTENER, listener_id)
 
 
 def get_esd_entities(servicetype, esd):

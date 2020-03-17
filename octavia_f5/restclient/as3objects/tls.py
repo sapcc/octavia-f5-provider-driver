@@ -22,8 +22,7 @@ def get_listener_name(listener_id):
     :param listener_id: octavia listener id
     :return: AS3 object name
     """
-    return "{}{}".format(constants.PREFIX_TLS_LISTENER,
-                         listener_id.replace('-', '_'))
+    return "{}{}".format(constants.PREFIX_TLS_LISTENER, listener_id)
 
 
 def get_pool_name(pool_id):

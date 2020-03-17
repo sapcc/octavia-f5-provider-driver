@@ -44,8 +44,7 @@ SUPPORTED_ACTION_TYPE = [
 
 
 def get_name(policy_id):
-    return constants.PREFIX_POLICY + \
-           policy_id.replace('/', '').replace('-', '_')
+    return "{}{}".format(constants.PREFIX_POLICY, policy_id)
 
 
 def _get_condition(l7rule):

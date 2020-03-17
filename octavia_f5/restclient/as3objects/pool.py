@@ -31,8 +31,7 @@ def get_name(pool_id):
     :param pool_id: pool id
     :return: AS3 object name
     """
-    return constants.PREFIX_POOL + \
-           pool_id.replace('/', '').replace('-', '_')
+    return "{}{}".format(constants.PREFIX_POOL, pool_id)
 
 
 def get_pool(pool):
