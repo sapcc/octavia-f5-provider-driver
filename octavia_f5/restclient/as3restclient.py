@@ -135,7 +135,7 @@ class BigipAS3RestClient(object):
         try:
             info = self.info()
             info.raise_for_status()
-            info_dict = dict(device=self.bigip.hostname, **info.json())
+            info_dict = dict(device=self.active_bigip.hostname, **info.json())
             self._metric_version.info(info_dict)
         except requests.exceptions.HTTPError as e:
             # Failed connecting to AS3 endpoint, gracefully terminate
