@@ -178,12 +178,6 @@ class Monitor(BaseDescription):
         super(Monitor, self).__init__(locals())
         setattr(self, 'class', 'Monitor')
 
-    def set_target_address(self, address):
-        setattr(self, 'targetAddress', address)
-
-    def set_target_port(self, port):
-        setattr(self, 'targetPort', port)
-
 
 class BigIP(BaseDescription):
     def __init__(self, bigip):
