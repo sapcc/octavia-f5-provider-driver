@@ -68,9 +68,13 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
     elif health_monitor.type == 'PING':
         args['monitorType'] = 'icmp'
     elif health_monitor.type == 'TCP':
-        args['monitorType'] = 'tcp-half-open'
+        args['monitorType'] = 'tcp'
+        args['send'] = ''
+        args['receive'] = ''
     elif health_monitor.type == 'TLS-HELLO':
         args['monitorType'] = 'tcp'
+        args['send'] = ''
+        args['receive'] = ''
     elif health_monitor.type == 'UDP-CONNECT':
         args['monitorType'] = 'external'
         args['script'] = UDP_CHECK
