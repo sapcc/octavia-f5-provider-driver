@@ -63,7 +63,7 @@ class ControllerWorker(object):
         self._flavor_repo = repo.FlavorRepository()
         self._vip_repo = repo.VipRepository()
         self.bigip = BigipAS3RestClient(
-            bigip_url=CONF.f5_agent.bigip_url,
+            bigip_urls=CONF.f5_agent.bigip_urls,
             enable_verify=CONF.f5_agent.bigip_verify,
             enable_token=CONF.f5_agent.bigip_token,
             esd=self._esd)
