@@ -17,12 +17,40 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia_f5.common import constants
+from octavia_f5.restclient import as3types
 from octavia_f5.restclient.as3classes import Monitor
 from octavia_f5.utils import driver_utils as utils
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
-UDP_CHECK = "#!/bin/sh\n/usr/bin/nc -uzv -w1 $1 $2 > /dev/null && echo up"
+TEMPLATE = """#!/bin/sh
+me=$(basename $0)
+
+pidfile="/var/run/$me-$1:$2.pid"
+
+if [ -f "$pidfile" ]; then
+   kill -9 $(cat $pidfile) > /dev/null 2>&1
+fi
+
+echo "$$" > $pidfile
+
+node_ip=$(echo $1 | sed 's/::ffff://')
+pm_port="$2"
+
+{}
+
+if [ $? -eq 0 ]
+then
+    rm -f $PIDFILE
+    echo "UP"
+else
+    rm -f $PIDFILE
+    exit
+fi"""
+
+UDP_CHECK = TEMPLATE.format("nc -uzv -w1 $1 $2 >/dev/null 2>&1")
+# Source: https://devcentral.f5.com/s/articles/https-monitor-ssl-handshake
+TLS_HELLO_CHECK = TEMPLATE.format("echo 'QUIT'|openssl s_client -verify 1 -connect $node_ip:$pm_port >/dev/null 2>&1")
 
 
 def get_name(healthmonitor_id):
@@ -31,11 +59,15 @@ def get_name(healthmonitor_id):
 
 def get_monitors(health_monitor, members):
     # Check if all members have a custom address/port, so we could just adapt the monitor
-    monitor_addresses = [member.monitor_address for member in members]
-    monitor_ports = [member.monitor_port for member in members]
+    monitor_addresses = [member.monitor_address for member in members if member.monitor_port is not None]
+    monitor_ports = [member.monitor_port for member in members if member.monitor_port is not None]
 
-    ref_addr = monitor_addresses[0] or None
-    ref_port = monitor_ports[0] or None
+    ref_addr = None
+    ref_port = None
+    if monitor_addresses:
+        ref_addr = monitor_addresses[0]
+    if monitor_ports:
+        ref_port = monitor_ports[0]
 
     if all(x == ref_addr for x in monitor_addresses) and all(x == ref_port for x in monitor_ports):
         return [(get_name(health_monitor.id),
@@ -72,13 +104,13 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
         args['send'] = ''
         args['receive'] = ''
     elif health_monitor.type == 'TLS-HELLO':
-        args['monitorType'] = 'tcp'
-        args['send'] = ''
-        args['receive'] = ''
+        args['monitorType'] = 'external'
+        args['script'] = TLS_HELLO_CHECK
+        args['receive'] = 'UP'
     elif health_monitor.type == 'UDP-CONNECT':
         args['monitorType'] = 'external'
         args['script'] = UDP_CHECK
-        args['receive'] = 'up'
+        args['receive'] = 'UP'
 
     # F5 specific monitory types
     elif health_monitor.type == 'SIP':
@@ -128,6 +160,8 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
         args["targetAddress"] = target_address
     if target_port:
         args["targetPort"] = target_port
+
+    args['label'] = as3types.f5label(health_monitor.name or health_monitor.id)
 
     return Monitor(**args)
 
