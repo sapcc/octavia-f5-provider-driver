@@ -13,10 +13,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import functools
 import time
 
 import futurist
 import prometheus_client as prometheus
+import requests
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
@@ -31,6 +33,25 @@ from octavia_f5.restclient.as3restclient import BigipAS3RestClient, authorized
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
+
+class DatabaseLockSession():
+    """Provides a database session and rolls it back if an exception occured before exiting with-statement."""
+    def __enter__(self):
+        self._lock_session = db_api.get_session(autocommit=False)
+        return self._lock_session
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_tb is None:
+            self._lock_session.commit()
+        else:
+            if exc_type.is_instance(db_exc.DBDeadlock):
+                LOG.debug('Database reports deadlock. Skipping.')
+                self._lock_session.rollback()
+            elif exc_type.is_instance(db_exc.RetryRequest):
+                LOG.debug('Database is requesting a retry. Skipping.')
+                self._lock_session.rollback()
+            else:
+                with excutils.save_and_reraise_exception():
+                    self._lock_session.rollback()
 
 def update_health(obj):
     handler = stevedore_driver.DriverManager(
@@ -55,7 +76,6 @@ class StatusManager(BigipAS3RestClient):
         super(StatusManager, self).__init__(bigip_urls=CONF.f5_agent.bigip_urls,
                                             enable_verify=CONF.f5_agent.bigip_verify,
                                             enable_token=CONF.f5_agent.bigip_token)
-        self.amphora_id = None
         self.seq = 0
         LOG.info('Health Manager Sender starting.')
         self.amp_repo = repo.AmphoraRepository()
@@ -120,6 +140,26 @@ class StatusManager(BigipAS3RestClient):
         Also updates listener_count for amphora database via update_listener_count() function. This is needed for
         scheduling decisions.
         """
+        self._metric_heartbeat.inc()
+
+        # Check availability of all devices
+        for device in self.bigips:
+            device_name = device.hostname
+            LOG.debug('Checking availability of device with URL {}'.format(device_name))
+            timeout = CONF.f5_agent.availability_timeout
+
+            # Try reaching device
+            available = True
+            try:
+                requests.get(device.scheme + '://' + device.hostname,
+                             timeout=timeout, verify=CONF.f5_agent.bigip_verify);
+            except requests.exceptions.Timeout as e:
+                LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
+                         timeout, device.hostname));
+                available = False
+
+            # Update database entry
+            self.update_availability(device_name, available)
 
         # Check for failover
         device_json = self.get(path='/tm/cm/device').json()
@@ -128,7 +168,6 @@ class StatusManager(BigipAS3RestClient):
                 self._failover()
                 return
 
-        self._metric_heartbeat.inc()
         amphora_messages = {}
 
         def _get_lb_msg(lb_id):
@@ -142,6 +181,7 @@ class StatusManager(BigipAS3RestClient):
                 }
             return amphora_messages[lb_id]
 
+        # update listener count
         vipstats = self.get(path='tm/ltm/virtual/stats').json()
         if 'entries' not in vipstats:
             self.update_listener_count(0)
@@ -216,31 +256,53 @@ class StatusManager(BigipAS3RestClient):
 
         :param num_listeners: number of listener for the bigip device
         """
-        lock_session = None
-        try:
-            lock_session = db_api.get_session(autocommit=False)
-            device_amp = self.amp_repo.get(lock_session,
-                                           compute_flavor=CONF.host,
-                                           load_balancer_id=None)
-            if not device_amp:
-                device_amp = self.amp_repo.create(
-                    lock_session,
+        with DatabaseLockSession() as session:
+            device_name = self.active_bigip.hostname
+            device_entry = self.amp_repo.get(session,
+                                             compute_flavor=CONF.host,
+                                             load_balancer_id=None,
+                                             cached_zone=device_name)
+            if not device_entry:
+                self.amp_repo.create(
+                    session,
                     compute_flavor=CONF.host,
-                    status=constants.AMPHORA_READY,
-                    vrrp_priority=num_listeners)
+                    vrrp_priority=num_listeners,
+                    cached_zone=device_name)
             else:
-                self.amp_repo.update(lock_session, device_amp.id,
-                                     status=constants.AMPHORA_READY,
+                self.amp_repo.update(session, device_entry.id,
                                      vrrp_priority=num_listeners)
-            self.amphora_id = device_amp.id
-            lock_session.commit()
-        except db_exc.DBDeadlock:
-            LOG.debug('Database reports deadlock. Skipping.')
-            lock_session.rollback()
-        except db_exc.RetryRequest:
-            LOG.debug('Database is requesting a retry. Skipping.')
-            lock_session.rollback()
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                if lock_session:
-                    lock_session.rollback()
+
+    def update_availability(self, device_name, available):
+        """ updates availability status of bigip device (status column in amphora table).
+        The values for 'status' are used as follows:
+        - 'READY': Device is online, everything is ok.
+        - 'ALLOCATED': Device is offline.
+        - 'BOOTING': Device is online but needs a full sync, because it was offline before.
+          It is the responsibility of the syncing mechanism to set the status to 'READY' again.
+
+        :param device_name: Name of device. This usually is the domain under which the device can be reached.
+        :param available: Whether the device is available or not
+        """
+        with DatabaseLockSession() as session:
+            # update table entry
+            device_entry = self.amp_repo.get(session,
+                                             compute_flavor=CONF.host,
+                                             load_balancer_id=None,
+                                             cached_zone=device_name)
+
+            # determine status
+            status = constants.AMPHORA_ALLOCATED  # offline if not available
+            if available:
+                status = constants.AMPHORA_READY  # back online if available
+                if device_entry is None or device_entry.status != constants.AMPHORA_READY:
+                    status = constants.AMPHORA_BOOTING  # needs full sync if no DB entry or not yet marked as ready
+
+            # create/modify entry
+            if not device_entry:
+                self.amp_repo.create(
+                    session,
+                    compute_flavor=CONF.host,
+                    status=status,
+                    cached_zone=device_name)
+            else:
+                self.amp_repo.update(session, device_entry.id, status=status)

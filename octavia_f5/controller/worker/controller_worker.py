@@ -25,6 +25,7 @@ from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
+from octavia_f5.common import constants
 from octavia_f5.controller.worker import status
 from octavia_f5.controller.worker.f5agent_driver import member_create
 from octavia_f5.controller.worker.f5agent_driver import tenant_delete
@@ -60,7 +61,6 @@ class ControllerWorker(object):
         self._pool_repo = f5_repos.PoolRepository()
         self._l7policy_repo = f5_repos.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
-        self._flavor_repo = repo.FlavorRepository()
         self._vip_repo = repo.VipRepository()
         self.bigip = BigipAS3RestClient(
             bigip_urls=CONF.f5_agent.bigip_urls,
@@ -85,24 +85,86 @@ class ControllerWorker(object):
 
         super(ControllerWorker, self).__init__()
 
+    def _do_for_pending_networks(self, pending_networks, func):
+        """Iterate over networks and execute a function every time.
+
+        :param pending_networks: Networks to iterate over
+        :param func: Function to execute for each network
+        """
+        for network_id, loadbalancers in pending_networks.items():
+            LOG.info("Found pending tenant network %s, syncing...", network_id)
+            try:
+                func(network_id, loadbalancers)
+            except exceptions.RetryException as e:
+                LOG.warning("Device is busy, retrying with next sync: %s", e)
+            except o_exceptions.CertificateRetrievalException as e:
+                LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
+            except exceptions.AS3Exception as e:
+                LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
+                for lb in loadbalancers:
+                    self.status.set_error(lb)
+
     @periodics.periodic(120, run_immediately=True)
     def pending_sync(self):
         """
         Reconciliation loop that
-        - schedules unscheduled load balancers to this worker
+        - synchronizes load balancers that are in a PENDING state
         - deletes load balancers that are PENDING_DELETE
+        - executes a full sync on F5 devices that were offline but are now back online
         """
 
-        # schedule unscheduled load balancers to this worker
+        # synchronize load balancers that are in a PENDING state
         self.sync_loadbalancers()
 
         # delete load balancers that are PENDING_DELETE
+        session = db_apis.get_session()
         lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
-            db_apis.get_session(),
-            provisioning_status=lib_consts.PENDING_DELETE)
+            session, provisioning_status=lib_consts.PENDING_DELETE)
         for lb in lbs_to_delete:
             LOG.info("Found pending deletion of lb %s", lb.id)
             self.delete_load_balancer(lb.id)
+
+        # Execute a full sync on F5 devices that were offline but are now back online.
+        self.full_sync_reappearing_devices(session)
+
+    @lockutils.synchronized('tenant_refresh')
+    def full_sync_reappearing_devices(self, session):
+        """Execute a full sync on F5 devices that were offline but are now back online. These devices have
+        status='BOOTING' (set by status manager) in their corresponding amphora table entry. """
+        for device in self.bigip.bigips:
+            device_name = device.hostname
+            device_entry = self._amphora_repo.get(session,
+                                         status=constants.AMPHORA_BOOTING,
+                                         compute_flavor=CONF.host,
+                                         load_balancer_id=None,
+                                         cached_zone=device_name)
+            if not device_entry:
+                continue
+            LOG.info("Device reappeared: %s. Doing a full sync.", device_name)
+
+            # get all load balancers (of this host)
+            lbs = self._loadbalancer_repo.get_all_from_host(session)
+
+            # Use a new instance of BigipAS3RestClient because we don't know whether the correct BigIP is set in self.bigip
+            bigip_to_sync = BigipAS3RestClient(
+                bigip_urls=[device.geturl()],
+                enable_verify=self.bigip.enable_verify,
+                enable_token=self.bigip.enable_token,
+                esd=self.bigip.esd)
+
+            # deduplicate
+            pending_networks = collections.defaultdict(list)
+            for lb in lbs:
+                if lb not in pending_networks[lb.vip.network_id]:
+                    pending_networks[lb.vip.network_id].append(lb)
+
+            def refresh_and_update_device_status(network_id, loadbalancers):
+                    self._refresh(network_id, bigip=bigip_to_sync)
+                    # Don't update status of load balancers because their status must be determined from the active BigIP
+                    # We must however set the device to active
+                    self._amphora_repo.update(session, device_entry.id, status=constants.AMPHORA_READY)
+
+            self._do_for_pending_networks(pending_networks, refresh_and_update_device_status)
 
     @lockutils.synchronized('tenant_refresh')
     def sync_loadbalancers(self):
@@ -129,12 +191,13 @@ class ControllerWorker(object):
         l7policies = self._l7policy_repo.get_pending_from_host(db_apis.get_session())
         lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
 
+        # deduplicate
         pending_networks = collections.defaultdict(list)
         for lb in lbs:
             if lb not in pending_networks[lb.vip.network_id]:
                 pending_networks[lb.vip.network_id].append(lb)
 
-        for network_id, loadbalancers in pending_networks.items():
+        def refresh_and_update_loadbalancer_status(network_id, loadbalancers):
             LOG.info("Found pending tenant network %s, syncing...", network_id)
             try:
                 if self._refresh(network_id).ok:
@@ -143,6 +206,9 @@ class ControllerWorker(object):
                 LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
                 for lb in loadbalancers:
                     self.status.set_error(lb)
+
+
+        self._do_for_pending_networks(pending_networks, refresh_and_update_loadbalancer_status)
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
@@ -163,11 +229,13 @@ class ControllerWorker(object):
                 server_group_id=CONF.host))
         return [lb for lb in loadbalancers if lb]
 
-    def _refresh(self, network_id):
+    def _refresh(self, network_id, bigip=None):
+        if not bigip:
+            bigip = self.bigip
         loadbalancers = self._get_all_loadbalancer(network_id)
         segmentation_id = self.network_driver.get_segmentation_id(network_id)
         try:
-            return tenant_update(self.bigip,
+            return tenant_update(bigip,
                                  self.cert_manager,
                                  network_id,
                                  loadbalancers,
@@ -505,12 +573,12 @@ class ControllerWorker(object):
 
         This function creates an amphora entry in the database, if it doesn't already exist.
         """
-        device_amp = self._amphora_repo.get(
+        device_entry = self._amphora_repo.get(
             db_apis.get_session(),
             load_balancer_id=load_balancer_id)
 
         # create amphora mapping if missing
-        if not device_amp:
+        if not device_entry:
             self._amphora_repo.create(
                 db_apis.get_session(),
                 id=load_balancer_id,
@@ -520,10 +588,10 @@ class ControllerWorker(object):
             return
 
         # update host if not updated yet
-        if device_amp.compute_flavor != CONF.host:
+        if device_entry.compute_flavor != CONF.host:
             self._amphora_repo.update(
                 db_apis.get_session(),
-                id=device_amp.id,
+                id=device_entry.id,
                 compute_flavor=CONF.host)
 
     def create_amphora(self):
