@@ -124,7 +124,7 @@ class BigipAS3RestClient(object):
         'octavia_as3_version', 'AS3 Version')
 
     def __init__(self, bigip_urls, enable_verify=True, enable_token=True, esd=None):
-        self.bigips = [ parse.urlsplit(url, allow_fragments=False) for url in bigip_urls ]
+        self.bigips = [parse.urlsplit(url, allow_fragments=False) for url in bigip_urls]
         # Use the first BigIP device by default
         self.active_bigip = self.bigips[0]
         self.enable_verify = enable_verify
@@ -169,7 +169,7 @@ class BigipAS3RestClient(object):
         meth = getattr(self.session, method)
         response = meth(url, **kwargs)
         self._metric_httpstatus.labels(method=method, statuscode=response.status_code).inc()
-        LOG.debug("%s finished with %d", method, response.status_code)
+        LOG.debug("%s to %s finished with %d", method, self.active_bigip.hostname, response.status_code)
         return response
 
     @_metric_failover_exceptions.count_exceptions()
