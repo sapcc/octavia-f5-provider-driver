@@ -97,6 +97,9 @@ f5_agent_opts = [
                help=_("Use Cipher String for ciphers used in server TLS profiles")),
     cfg.StrOpt('default_client_ciphers', default=None,
                help=_("Use Cipher String for ciphers used in client TLS profiles")),
+    cfg.IntOpt('availability_timeout', default=5.0, # TODO: Is this really in seconds?
+               help=_("Time in seconds before a device is marked as offline."
+                      "This is only used by status manager, NOT for AS3 requests.")),
 
 ]
 
