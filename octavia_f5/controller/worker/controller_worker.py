@@ -163,7 +163,8 @@ class ControllerWorker(object):
             loadbalancers.append(self._loadbalancer_repo.get(
                 db_apis.get_session(),
                 show_deleted=False,
-                id=vip.load_balancer_id))
+                id=vip.load_balancer_id,
+                server_group_id=CONF.host))
         return [lb for lb in loadbalancers if lb]
 
     def _refresh(self, network_id):
@@ -325,8 +326,13 @@ class ControllerWorker(object):
 
         self.ensure_amphora_exists(member.pool.load_balancer.id)
 
-        if not member.backup and member_create(self.bigip, member).ok:
-            self.status.set_active(member)
+        if not member.backup:
+            try:
+                if member_create(self.bigip, member).ok:
+                    self.status.set_active(member)
+                    return
+            except exceptions.AS3Exception:
+                pass
         elif self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_active(member)
         else:
