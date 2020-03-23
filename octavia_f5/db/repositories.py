@@ -58,14 +58,9 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
         :param filters: Filters to decide which entities should be retrieved.
         :returns: [octavia.common.data_model]
         """
-        query_options = (
-            subqueryload(models.LoadBalancer.vip),
-            subqueryload(models.LoadBalancer.pools),
-            subqueryload(models.LoadBalancer.listeners),
-            noload('*'))
         filters.update(server_group_id=host)
         return super(LoadBalancerRepository, self).get_all(
-            session, query_options=query_options, **filters)[0]
+            session, **filters)[0]
 
 
 class PoolRepository(repositories.PoolRepository):
