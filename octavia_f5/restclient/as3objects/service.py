@@ -53,10 +53,7 @@ def get_esd_entities(servicetype, esd):
     service_args = {}
     irules = esd.get('lbaas_irule', None)
     if irules:
-        service_args['iRules'] = [
-            as3.BigIP('/Common/' + rule) for
-            rule in irules
-        ]
+        service_args['iRules'] = [as3.BigIP(rule) for rule in irules]
 
     # client / server tcp profiles
     if servicetype in [const.SERVICE_HTTP, const.SERVICE_HTTPS,
@@ -66,11 +63,11 @@ def get_esd_entities(servicetype, esd):
         if stcp and ctcp:
             # Server and Clientside profile defined
             service_args['profileTCP'] = as3.Service_Generic_profileTCP(
-                ingress=as3.BigIP('/Common/' + ctcp),
-                egress=as3.BigIP('/Common/' + stcp)
+                ingress=as3.BigIP(ctcp),
+                egress=as3.BigIP(stcp)
             )
         elif ctcp:
-            service_args['profileTCP'] = as3.BigIP('/Common/' + ctcp)
+            service_args['profileTCP'] = as3.BigIP(ctcp)
         else:
             service_args['profileTCP'] = 'normal'
 
@@ -78,14 +75,12 @@ def get_esd_entities(servicetype, esd):
         # OneConnect (Multiplex) Profile
         oneconnect = esd.get('lbaas_one_connect', None)
         if oneconnect:
-            service_args['profileMultiplex'] = as3.BigIP(
-                '/Common/' + oneconnect)
+            service_args['profileMultiplex'] = as3.BigIP(oneconnect)
 
         # HTTP Compression Profile
         compression = esd.get('lbaas_http_compression', None)
         if compression:
-            service_args['profileHTTPCompression'] = as3.BigIP(
-                '/Common/' + compression)
+            service_args['profileHTTPCompression'] = as3.BigIP(compression)
 
     return service_args
 
@@ -124,7 +119,7 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['_servicetype'] = const.SERVICE_HTTP
     # HTTPS (non-terminated)
     elif listener.protocol == const.PROTOCOL_HTTPS:
-        service_args['_servicetype'] = const.SERVICE_GENERIC
+        service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
     # Proxy
     elif listener.protocol == const.PROTOCOL_PROXY:
         service_args['_servicetype'] = const.SERVICE_HTTP
@@ -154,10 +149,18 @@ def get_service(listener, cert_manager, esd_repository):
         ))
         entities.extend([(cert['id'], cert['as3']) for cert in certificates])
 
-    # add profile
-    if CONF.f5_agent.profile_l4:
+    # add default profiles to supported listeners
+    if CONF.f5_agent.profile_http and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+        service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http)
+    if CONF.f5_agent.profile_http_compression and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+        service_args['profileHTTPCompression'] = as3.BigIP(CONF.f5_agent.profile_http_compression)
+    if CONF.f5_agent.profile_l4 and service_args['_servicetype'] == const.SERVICE_L4:
         service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)
-    if CONF.f5_agent.profile_multiplex:
+    if CONF.f5_agent.profile_tcp and service_args['_servicetype'] in const.SERVICE_TCP_TYPES:
+        service_args['profileTCP'] = as3.BigIP(CONF.f5_agent.profile_tcp)
+    if CONF.f5_agent.profile_udp and service_args['_servicetype'] == const.SERVICE_UDP:
+        service_args['profileUDP'] = as3.BigIP(CONF.f5_agent.profile_udp)
+    if CONF.f5_agent.profile_multiplex and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
         service_args['profileMultiplex'] = as3.BigIP(CONF.f5_agent.profile_multiplex)
 
     if listener.connection_limit > 0:
