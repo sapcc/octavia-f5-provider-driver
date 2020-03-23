@@ -25,7 +25,7 @@ class TestAS3Classes(base.TestCase):
 
         # creation with default arguments
         as3 = {'action': 'deploy', 'class': 'AS3', 'persist': True}
-        self.assertEqual(as3, as3classes.AS3().to_dict())
+        self.assertTrue(as3.items() <= as3classes.AS3().to_dict().items())
 
     def test_adc(self):
         # erroneous creation
