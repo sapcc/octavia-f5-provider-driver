@@ -236,18 +236,18 @@ class StatusManager(BigipAS3RestClient):
         try:
             lock_session = db_api.get_session(autocommit=False)
             device_name = self.active_bigip.hostname
-            device_amp = self.amp_repo.get(lock_session,
+            device_entry = self.amp_repo.get(lock_session,
                                            compute_flavor=CONF.host,
                                            load_balancer_id=None,
                                            cached_zone=device_name)
-            if not device_amp:
-                device_amp = self.amp_repo.create(
+            if not device_entry:
+                device_entry = self.amp_repo.create(
                     lock_session,
                     compute_flavor=CONF.host,
                     vrrp_priority=num_listeners,
                     cached_zone=device_name)
             else:
-                self.amp_repo.update(lock_session, device_amp.id,
+                self.amp_repo.update(lock_session, device_entry.id,
                                      vrrp_priority=num_listeners)
             lock_session.commit()
         except db_exc.DBDeadlock:
@@ -275,7 +275,7 @@ class StatusManager(BigipAS3RestClient):
 
         # update table entry
         try:
-            device_amp = self.amp_repo.get(lock_session,
+            device_entry = self.amp_repo.get(lock_session,
                                            compute_flavor=CONF.host,
                                            load_balancer_id=None,
                                            cached_zone=device_name)
@@ -284,18 +284,18 @@ class StatusManager(BigipAS3RestClient):
             status = constants.AMPHORA_ALLOCATED  # offline if not available
             if available:
                 status = constants.AMPHORA_BOOTING  # back online if available (needs full sync)
-                if device_amp.status == constants.AMPHORA_READY:
+                if device_entry.status == constants.AMPHORA_READY:
                     status = constants.AMPHORA_READY  # ready if it had been available before
 
             # create/modify entry
-            if not device_amp:
-                device_amp = self.amp_repo.create(
+            if not device_entry:
+                device_entry = self.amp_repo.create(
                     lock_session,
                     compute_flavor=CONF.host,
                     status=status,
                     cached_zone=device_name)
             else:
-                self.amp_repo.update(lock_session, device_amp.id, status=status)
+                self.amp_repo.update(lock_session, device_entry.id, status=status)
             lock_session.commit()
         except db_exc.DBDeadlock:
             LOG.debug('Database reports deadlock. Skipping.')
