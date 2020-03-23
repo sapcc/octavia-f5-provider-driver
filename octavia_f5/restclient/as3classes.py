@@ -180,10 +180,12 @@ class Monitor(BaseDescription):
 
 
 class BigIP(BaseDescription):
-    def __init__(self, bigip):
+    def __init__(self, bigip, _common=True):
         super(BigIP, self).__init__(locals())
 
         self.require('bigip')
+        if _common:
+            setattr(self, 'bigip', '/Common/{}'.format(bigip))
 
 
 class Service_Generic_profileTCP(BaseDescription):

@@ -189,8 +189,12 @@ class TestAS3Classes(base.TestCase):
     def test_bigip(self):
         # creation
         bigip = {'bigip': 'test_bigip'}
-        bigip_obj = as3classes.BigIP(bigip['bigip'])
+        bigip_obj = as3classes.BigIP(bigip['bigip'], _common=False)
         self.assertEqual(bigip, bigip_obj.to_dict())
+
+        bigip_common = {'bigip': '/Common/test_bigip'}
+        bigip_obj = as3classes.BigIP(bigip_common['bigip'])
+        self.assertEqual(bigip_common, bigip_obj.to_dict())
 
     def test_servicegenericprofile_tcp(self):
         sgptcp = {'ingress': 'test_ingress',
