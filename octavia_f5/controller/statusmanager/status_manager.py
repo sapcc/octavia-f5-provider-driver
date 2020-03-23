@@ -242,12 +242,10 @@ class StatusManager(BigipAS3RestClient):
                 device_amp = self.amp_repo.create(
                     lock_session,
                     compute_flavor=CONF.host,
-                    status=constants.AMPHORA_READY,
                     vrrp_priority=num_listeners,
                     cached_zone=device_name)
             else:
                 self.amp_repo.update(lock_session, device_amp.id,
-                                     status=constants.AMPHORA_READY,
                                      vrrp_priority=num_listeners)
             lock_session.commit()
         except db_exc.DBDeadlock:
