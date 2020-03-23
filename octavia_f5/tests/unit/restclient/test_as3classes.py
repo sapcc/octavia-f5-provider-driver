@@ -193,7 +193,7 @@ class TestAS3Classes(base.TestCase):
         self.assertEqual(bigip, bigip_obj.to_dict())
 
         bigip_common = {'bigip': '/Common/test_bigip'}
-        bigip_obj = as3classes.BigIP(bigip_common['bigip'])
+        bigip_obj = as3classes.BigIP(bigip['bigip'])
         self.assertEqual(bigip_common, bigip_obj.to_dict())
 
     def test_servicegenericprofile_tcp(self):
