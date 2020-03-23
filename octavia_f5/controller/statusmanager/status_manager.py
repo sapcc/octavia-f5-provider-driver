@@ -40,6 +40,7 @@ def update_health(obj):
     ).driver
     handler.update_health(obj, '127.0.0.1')
 
+
 def update_stats(obj):
     handler = stevedore_driver.DriverManager(
         namespace='octavia.amphora.stats_update_drivers',
@@ -144,6 +145,7 @@ class StatusManager(BigipAS3RestClient):
                 return
 
         amphora_messages = {}
+
         def _get_lb_msg(lb_id):
             if lb_id not in amphora_messages:
                 amphora_messages[lb_id] = {
@@ -261,24 +263,31 @@ class StatusManager(BigipAS3RestClient):
 
     def update_availability(self, device_name, available):
         """ updates availability status of bigip device (status column in amphora table).
-        The value will be READY if the device is available or ALLOCATED if it is not.
+        The values for 'status' are used as follows:
+        - 'READY': Device is online, everything is ok.
+        - 'ALLOCATED': Device is offline.
+        - 'BOOTING': Device is online but needs a full sync, because it was offline before.
+          It is the responsibility of the syncing mechanism to set the status to 'READY' again.
 
         :param available: whether the device is available or not
         """
-        lock_session = None
-
-        # determine status
-        status = constants.AMPHORA_READY
-        if not available:
-            status = constants.AMPHORA_ALLOCATED
+        lock_session = db_api.get_session(autocommit=False)
 
         # update table entry
         try:
-            lock_session = db_api.get_session(autocommit=False)
             device_amp = self.amp_repo.get(lock_session,
                                            compute_flavor=CONF.host,
                                            load_balancer_id=None,
                                            cached_zone=device_name)
+
+            # determine status
+            status = constants.AMPHORA_ALLOCATED  # offline if not available
+            if available:
+                status = constants.AMPHORA_BOOTING  # back online if available (needs full sync)
+                if device_amp.status == constants.AMPHORA_READY:
+                    status = constants.AMPHORA_READY  # ready if it had been available before
+
+            # create/modify entry
             if not device_amp:
                 device_amp = self.amp_repo.create(
                     lock_session,
