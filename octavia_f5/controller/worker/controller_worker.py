@@ -25,6 +25,7 @@ from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
+from octavia_f5.common import constants
 from octavia_f5.controller.worker import status
 from octavia_f5.controller.worker.f5agent_driver import member_create
 from octavia_f5.controller.worker.f5agent_driver import tenant_delete
@@ -60,7 +61,6 @@ class ControllerWorker(object):
         self._pool_repo = f5_repos.PoolRepository()
         self._l7policy_repo = f5_repos.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
-        self._flavor_repo = repo.FlavorRepository()
         self._vip_repo = repo.VipRepository()
         self.bigip = BigipAS3RestClient(
             bigip_urls=CONF.f5_agent.bigip_urls,
@@ -86,23 +86,47 @@ class ControllerWorker(object):
         super(ControllerWorker, self).__init__()
 
     @periodics.periodic(120, run_immediately=True)
+    @lockutils.synchronized('tenant_refresh')
     def pending_sync(self):
         """
         Reconciliation loop that
-        - schedules unscheduled load balancers to this worker
+        - synchronizes load balancers that are in a PENDING state
         - deletes load balancers that are PENDING_DELETE
+        - executes a full sync on F5 devices that were offline but are now back online
         """
 
-        # schedule unscheduled load balancers to this worker
+        # synchronize load balancers that are in a PENDING state
         self.sync_loadbalancers()
 
         # delete load balancers that are PENDING_DELETE
+        session = db_apis.get_session()
         lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
-            db_apis.get_session(),
-            provisioning_status=lib_consts.PENDING_DELETE)
+            session, provisioning_status=lib_consts.PENDING_DELETE)
         for lb in lbs_to_delete:
             LOG.info("Found pending deletion of lb %s", lb.id)
             self.delete_load_balancer(lb.id)
+
+        # Execute a full sync on F5 devices that were offline but are now back online.
+        # (in amphora table status='BOOTING', set by status manager)
+        for device in self.bigip.bigips:
+            device_name = device.hostname
+            device_entry = self._amphora_repo.get(session,
+                                         status=constants.AMPHORA_BOOTING,
+                                         compute_flavor=CONF.host,
+                                         load_balancer_id=None,
+                                         cached_zone=device_name)
+            if not device_entry:
+                return
+            LOG.info("Device reappeared: %s. Doing a full sync.", device_name)
+
+            # get all load balancers (of this host)
+            lbs = self._loadbalancer_repo.get_all_from_host(session)
+
+            # Change the BigIP temporarily for refreshing load balancers
+            originally_active_bigip = self.bigip.active_bigip
+            self.bigip.active_bigip = device
+            self._refresh_lbs(lbs)
+            self.bigip.active_bigip = originally_active_bigip
 
     @lockutils.synchronized('tenant_refresh')
     def sync_loadbalancers(self):
@@ -129,6 +153,12 @@ class ControllerWorker(object):
         l7policies = self._l7policy_repo.get_pending_from_host(db_apis.get_session())
         lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
 
+        self._refresh_lbs(lbs)
+
+    def _refresh_lbs(self, lbs):
+        """Refresh several load balancers"""
+
+        # deduplicate
         pending_networks = collections.defaultdict(list)
         for lb in lbs:
             if lb not in pending_networks[lb.vip.network_id]:
