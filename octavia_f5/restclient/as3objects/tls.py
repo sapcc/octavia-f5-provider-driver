@@ -34,8 +34,7 @@ def get_pool_name(pool_id):
     :param pool_id: octavia pool id
     :return: AS3 object name
     """
-    return "{}{}".format(constants.PREFIX_TLS_POOL,
-                         pool_id.replace('-', '_'))
+    return "{}{}".format(constants.PREFIX_TLS_POOL, pool_id)
 
 
 def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode='NONE'):
