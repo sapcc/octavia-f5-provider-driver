@@ -91,6 +91,8 @@ f5_agent_opts = [
                 help=_('Port for prometheus to expose, defaults to 8000.')),
     cfg.BoolOpt('dry_run', default=False,
                 help=_("Run in dry-run, do not realize AS3 definitions.")),
+    cfg.BoolOpt('snat_virtual', default=False,
+                help=_("Use the virtual-server address as SNAT address.")),
 
 ]
 

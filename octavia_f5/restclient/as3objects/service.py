@@ -305,6 +305,10 @@ def get_service(listener, cert_manager, esd_repository):
     if CONF.f5_agent.profile_multiplex and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
         service_args['profileMultiplex'] = as3.BigIP(CONF.f5_agent.profile_multiplex)
 
+    # Use the virtual-server address as SNAT address
+    if CONF.f5_agent.snat_virtual:
+        service_args['snat'] = 'self'
+
     # create service object and fill in additional fields
     service = as3.Service(**service_args)
 
