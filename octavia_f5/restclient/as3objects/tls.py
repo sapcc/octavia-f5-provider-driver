@@ -14,6 +14,9 @@
 
 from octavia_f5.common import constants
 from octavia_f5.restclient.as3classes import TLS_Server, TLS_Client, Pointer
+from oslo_config import cfg
+
+CONF = cfg.CONF
 
 
 def get_listener_name(listener_id):
@@ -58,6 +61,9 @@ def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode=
         service_args['authenticationInviteCA'] = authentication_ca
         service_args['authenticationMode'] = mode_map[authentication_mode]
 
+    if CONF.f5_agent.default_server_ciphers:
+        service_args['ciphers'] = CONF.f5_agent.default_server_ciphers
+
     return TLS_Server(**service_args)
 
 
@@ -77,5 +83,8 @@ def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
         service_args['clientCertificate'] = client_cert
     if crl_file:
         service_args['crlFile'] = crl_file
+
+    if CONF.f5_agent.default_client_ciphers:
+        service_args['ciphers'] = CONF.f5_agent.default_client_ciphers
 
     return TLS_Client(**service_args)

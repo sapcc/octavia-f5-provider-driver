@@ -93,6 +93,10 @@ f5_agent_opts = [
                 help=_("Run in dry-run, do not realize AS3 definitions.")),
     cfg.BoolOpt('snat_virtual', default=False,
                 help=_("Use the virtual-server address as SNAT address.")),
+    cfg.StrOpt('default_server_ciphers', default=None,
+               help=_("Use Cipher String for ciphers used in server TLS profiles")),
+    cfg.StrOpt('default_client_ciphers', default=None,
+               help=_("Use Cipher String for ciphers used in client TLS profiles")),
 
 ]
 
