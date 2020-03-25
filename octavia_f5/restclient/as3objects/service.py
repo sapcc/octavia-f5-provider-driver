@@ -149,20 +149,6 @@ def get_service(listener, cert_manager, esd_repository):
         ))
         entities.extend([(cert['id'], cert['as3']) for cert in certificates])
 
-    # add default profiles to supported listeners
-    if CONF.f5_agent.profile_http and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
-        service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http)
-    if CONF.f5_agent.profile_http_compression and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
-        service_args['profileHTTPCompression'] = as3.BigIP(CONF.f5_agent.profile_http_compression)
-    if CONF.f5_agent.profile_l4 and service_args['_servicetype'] == const.SERVICE_L4:
-        service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)
-    if CONF.f5_agent.profile_tcp and service_args['_servicetype'] in const.SERVICE_TCP_TYPES:
-        service_args['profileTCP'] = as3.BigIP(CONF.f5_agent.profile_tcp)
-    if CONF.f5_agent.profile_udp and service_args['_servicetype'] == const.SERVICE_UDP:
-        service_args['profileUDP'] = as3.BigIP(CONF.f5_agent.profile_udp)
-    if CONF.f5_agent.profile_multiplex and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
-        service_args['profileMultiplex'] = as3.BigIP(CONF.f5_agent.profile_multiplex)
-
     if listener.connection_limit > 0:
         service_args['maxConnections'] = listener.connection_limit
 
@@ -300,6 +286,24 @@ def get_service(listener, cert_manager, esd_repository):
 
     # Ensure no duplicate iRules
     service_args['iRules'] = list(set(service_args['iRules']))
+
+    # fastL4 profile don't support header insertion, fallback to TCP Profile when iRules detected
+    if service_args['_servicetype'] == const.SERVICE_L4 and len(service_args['iRules']) > 0:
+        service_args['_servicetype'] = const.SERVICE_TCP
+
+    # add default profiles to supported listeners
+    if CONF.f5_agent.profile_http and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+        service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http)
+    if CONF.f5_agent.profile_http_compression and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+        service_args['profileHTTPCompression'] = as3.BigIP(CONF.f5_agent.profile_http_compression)
+    if CONF.f5_agent.profile_l4 and service_args['_servicetype'] == const.SERVICE_L4:
+        service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)
+    if CONF.f5_agent.profile_tcp and service_args['_servicetype'] in const.SERVICE_TCP_TYPES:
+        service_args['profileTCP'] = as3.BigIP(CONF.f5_agent.profile_tcp)
+    if CONF.f5_agent.profile_udp and service_args['_servicetype'] == const.SERVICE_UDP:
+        service_args['profileUDP'] = as3.BigIP(CONF.f5_agent.profile_udp)
+    if CONF.f5_agent.profile_multiplex and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+        service_args['profileMultiplex'] = as3.BigIP(CONF.f5_agent.profile_multiplex)
 
     # create service object and fill in additional fields
     service = as3.Service(**service_args)
