@@ -15,6 +15,7 @@
 import functools
 import json
 import os
+import re
 import signal
 
 import prometheus_client as prometheus
@@ -45,6 +46,11 @@ def check_response(func):
             if 'the requested route-domain' in text.get('response', ''):
                 # Self-IP not created yet, retry
                 raise exceptions.RetryException(text['message'])
+            if 'declaration failed' in text['message']:
+                # Workaround for Monitor deletion bug
+                m = re.search('Monitor /(.*)/(.*)/(.*) is in use', text['response'])
+                if m:
+                    raise exceptions.MonitorDeletionException(*m.groups())
             err = '{}: {}'.format(text['message'], text.get('response'))
             raise exceptions.AS3Exception(err)
 

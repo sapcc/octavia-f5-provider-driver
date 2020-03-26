@@ -20,14 +20,13 @@ from requests import ConnectionError
 from tenacity import *
 
 from octavia_f5.common import constants
-from octavia_f5.restclient.as3classes import ADC, AS3, Application
+from octavia_f5.restclient.as3classes import ADC, AS3, Application, Monitor
 from octavia_f5.restclient.as3objects import application as m_app
-from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import tenant as m_part
-from octavia_f5.utils import driver_utils as utils
+from octavia_f5.utils import driver_utils as utils, exceptions
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -99,7 +98,14 @@ def tenant_update(bigip,
         # Attach newly created application
         tenant.add_application(m_app.get_name(loadbalancer.id), app)
 
-    return bigip.post(json=decl.to_json())
+    # Workaround for Monitor deletion bug, inject no-op Monitor
+    try:
+        return bigip.post(json=decl.to_json())
+    except exceptions.MonitorDeletionException as e:
+        tenant = getattr(decl.declaration, e.tenant)
+        application = getattr(tenant, e.application)
+        application.add_entities([(e.monitor, Monitor(monitorType='icmp', interval=0))])
+        return bigip.post(json=decl.to_json())
 
 
 @retry(

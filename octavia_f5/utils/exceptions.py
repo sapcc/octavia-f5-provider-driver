@@ -43,3 +43,10 @@ class PolicyTypeNotSupported(AS3Exception):
 
 class PolicyActionNotSupported(AS3Exception):
     pass
+
+
+class MonitorDeletionException(AS3Exception):
+    def __init__(self, tenant, application, monitor):
+        self.tenant = tenant
+        self.application = application
+        self.monitor = monitor
