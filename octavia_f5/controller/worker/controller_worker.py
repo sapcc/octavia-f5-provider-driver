@@ -86,7 +86,6 @@ class ControllerWorker(object):
         super(ControllerWorker, self).__init__()
 
     @periodics.periodic(120, run_immediately=True)
-    @lockutils.synchronized('tenant_refresh')
     def pending_sync(self):
         """
         Reconciliation loop that
@@ -107,7 +106,12 @@ class ControllerWorker(object):
             self.delete_load_balancer(lb.id)
 
         # Execute a full sync on F5 devices that were offline but are now back online.
-        # (in amphora table status='BOOTING', set by status manager)
+        self.full_sync_reappearing_devices(session)
+
+    @lockutils.synchronized('tenant_refresh')
+    def full_sync_reappearing_devices(self, session):
+        """Execute a full sync on F5 devices that were offline but are now back online. These devices have
+        status='BOOTING' (set by status manager) in their corresponding amphora table entry. """
         for device in self.bigip.bigips:
             device_name = device.hostname
             device_entry = self._amphora_repo.get(session,
@@ -116,7 +120,7 @@ class ControllerWorker(object):
                                          load_balancer_id=None,
                                          cached_zone=device_name)
             if not device_entry:
-                return
+                continue
             LOG.info("Device reappeared: %s. Doing a full sync.", device_name)
 
             # get all load balancers (of this host)
@@ -125,7 +129,32 @@ class ControllerWorker(object):
             # Change the BigIP temporarily for refreshing load balancers
             originally_active_bigip = self.bigip.active_bigip
             self.bigip.active_bigip = device
-            self._refresh_lbs(lbs)
+
+            # deduplicate
+            pending_networks = collections.defaultdict(list)
+            for lb in lbs:
+                if lb not in pending_networks[lb.vip.network_id]:
+                    pending_networks[lb.vip.network_id].append(lb)
+
+            for network_id, loadbalancers in pending_networks.items():
+                LOG.info("Found pending tenant network %s, syncing...", network_id)
+                try:
+                    self._refresh(network_id)
+                    # Don't update status of load balancers because their status must be determined from the active BigIP
+                    # We must however set the device to active
+                    self._amphora_repo.update(session,
+                                              device_entry.id,
+                                              status=constants.AMPHORA_READY)
+                except exceptions.RetryException as e:
+                    LOG.warning("Device is busy, retrying with next sync: %s", e)
+                except o_exceptions.CertificateRetrievalException as e:
+                    LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
+                except exceptions.AS3Exception as e:
+                    LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
+                    for lb in loadbalancers:
+                        self.status.set_error(lb)
+
+            # Change the BigIP back to what it was before
             self.bigip.active_bigip = originally_active_bigip
 
     @lockutils.synchronized('tenant_refresh')
@@ -152,11 +181,6 @@ class ControllerWorker(object):
 
         l7policies = self._l7policy_repo.get_pending_from_host(db_apis.get_session())
         lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
-
-        self._refresh_lbs(lbs)
-
-    def _refresh_lbs(self, lbs):
-        """Refresh several load balancers"""
 
         # deduplicate
         pending_networks = collections.defaultdict(list)
