@@ -126,9 +126,12 @@ class ControllerWorker(object):
             # get all load balancers (of this host)
             lbs = self._loadbalancer_repo.get_all_from_host(session)
 
-            # Change the BigIP temporarily for refreshing load balancers
-            originally_active_bigip = self.bigip.active_bigip
-            self.bigip.active_bigip = device
+            # Use a new instance of BigipAS3RestClient because we don't know whether the correct BigIP is set in self.bigip
+            bigip_to_sync = self.bigip = BigipAS3RestClient(
+                bigip_urls=[device],
+                enable_verify=self.bigip.enable_verify,
+                enable_token=self.bigip.enable_token,
+                esd=self.bigip.esd)
 
             # deduplicate
             pending_networks = collections.defaultdict(list)
@@ -139,7 +142,7 @@ class ControllerWorker(object):
             for network_id, loadbalancers in pending_networks.items():
                 LOG.info("Found pending tenant network %s, syncing...", network_id)
                 try:
-                    self._refresh(network_id)
+                    self._refresh(network_id, bigip=bigip_to_sync)
                     # Don't update status of load balancers because their status must be determined from the active BigIP
                     # We must however set the device to active
                     self._amphora_repo.update(session,
@@ -153,9 +156,6 @@ class ControllerWorker(object):
                     LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
                     for lb in loadbalancers:
                         self.status.set_error(lb)
-
-            # Change the BigIP back to what it was before
-            self.bigip.active_bigip = originally_active_bigip
 
     @lockutils.synchronized('tenant_refresh')
     def sync_loadbalancers(self):
@@ -221,10 +221,12 @@ class ControllerWorker(object):
                 server_group_id=CONF.host))
         return [lb for lb in loadbalancers if lb]
 
-    def _refresh(self, network_id):
+    def _refresh(self, network_id, bigip=None):
+        if not bigip:
+            bigip = self.bigip
         loadbalancers = self._get_all_loadbalancer(network_id)
         segmentation_id = self.network_driver.get_segmentation_id(network_id)
-        return tenant_update(self.bigip,
+        return tenant_update(bigip,
                              self.cert_manager,
                              network_id,
                              loadbalancers,
