@@ -241,7 +241,7 @@ class StatusManager(BigipAS3RestClient):
                                            load_balancer_id=None,
                                            cached_zone=device_name)
             if not device_entry:
-                device_entry = self.amp_repo.create(
+                self.amp_repo.create(
                     lock_session,
                     compute_flavor=CONF.host,
                     vrrp_priority=num_listeners,
@@ -289,7 +289,7 @@ class StatusManager(BigipAS3RestClient):
 
             # create/modify entry
             if not device_entry:
-                device_entry = self.amp_repo.create(
+                self.amp_repo.create(
                     lock_session,
                     compute_flavor=CONF.host,
                     status=status,
