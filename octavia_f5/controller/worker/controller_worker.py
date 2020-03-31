@@ -85,6 +85,25 @@ class ControllerWorker(object):
 
         super(ControllerWorker, self).__init__()
 
+    def _do_for_pending_networks(self, pending_networks, func):
+        """Iterate over networks and execute a function every time.
+
+        :param pending_networks: Networks to iterate over
+        :param func: Function to execute for each network
+        """
+        for network_id, loadbalancers in pending_networks.items():
+            LOG.info("Found pending tenant network %s, syncing...", network_id)
+            try:
+                func(network_id, loadbalancers)
+            except exceptions.RetryException as e:
+                LOG.warning("Device is busy, retrying with next sync: %s", e)
+            except o_exceptions.CertificateRetrievalException as e:
+                LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
+            except exceptions.AS3Exception as e:
+                LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
+                for lb in loadbalancers:
+                    self.status.set_error(lb)
+
     @periodics.periodic(120, run_immediately=True)
     def pending_sync(self):
         """
@@ -139,23 +158,13 @@ class ControllerWorker(object):
                 if lb not in pending_networks[lb.vip.network_id]:
                     pending_networks[lb.vip.network_id].append(lb)
 
-            for network_id, loadbalancers in pending_networks.items():
-                LOG.info("Found pending tenant network %s, syncing...", network_id)
-                try:
+            def refresh_and_update_device_status(network_id, loadbalancers):
                     self._refresh(network_id, bigip=bigip_to_sync)
                     # Don't update status of load balancers because their status must be determined from the active BigIP
                     # We must however set the device to active
-                    self._amphora_repo.update(session,
-                                              device_entry.id,
-                                              status=constants.AMPHORA_READY)
-                except exceptions.RetryException as e:
-                    LOG.warning("Device is busy, retrying with next sync: %s", e)
-                except o_exceptions.CertificateRetrievalException as e:
-                    LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
-                except exceptions.AS3Exception as e:
-                    LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
-                    for lb in loadbalancers:
-                        self.status.set_error(lb)
+                    self._amphora_repo.update(session, device_entry.id, status=constants.AMPHORA_READY)
+
+            self._do_for_pending_networks(pending_networks, refresh_and_update_device_status)
 
     @lockutils.synchronized('tenant_refresh')
     def sync_loadbalancers(self):
@@ -188,19 +197,11 @@ class ControllerWorker(object):
             if lb not in pending_networks[lb.vip.network_id]:
                 pending_networks[lb.vip.network_id].append(lb)
 
-        for network_id, loadbalancers in pending_networks.items():
-            LOG.info("Found pending tenant network %s, syncing...", network_id)
-            try:
-                if self._refresh(network_id).ok:
-                    self.status.update_status(loadbalancers)
-            except exceptions.RetryException as e:
-                LOG.warning("Device is busy, retrying with next sync: %s", e)
-            except o_exceptions.CertificateRetrievalException as e:
-                LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
-            except exceptions.AS3Exception as e:
-                LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
-                for lb in loadbalancers:
-                    self.status.set_error(lb)
+        def refresh_and_update_loadbalancer_status(network_id, loadbalancers):
+            if self._refresh(network_id).ok:
+                self.status.update_status(loadbalancers)
+
+        self._do_for_pending_networks(pending_networks, refresh_and_update_loadbalancer_status)
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
