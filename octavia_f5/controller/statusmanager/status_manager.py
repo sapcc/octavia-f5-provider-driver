@@ -13,6 +13,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import functools
 import time
 
 import futurist
@@ -30,6 +31,25 @@ from octavia_f5.restclient.as3restclient import BigipAS3RestClient, authorized
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
+
+
+def rollback_on_db_exception(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        lock_session = db_api.get_session(autocommit=False)
+        try:
+            return func(lock_session, *args, **kwargs)
+        except db_exc.DBDeadlock:
+            LOG.debug('Database reports deadlock. Skipping.')
+            lock_session.rollback()
+        except db_exc.RetryRequest:
+            LOG.debug('Database is requesting a retry. Skipping.')
+            lock_session.rollback()
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                lock_session.rollback()
+
+    return wrapper
 
 
 def update_health(obj):
@@ -227,41 +247,32 @@ class StatusManager(BigipAS3RestClient):
             self.health_executor.submit(update_health, msg)
             self.stats_executor.submit(update_stats, msg)
 
-    def update_listener_count(self, num_listeners):
+    @rollback_on_db_exception
+    def update_listener_count(self, lock_session, num_listeners):
         """ updates listener count of bigip device (vrrp_priority column in amphora table)
 
+        :param lock_session: Database session supplied by the rollback_on_db_exception wrapper.
+                             Don't supply this argument when calling this function!
         :param num_listeners: number of listener for the bigip device
         """
-        lock_session = None
-        try:
-            lock_session = db_api.get_session(autocommit=False)
-            device_name = self.active_bigip.hostname
-            device_entry = self.amp_repo.get(lock_session,
-                                           compute_flavor=CONF.host,
-                                           load_balancer_id=None,
-                                           cached_zone=device_name)
-            if not device_entry:
-                self.amp_repo.create(
-                    lock_session,
-                    compute_flavor=CONF.host,
-                    vrrp_priority=num_listeners,
-                    cached_zone=device_name)
-            else:
-                self.amp_repo.update(lock_session, device_entry.id,
-                                     vrrp_priority=num_listeners)
-            lock_session.commit()
-        except db_exc.DBDeadlock:
-            LOG.debug('Database reports deadlock. Skipping.')
-            lock_session.rollback()
-        except db_exc.RetryRequest:
-            LOG.debug('Database is requesting a retry. Skipping.')
-            lock_session.rollback()
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                if lock_session:
-                    lock_session.rollback()
+        device_name = self.active_bigip.hostname
+        device_entry = self.amp_repo.get(lock_session,
+                                       compute_flavor=CONF.host,
+                                       load_balancer_id=None,
+                                       cached_zone=device_name)
+        if not device_entry:
+            self.amp_repo.create(
+                lock_session,
+                compute_flavor=CONF.host,
+                vrrp_priority=num_listeners,
+                cached_zone=device_name)
+        else:
+            self.amp_repo.update(lock_session, device_entry.id,
+                                 vrrp_priority=num_listeners)
+        lock_session.commit()
 
-    def update_availability(self, device_name, available):
+    @rollback_on_db_exception
+    def update_availability(self, lock_session, device_name, available):
         """ updates availability status of bigip device (status column in amphora table).
         The values for 'status' are used as follows:
         - 'READY': Device is online, everything is ok.
@@ -269,41 +280,32 @@ class StatusManager(BigipAS3RestClient):
         - 'BOOTING': Device is online but needs a full sync, because it was offline before.
           It is the responsibility of the syncing mechanism to set the status to 'READY' again.
 
-        :param available: whether the device is available or not
+        :param lock_session: Database session supplied by the rollback_on_db_exception wrapper.
+                             Don't supply this argument when calling this function!
+        :param device_name: Name of device. This usually is the domain under which the device can be reached.
+        :param available: Whether the device is available or not
         """
-        lock_session = db_api.get_session(autocommit=False)
 
         # update table entry
-        try:
-            device_entry = self.amp_repo.get(lock_session,
-                                           compute_flavor=CONF.host,
-                                           load_balancer_id=None,
-                                           cached_zone=device_name)
+        device_entry = self.amp_repo.get(lock_session,
+                                       compute_flavor=CONF.host,
+                                       load_balancer_id=None,
+                                       cached_zone=device_name)
 
-            # determine status
-            status = constants.AMPHORA_ALLOCATED  # offline if not available
-            if available:
-                status = constants.AMPHORA_BOOTING  # back online if available (needs full sync)
-                if device_entry.status == constants.AMPHORA_READY:
-                    status = constants.AMPHORA_READY  # ready if it had been available before
+        # determine status
+        status = constants.AMPHORA_ALLOCATED  # offline if not available
+        if available:
+            status = constants.AMPHORA_BOOTING  # back online if available (needs full sync)
+            if device_entry.status == constants.AMPHORA_READY:
+                status = constants.AMPHORA_READY  # ready if it had been available before
 
-            # create/modify entry
-            if not device_entry:
-                self.amp_repo.create(
-                    lock_session,
-                    compute_flavor=CONF.host,
-                    status=status,
-                    cached_zone=device_name)
-            else:
-                self.amp_repo.update(lock_session, device_entry.id, status=status)
-            lock_session.commit()
-        except db_exc.DBDeadlock:
-            LOG.debug('Database reports deadlock. Skipping.')
-            lock_session.rollback()
-        except db_exc.RetryRequest:
-            LOG.debug('Database is requesting a retry. Skipping.')
-            lock_session.rollback()
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                if lock_session:
-                    lock_session.rollback()
+        # create/modify entry
+        if not device_entry:
+            self.amp_repo.create(
+                lock_session,
+                compute_flavor=CONF.host,
+                status=status,
+                cached_zone=device_name)
+        else:
+            self.amp_repo.update(lock_session, device_entry.id, status=status)
+        lock_session.commit()
