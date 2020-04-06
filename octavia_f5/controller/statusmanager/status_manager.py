@@ -18,6 +18,7 @@ import time
 
 import futurist
 import prometheus_client as prometheus
+import requests
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
@@ -150,8 +151,10 @@ class StatusManager(BigipAS3RestClient):
             # Try reaching device
             available = True
             try:
-                self.get(path='', timeout=timeout)
-            except Exception as e:
+                requests.get(device.scheme + '://' + device.hostname, timeout=timeout);
+            except requests.exceptions.Timeout as e:
+                LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
+                         timeout, device.hostname));
                 available = False
 
             # Update database entry
