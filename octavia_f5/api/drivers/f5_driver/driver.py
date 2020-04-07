@@ -151,7 +151,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         payload = {'old_member_ids': [],
                    'new_member_ids': [],
                    'updated_members': []}
-        client = self.client.prepare(server=self._get_server(db_pool.loadbalancer_id))
+        client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
         client.cast({}, 'batch_update_members', **payload)
 
     # Health Monitor
