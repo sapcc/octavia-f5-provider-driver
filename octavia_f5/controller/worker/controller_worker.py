@@ -352,8 +352,10 @@ class ControllerWorker(object):
             pool = old_members[0].pool
         elif new_members:
             pool = new_members[0].pool
-        else:
+        elif updated_members:
             pool = updated_members[0][0].pool
+        else:
+            return
         load_balancer = pool.load_balancer
         network_id = load_balancer.vip.network_id
         if self._refresh(network_id).ok:
