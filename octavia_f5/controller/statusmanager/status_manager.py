@@ -35,11 +35,13 @@ LOG = logging.getLogger(__name__)
 
 
 def rollback_on_db_exception(func):
+    """Call func and supply a session argument. If func raises an exception, roll back the session."""
     @functools.wraps(func)
     def wrapper(*args, **kwargs):
         lock_session = db_api.get_session(autocommit=False)
         try:
-            return func(lock_session, *args, **kwargs)
+            kwargs['session'] = lock_session
+            return func(*args, **kwargs)
         except db_exc.DBDeadlock:
             LOG.debug('Database reports deadlock. Skipping.')
             lock_session.rollback()
@@ -151,7 +153,8 @@ class StatusManager(BigipAS3RestClient):
             # Try reaching device
             available = True
             try:
-                requests.get(device.scheme + '://' + device.hostname, timeout=timeout);
+                requests.get(device.scheme + '://' + device.hostname,
+                             timeout=timeout, verify=CONF.f5_agent.bigip_verify);
             except requests.exceptions.Timeout as e:
                 LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
                          timeout, device.hostname));
@@ -251,31 +254,31 @@ class StatusManager(BigipAS3RestClient):
             self.stats_executor.submit(update_stats, msg)
 
     @rollback_on_db_exception
-    def update_listener_count(self, lock_session, num_listeners):
+    def update_listener_count(self, num_listeners, session=None):
         """ updates listener count of bigip device (vrrp_priority column in amphora table)
 
-        :param lock_session: Database session supplied by the rollback_on_db_exception wrapper.
-                             Don't supply this argument when calling this function!
+        :param session: Database session supplied by the rollback_on_db_exception wrapper.
+                        Don't supply this argument when calling this function!
         :param num_listeners: number of listener for the bigip device
         """
         device_name = self.active_bigip.hostname
-        device_entry = self.amp_repo.get(lock_session,
-                                       compute_flavor=CONF.host,
-                                       load_balancer_id=None,
-                                       cached_zone=device_name)
+        device_entry = self.amp_repo.get(session,
+                                         compute_flavor=CONF.host,
+                                         load_balancer_id=None,
+                                         cached_zone=device_name)
         if not device_entry:
             self.amp_repo.create(
-                lock_session,
+                session,
                 compute_flavor=CONF.host,
                 vrrp_priority=num_listeners,
                 cached_zone=device_name)
         else:
-            self.amp_repo.update(lock_session, device_entry.id,
+            self.amp_repo.update(session, device_entry.id,
                                  vrrp_priority=num_listeners)
-        lock_session.commit()
+        session.commit()
 
     @rollback_on_db_exception
-    def update_availability(self, lock_session, device_name, available):
+    def update_availability(self, device_name, available, session=None):
         """ updates availability status of bigip device (status column in amphora table).
         The values for 'status' are used as follows:
         - 'READY': Device is online, everything is ok.
@@ -283,17 +286,17 @@ class StatusManager(BigipAS3RestClient):
         - 'BOOTING': Device is online but needs a full sync, because it was offline before.
           It is the responsibility of the syncing mechanism to set the status to 'READY' again.
 
-        :param lock_session: Database session supplied by the rollback_on_db_exception wrapper.
-                             Don't supply this argument when calling this function!
+        :param session: Database session supplied by the rollback_on_db_exception wrapper.
+                        Don't supply this argument when calling this function!
         :param device_name: Name of device. This usually is the domain under which the device can be reached.
         :param available: Whether the device is available or not
         """
 
         # update table entry
-        device_entry = self.amp_repo.get(lock_session,
-                                       compute_flavor=CONF.host,
-                                       load_balancer_id=None,
-                                       cached_zone=device_name)
+        device_entry = self.amp_repo.get(session,
+                                         compute_flavor=CONF.host,
+                                         load_balancer_id=None,
+                                         cached_zone=device_name)
 
         # determine status
         status = constants.AMPHORA_ALLOCATED  # offline if not available
@@ -305,10 +308,10 @@ class StatusManager(BigipAS3RestClient):
         # create/modify entry
         if not device_entry:
             self.amp_repo.create(
-                lock_session,
+                session,
                 compute_flavor=CONF.host,
                 status=status,
                 cached_zone=device_name)
         else:
-            self.amp_repo.update(lock_session, device_entry.id, status=status)
-        lock_session.commit()
+            self.amp_repo.update(session, device_entry.id, status=status)
+        session.commit()

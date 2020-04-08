@@ -146,8 +146,8 @@ class ControllerWorker(object):
             lbs = self._loadbalancer_repo.get_all_from_host(session)
 
             # Use a new instance of BigipAS3RestClient because we don't know whether the correct BigIP is set in self.bigip
-            bigip_to_sync = self.bigip = BigipAS3RestClient(
-                bigip_urls=[device],
+            bigip_to_sync = BigipAS3RestClient(
+                bigip_urls=[device.geturl()],
                 enable_verify=self.bigip.enable_verify,
                 enable_token=self.bigip.enable_token,
                 esd=self.bigip.esd)
