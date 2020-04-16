@@ -293,9 +293,9 @@ class StatusManager(BigipAS3RestClient):
             # determine status
             status = constants.AMPHORA_ALLOCATED  # offline if not available
             if available:
-                status = constants.AMPHORA_BOOTING  # back online if available (needs full sync)
-                if device_entry.status == constants.AMPHORA_READY:
-                    status = constants.AMPHORA_READY  # ready if it had been available before
+                status = constants.AMPHORA_READY  # back online if available
+                if device_entry is None or device_entry.status != constants.AMPHORA_READY:
+                    status = constants.AMPHORA_BOOTING  # needs full sync if no DB entry or not yet marked as ready
 
             # create/modify entry
             if not device_entry:
