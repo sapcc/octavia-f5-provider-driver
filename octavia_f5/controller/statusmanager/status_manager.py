@@ -256,7 +256,7 @@ class StatusManager(BigipAS3RestClient):
 
         :param num_listeners: number of listener for the bigip device
         """
-        with DatabaseLockSession as session:
+        with DatabaseLockSession() as session:
             device_name = self.active_bigip.hostname
             device_entry = self.amp_repo.get(session,
                                              compute_flavor=CONF.host,
@@ -283,7 +283,7 @@ class StatusManager(BigipAS3RestClient):
         :param device_name: Name of device. This usually is the domain under which the device can be reached.
         :param available: Whether the device is available or not
         """
-        with DatabaseLockSession as session:
+        with DatabaseLockSession() as session:
             # update table entry
             device_entry = self.amp_repo.get(session,
                                              compute_flavor=CONF.host,
