@@ -139,10 +139,6 @@ class ControllerWorker(object):
             try:
                 if self._refresh(network_id).ok:
                     self.status.update_status(loadbalancers)
-            except exceptions.RetryException as e:
-                LOG.warning("Device is busy, retrying with next sync: %s", e)
-            except o_exceptions.CertificateRetrievalException as e:
-                LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
             except exceptions.AS3Exception as e:
                 LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
                 for lb in loadbalancers:
@@ -170,11 +166,16 @@ class ControllerWorker(object):
     def _refresh(self, network_id):
         loadbalancers = self._get_all_loadbalancer(network_id)
         segmentation_id = self.network_driver.get_segmentation_id(network_id)
-        return tenant_update(self.bigip,
-                             self.cert_manager,
-                             network_id,
-                             loadbalancers,
-                             segmentation_id)
+        try:
+            return tenant_update(self.bigip,
+                                 self.cert_manager,
+                                 network_id,
+                                 loadbalancers,
+                                 segmentation_id)
+        except exceptions.RetryException as e:
+            LOG.warning("Device is busy, retrying with next sync: %s", e)
+        except o_exceptions.CertificateRetrievalException as e:
+            LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
 
     """
     Loadbalancer
