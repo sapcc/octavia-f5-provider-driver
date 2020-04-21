@@ -60,8 +60,19 @@ def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode=
         service_args['authenticationInviteCA'] = authentication_ca
         service_args['authenticationMode'] = mode_map[authentication_mode]
 
-    if CONF.f5_agent.default_server_ciphers:
-        service_args['ciphers'] = CONF.f5_agent.default_server_ciphers
+    if CONF.f5_tls_server.default_ciphers:
+        service_args['ciphers'] = CONF.f5_tls_server.default_ciphers
+
+    service_args['forwardProxyBypassEnabled'] = CONF.f5_tls_server.forward_proxy_bypass
+    service_args['forwardProxyEnabled'] = CONF.f5_tls_server.forward_proxy
+    service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_server.insert_empty_fragments
+    service_args['singleUseDhEnabled'] = CONF.f5_tls_server.single_use_dh
+    service_args['tls1_0Enabled'] = CONF.f5_tls_server.tls_1_0
+    service_args['tls1_1Enabled'] = CONF.f5_tls_server.tls_1_1
+    service_args['tls1_2Enabled'] = CONF.f5_tls_server.tls_1_2
+    service_args['tls1_3Enabled'] = CONF.f5_tls_server.tls_1_3
+    service_args['cacheCertificateEnabled'] = CONF.f5_tls_server.cache_certificate
+    service_args['staplerOCSPEnabled'] = CONF.f5_tls_server.stapler_ocsp
 
     return TLS_Server(**service_args)
 
@@ -83,7 +94,16 @@ def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
     if crl_file:
         service_args['crlFile'] = crl_file
 
-    if CONF.f5_agent.default_client_ciphers:
-        service_args['ciphers'] = CONF.f5_agent.default_client_ciphers
+    if CONF.f5_tls_client.default_ciphers:
+        service_args['ciphers'] = CONF.f5_tls_client.default_ciphers
+
+    service_args['forwardProxyBypassEnabled'] = CONF.f5_tls_client.forward_proxy_bypass
+    service_args['forwardProxyEnabled'] = CONF.f5_tls_client.forward_proxy
+    service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_client.insert_empty_fragments
+    service_args['singleUseDhEnabled'] = CONF.f5_tls_client.single_use_dh
+    service_args['tls1_0Enabled'] = CONF.f5_tls_client.tls_1_0
+    service_args['tls1_1Enabled'] = CONF.f5_tls_client.tls_1_1
+    service_args['tls1_2Enabled'] = CONF.f5_tls_client.tls_1_2
+    service_args['tls1_3Enabled'] = CONF.f5_tls_client.tls_1_3
 
     return TLS_Client(**service_args)
