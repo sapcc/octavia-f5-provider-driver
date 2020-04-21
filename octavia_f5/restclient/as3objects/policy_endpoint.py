@@ -12,6 +12,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from octavia_f5.common import constants as const
 from octavia_f5.restclient import as3types
 from octavia_f5.restclient.as3classes import *
 from octavia_f5.restclient.as3objects import pool
@@ -30,16 +31,18 @@ COMPARE_TYPE_INVERT_MAP = {
     'EQUAL_TO': 'does-not-equal'
 }
 COND_TYPE_MAP = {
-    'HOST_NAME': {'match_key': 'host', 'type': 'httpUri'},
-    'PATH': {'match_key': 'path', 'type': 'httpUri'},
-    'FILE_TYPE': {'match_key': 'extension', 'type': 'httpUri'},
-    'HEADER': {'match_key': 'all', 'type': 'httpHeader'},
-    'SSL_DN_FIELD': {'match_key': 'serverName', 'type': 'sslExtension'}
+    const.L7RULE_TYPE_HOST_NAME: {'match_key': 'host', 'type': 'httpUri'},
+    const.L7RULE_TYPE_PATH: {'match_key': 'path', 'type': 'httpUri'},
+    const.L7RULE_TYPE_FILE_TYPE: {'match_key': 'extension', 'type': 'httpUri'},
+    const.L7RULE_TYPE_HEADER: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name'},
+    const.L7RULE_TYPE_SSL_DN_FIELD: {'match_key': 'serverName', 'type': 'sslExtension'},
+    const.L7RULE_TYPE_COOKIE: {'match_key': 'all', 'type': 'httpCookie', 'key_name': 'name'},
 }
 SUPPORTED_ACTION_TYPE = [
-    'REDIRECT_TO_POOL',
-    'REDIRECT_TO_URL',
-    'REJECT'
+    const.L7POLICY_ACTION_REDIRECT_TO_POOL,
+    const.L7POLICY_ACTION_REDIRECT_TO_URL,
+    const.L7POLICY_ACTION_REDIRECT_PREFIX,
+    const.L7POLICY_ACTION_REJECT
 ]
 
 
@@ -49,9 +52,13 @@ def get_name(policy_id):
 
 def _get_condition(l7rule):
     if l7rule.type not in COND_TYPE_MAP:
-        raise PolicyTypeNotSupported()
+        raise PolicyTypeNotSupported(
+            "l7policy-id={}, l7rule-id={}, type={}".format(
+            l7rule.l7policy_id, l7rule.id, l7rule.type))
     if l7rule.compare_type not in COMPARE_TYPE_MAP:
-        raise CompareTypeNotSupported()
+        raise CompareTypeNotSupported(
+            "l7policy-id={}, l7rule-id={}, type={}".format(
+            l7rule.l7policy_id, l7rule.id, l7rule.compare_type))
 
     args = dict()
     if l7rule.invert:
@@ -59,28 +66,36 @@ def _get_condition(l7rule):
     else:
         operand = COMPARE_TYPE_MAP[l7rule.compare_type]
     condition = COND_TYPE_MAP[l7rule.type]
-    compare_string = Policy_Compare_String(operand=operand, values=[l7rule.value])
+    values = [l7rule.value]
+    if 'eval_true' in condition and l7rule.value.lower() == 'true':
+        values = [condition['eval_true']]
+    compare_string = Policy_Compare_String(operand=operand, values=values)
     args[condition['match_key']] = compare_string
     args['type'] = condition['type']
+    if 'key_name' in condition:
+        args[condition['key_name']] = l7rule.key
     return Policy_Condition(**args)
 
 
 def _get_action(l7policy):
-    # TODO!!! REDIRECT_PREFIX (http://abc.de -> https://abc.de)
     if l7policy.action not in SUPPORTED_ACTION_TYPE:
         raise PolicyActionNotSupported()
 
     args = dict()
-    if l7policy.action == 'REDIRECT_TO_POOL':
+    if l7policy.action == const.L7POLICY_ACTION_REDIRECT_TO_POOL:
         args['type'] = 'forward'
         pool_name = pool.get_name(l7policy.redirect_pool_id)
         args['select'] = {'pool': {'use': pool_name}}
         args['event'] = 'request'
-    elif l7policy.action == 'REDIRECT_TO_URL':
+    elif l7policy.action == const.L7POLICY_ACTION_REDIRECT_TO_URL:
         args['type'] = 'httpRedirect'
         args['location'] = l7policy.redirect_url
         args['event'] = 'request'
-    elif l7policy.action == 'REJECT':
+    elif l7policy.action == const.L7POLICY_ACTION_REDIRECT_PREFIX:
+        args['type'] = 'httpRedirect'
+        args['location'] = 'tcl:{}[HTTP::uri]'.format(l7policy.redirect_prefix)
+        args['event'] = 'request'
+    elif l7policy.action == const.L7POLICY_ACTION_REJECT:
         args['type'] = 'drop'
         args['event'] = 'request'
     return Policy_Action(**args)
