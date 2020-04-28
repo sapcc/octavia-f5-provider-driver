@@ -95,10 +95,6 @@ class ControllerWorker(object):
             LOG.info("Found pending tenant network %s, syncing...", network_id)
             try:
                 func(network_id, loadbalancers)
-            except exceptions.RetryException as e:
-                LOG.warning("Device is busy, retrying with next sync: %s", e)
-            except o_exceptions.CertificateRetrievalException as e:
-                LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
             except exceptions.AS3Exception as e:
                 LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
                 for lb in loadbalancers:
@@ -227,11 +223,16 @@ class ControllerWorker(object):
             bigip = self.bigip
         loadbalancers = self._get_all_loadbalancer(network_id)
         segmentation_id = self.network_driver.get_segmentation_id(network_id)
-        return tenant_update(bigip,
-                             self.cert_manager,
-                             network_id,
-                             loadbalancers,
-                             segmentation_id)
+        try:
+            return tenant_update(self.bigip,
+                                 self.cert_manager,
+                                 network_id,
+                                 loadbalancers,
+                                 segmentation_id)
+        except exceptions.RetryException as e:
+            LOG.warning("Device is busy, retrying with next sync: %s", e)
+        except o_exceptions.CertificateRetrievalException as e:
+            LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
 
     """
     Loadbalancer
@@ -409,8 +410,10 @@ class ControllerWorker(object):
             pool = old_members[0].pool
         elif new_members:
             pool = new_members[0].pool
-        else:
+        elif updated_members:
             pool = updated_members[0][0].pool
+        else:
+            return
         load_balancer = pool.load_balancer
         network_id = load_balancer.vip.network_id
         if self._refresh(network_id).ok:
