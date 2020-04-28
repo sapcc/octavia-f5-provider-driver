@@ -99,13 +99,13 @@ def tenant_update(bigip,
         tenant.add_application(m_app.get_name(loadbalancer.id), app)
 
     # Workaround for Monitor deletion bug, inject no-op Monitor
-    try:
-        return bigip.post(json=decl.to_json())
-    except exceptions.MonitorDeletionException as e:
-        tenant = getattr(decl.declaration, e.tenant)
-        application = getattr(tenant, e.application)
-        application.add_entities([(e.monitor, Monitor(monitorType='icmp', interval=0))])
-        return bigip.post(json=decl.to_json())
+    while True:
+        try:
+            return bigip.post(json=decl.to_json())
+        except exceptions.MonitorDeletionException as e:
+            tenant = getattr(decl.declaration, e.tenant)
+            application = getattr(tenant, e.application)
+            application.add_entities([(e.monitor, Monitor(monitorType='icmp', interval=0))])
 
 
 @retry(
