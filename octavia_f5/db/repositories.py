@@ -40,13 +40,24 @@ class AmphoraRepository(repositories.AmphoraRepository):
         """
 
         candidates = session.query(self.model_class)
+
+        # Filter and sort. It is wise to sort before removing duplicates so that the first duplicate is kept,
+        # that is, the duplicate with the lowest value for vrrp_priority.
         candidates = candidates.filter_by(
             status=consts.AMPHORA_READY,
             load_balancer_id=None)
         candidates = candidates.order_by(
             self.model_class.vrrp_priority.asc(),
             self.model_class.updated_at.desc())
-        return [candidate.compute_flavor for candidate in candidates.all()]
+
+        # Extract hostnames (field 'compute_flavor'), removing duplicates
+        # Count entries with same compute_flavor value as one single candidate
+        uniqueCandidates = []
+        for c in candidates.all():
+            if not c.compute_flavor in uniqueCandidates:
+                uniqueCandidates.append(c)
+
+        return uniqueCandidates
 
 
 class LoadBalancerRepository(repositories.LoadBalancerRepository):
