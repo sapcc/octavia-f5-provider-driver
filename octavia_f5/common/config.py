@@ -93,12 +93,47 @@ f5_agent_opts = [
                 help=_("Run in dry-run, do not realize AS3 definitions.")),
     cfg.BoolOpt('snat_virtual', default=False,
                 help=_("Use the virtual-server address as SNAT address.")),
-    cfg.StrOpt('default_server_ciphers', default=None,
-               help=_("Use Cipher String for ciphers used in server TLS profiles")),
-    cfg.StrOpt('default_client_ciphers', default=None,
-               help=_("Use Cipher String for ciphers used in client TLS profiles")),
-
 ]
+
+f5_tls_shared = {
+    cfg.StrOpt('default_ciphers', default=None,
+               help=_("Use Cipher String for ciphers used in TLS profiles")),
+    cfg.BoolOpt('forward_proxy_bypass', default=False,
+                help=_("Enables or disables (default) SSL forward proxy bypass.")),
+    cfg.BoolOpt('forward_proxy', default=False,
+                help=_("Enables or disables (default) SSL forward proxy.")),
+    cfg.BoolOpt('insert_empty_fragments', default=False,
+                help=_("Enables a countermeasure against an SSL 3.0/TLS 1.0 protocol "
+                       "vulnerability affecting CBC ciphers. These ciphers cannot be "
+                       "handled by certain broken SSL implementations.")),
+    cfg.BoolOpt('single_use_dh', default=False,
+                help=_("Creates a new key when using temporary/ephemeral DH parameters. "
+                       "This option must be used to prevent small subgroup attacks, when " 
+                       "the DH parameters were not generated using strong primes (for " 
+                       "example. when using DSA-parameters). If strong primes were used, " 
+                       "it is not strictly necessary to generate a new DH key during each " 
+                       "handshake, but F5 Networks recommends it. Enable the Single DH Use " 
+                       "option whenever temporary or ephemeral DH parameters are used.")),
+    cfg.BoolOpt('tls_1_0', default=True,
+                help=_("Allow TLS 1.0 Ciphers.")),
+    cfg.BoolOpt('tls_1_1', default=True,
+                help=_("Allow TLS 1.1 Ciphers.")),
+    cfg.BoolOpt('tls_1_2', default=True,
+                help=_("Allow TLS 1.2 Ciphers.")),
+    cfg.BoolOpt('tls_1_3', default=False,
+                help=_("Allow TLS 1.3 Ciphers. Note: tls_1_1 is only supported in tmos " 
+                       "version 14.0+.")),
+}
+
+f5_tls_server_opts = {
+    cfg.BoolOpt('cache_certificate', default=False,
+                help=_("Enables or disables (default) caching certificates by IP address " 
+                       "and port number.")),
+    cfg.BoolOpt('stapler_ocsp', default=False,
+                help=_("Specifies whether to enable OCSP stapling.")),
+}
+f5_tls_server_opts.update(f5_tls_shared)
+f5_tls_client_opts = f5_tls_shared
 
 f5_networking_opts = [
     cfg.BoolOpt('caching', default=True,
@@ -111,5 +146,7 @@ f5_networking_opts = [
 ]
 
 # Register the configuration options
+cfg.CONF.register_opts(f5_tls_server_opts, group='f5_tls_server')
+cfg.CONF.register_opts(f5_tls_client_opts, group='f5_tls_client')
 cfg.CONF.register_opts(f5_agent_opts, group='f5_agent')
 cfg.CONF.register_opts(f5_networking_opts, group='networking')

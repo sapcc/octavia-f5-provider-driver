@@ -18,5 +18,6 @@ import octavia_f5.common.config
 def list_opts():
     return [
         ('f5_agent', octavia_f5.common.config.f5_agent_opts),
+        ('f5_tls_server', octavia_f5.common.config.f5_tls_server_opts),
+        ('f5_tls_client', octavia_f5.common.config.f5_tls_client_opts),
     ]
-
