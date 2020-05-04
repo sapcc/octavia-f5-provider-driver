@@ -67,8 +67,6 @@ def _get_condition(l7rule):
         operand = COMPARE_TYPE_MAP[l7rule.compare_type]
     condition = COND_TYPE_MAP[l7rule.type]
     values = [l7rule.value]
-    if 'eval_true' in condition and l7rule.value.lower() == 'true':
-        values = [condition['eval_true']]
     compare_string = Policy_Compare_String(operand=operand, values=values)
     args[condition['match_key']] = compare_string
     args['type'] = condition['type']
