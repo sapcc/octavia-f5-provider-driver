@@ -43,7 +43,7 @@ def check_response(func):
             if 'please try again' in text['message']:
                 # BigIP busy, just throw retry-exception
                 raise exceptions.RetryException(text['message'])
-            if 'the requested route-domain' in text.get('response', ''):
+            if 'requested route-domain' in text.get('response', ''):
                 # Self-IP not created yet, retry
                 raise exceptions.RetryException(text['message'])
             if 'declaration failed' in text['message']:
