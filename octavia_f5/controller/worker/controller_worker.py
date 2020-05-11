@@ -12,6 +12,7 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
 import collections
 import threading
 
@@ -26,15 +27,10 @@ from sqlalchemy.orm import exc as db_exceptions
 from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
-from octavia_f5.controller.worker import status
-from octavia_f5.controller.worker.f5agent_driver import member_create
-from octavia_f5.controller.worker.f5agent_driver import tenant_delete
-from octavia_f5.controller.worker.f5agent_driver import tenant_update
+from octavia_f5.controller.worker import status_manager, sync_manager
 from octavia_f5.db import api as db_apis
 from octavia_f5.db import repositories as f5_repos
-from octavia_f5.restclient.as3restclient import BigipAS3RestClient
-from octavia_f5.utils import cert_manager
-from octavia_f5.utils import esd_repo, driver_utils, exceptions
+from octavia_f5.utils import exceptions, driver_utils
 from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
@@ -52,7 +48,6 @@ class ControllerWorker(object):
 
     def __init__(self):
         self._loadbalancer_repo = f5_repos.LoadBalancerRepository()
-        self._esd = esd_repo.EsdRepository()
         self._amphora_repo = repo.AmphoraRepository()
         self._health_mon_repo = repo.HealthMonitorRepository()
         self._lb_repo = repo.LoadBalancerRepository()
@@ -62,17 +57,13 @@ class ControllerWorker(object):
         self._l7policy_repo = f5_repos.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
         self._vip_repo = repo.VipRepository()
-        self.bigip = BigipAS3RestClient(
-            bigip_urls=CONF.f5_agent.bigip_urls,
-            enable_verify=CONF.f5_agent.bigip_verify,
-            enable_token=CONF.f5_agent.bigip_token,
-            esd=self._esd)
 
+        self.sync = sync_manager.SyncManager()
+        self.status = status_manager.StatusManager()
         self.network_driver = driver_utils.get_network_driver()
-        self.cert_manager = cert_manager.CertManagerWrapper()
-        self.status = status.StatusManager(self.bigip)
         worker = periodics.PeriodicWorker(
-            [(self.pending_sync, None, None)]
+            [(self.pending_sync, None, None),
+             (self.full_sync_reappearing_devices, None, None)]
         )
         t = threading.Thread(target=worker.start)
         t.daemon = True
@@ -84,25 +75,6 @@ class ControllerWorker(object):
             prometheus.start_http_server(prometheus_port)
 
         super(ControllerWorker, self).__init__()
-
-    def _do_for_pending_networks(self, pending_networks, func):
-        """Iterate over networks and execute a function every time.
-
-        :param pending_networks: Networks to iterate over
-        :param func: Function to execute for each network
-        """
-        for network_id, loadbalancers in pending_networks.items():
-            LOG.info("Found pending tenant network %s, syncing...", network_id)
-            try:
-                func(network_id, loadbalancers)
-            except exceptions.RetryException as e:
-                LOG.warning("Device is busy, retrying with next sync: %s", e)
-            except o_exceptions.CertificateRetrievalException as e:
-                LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
-            except exceptions.AS3Exception as e:
-                LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
-                for lb in loadbalancers:
-                    self.status.set_error(lb)
 
     @periodics.periodic(120, run_immediately=True)
     def pending_sync(self):
@@ -124,47 +96,38 @@ class ControllerWorker(object):
             LOG.info("Found pending deletion of lb %s", lb.id)
             self.delete_load_balancer(lb.id)
 
-        # Execute a full sync on F5 devices that were offline but are now back online.
-        self.full_sync_reappearing_devices(session)
-
+    @periodics.periodic(240, run_immediately=True)
     @lockutils.synchronized('tenant_refresh')
-    def full_sync_reappearing_devices(self, session):
-        """Execute a full sync on F5 devices that were offline but are now back online. These devices have
-        status='BOOTING' (set by status manager) in their corresponding amphora table entry. """
-        for device in self.bigip.bigips:
-            device_name = device.hostname
-            device_entry = self._amphora_repo.get(session,
-                                         status=constants.AMPHORA_BOOTING,
-                                         compute_flavor=CONF.host,
-                                         load_balancer_id=None,
-                                         cached_zone=device_name)
-            if not device_entry:
-                continue
-            LOG.info("Device reappeared: %s. Doing a full sync.", device_name)
+    def full_sync_reappearing_devices(self):
+        session = db_apis.get_session(autocommit=False)
+
+        # Get all pending devices
+        booting_devices = self._amphora_repo.get_all(
+            session, status=constants.AMPHORA_BOOTING,
+            compute_flavor=CONF.host, load_balancer_id=None)
+
+        for device in booting_devices[0]:
+            LOG.info("Device reappeared: %s. Doing a full sync.", device.cached_zone)
 
             # get all load balancers (of this host)
             lbs = self._loadbalancer_repo.get_all_from_host(session)
 
-            # Use a new instance of BigipAS3RestClient because we don't know whether the correct BigIP is set in self.bigip
-            bigip_to_sync = BigipAS3RestClient(
-                bigip_urls=[device.geturl()],
-                enable_verify=self.bigip.enable_verify,
-                enable_token=self.bigip.enable_token,
-                esd=self.bigip.esd)
-
             # deduplicate
-            pending_networks = collections.defaultdict(list)
+            networks = collections.defaultdict(list)
             for lb in lbs:
-                if lb not in pending_networks[lb.vip.network_id]:
-                    pending_networks[lb.vip.network_id].append(lb)
+                if lb not in networks[lb.vip.network_id]:
+                    networks[lb.vip.network_id].append(lb)
 
-            def refresh_and_update_device_status(network_id, loadbalancers):
-                    self._refresh(network_id, bigip=bigip_to_sync)
-                    # Don't update status of load balancers because their status must be determined from the active BigIP
-                    # We must however set the device to active
-                    self._amphora_repo.update(session, device_entry.id, status=constants.AMPHORA_READY)
+            # push configuration
+            for network_id, loadbalancers in networks.items():
+                try:
+                    self.sync.tenant_update(network_id, loadbalancers, device.cached_zone)
+                except exceptions.AS3Exception as e:
+                    LOG.error("AS3 exception while syncing reappared device %s: %s", network_id, e)
 
-            self._do_for_pending_networks(pending_networks, refresh_and_update_device_status)
+            # Set device ready
+            self._amphora_repo.update(session, device.id, status=constants.AMPHORA_READY)
+            session.commit()
 
     @lockutils.synchronized('tenant_refresh')
     def sync_loadbalancers(self):
@@ -197,7 +160,7 @@ class ControllerWorker(object):
             if lb not in pending_networks[lb.vip.network_id]:
                 pending_networks[lb.vip.network_id].append(lb)
 
-        def refresh_and_update_loadbalancer_status(network_id, loadbalancers):
+        for network_id, loadbalancers in pending_networks.items():
             LOG.info("Found pending tenant network %s, syncing...", network_id)
             try:
                 if self._refresh(network_id).ok:
@@ -206,9 +169,6 @@ class ControllerWorker(object):
                 LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
                 for lb in loadbalancers:
                     self.status.set_error(lb)
-
-
-        self._do_for_pending_networks(pending_networks, refresh_and_update_loadbalancer_status)
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
@@ -229,22 +189,16 @@ class ControllerWorker(object):
                 server_group_id=CONF.host))
         return [lb for lb in loadbalancers if lb]
 
-    def _refresh(self, network_id, bigip=None):
-        if not bigip:
-            bigip = self.bigip
+    def _refresh(self, network_id):
         loadbalancers = self._get_all_loadbalancer(network_id)
-        segmentation_id = self.network_driver.get_segmentation_id(network_id)
         try:
-            return tenant_update(bigip,
-                                 self.cert_manager,
-                                 network_id,
-                                 loadbalancers,
-                                 segmentation_id)
+            return self.sync.tenant_update(network_id, loadbalancers)
         except exceptions.RetryException as e:
             LOG.warning("Device is busy, retrying with next sync: %s", e)
+            raise e
         except o_exceptions.CertificateRetrievalException as e:
             LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
-
+            raise e
     """
     Loadbalancer
     """
@@ -287,11 +241,10 @@ class ControllerWorker(object):
 
         if not existing_lbs:
             # Delete whole tenant
-            ret = tenant_delete(self.bigip, lb.vip.network_id)
+            ret = self.sync.tenant_delete(lb.vip.network_id)
         else:
             # Don't delete whole tenant
-            segmentation_id = self.network_driver.get_segmentation_id(lb.vip.network_id)
-            ret = tenant_update(self.bigip, self.cert_manager, lb.vip.network_id, existing_lbs, segmentation_id)
+            ret = self.sync.tenant_update(lb.vip.network_id, existing_lbs)
 
         if ret.ok:
             self.status.set_deleted(lb)
@@ -447,8 +400,9 @@ class ControllerWorker(object):
             self.status.set_deleted(member)
 
     """
-    Member
+    Health Monitor
     """
+
     @lockutils.synchronized('tenant_refresh')
     def create_health_monitor(self, health_monitor_id):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
@@ -566,6 +520,7 @@ class ControllerWorker(object):
     """
     Amphora
     """
+
     def ensure_amphora_exists(self, load_balancer_id):
         """
         Octavia health manager makes some assumptions about the existence of amphorae.

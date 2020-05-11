@@ -13,7 +13,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import functools
 import time
 
 import futurist
@@ -28,30 +27,37 @@ from stevedore import driver as stevedore_driver
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
-from octavia_f5.restclient.as3restclient import BigipAS3RestClient, authorized
+from octavia_f5.restclient import as3restclient
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
+F5_VIRTUAL_STATS = '/mgmt/tm/ltm/virtual/stats'
+F5_POOL_STATS = '/mgmt/tm/ltm/pool/stats'
+F5_POOL_MEMBERS = '/mgmt/tm/ltm/pool/{}/members'
+F5_POOL_MEMBER_STATS = '/mgmt/tm/ltm/pool/{}/members/stats'
 
-class DatabaseLockSession():
+
+class DatabaseLockSession(object):
     """Provides a database session and rolls it back if an exception occured before exiting with-statement."""
     def __enter__(self):
         self._lock_session = db_api.get_session(autocommit=False)
         return self._lock_session
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         if exc_tb is None:
             self._lock_session.commit()
         else:
-            if exc_type.is_instance(db_exc.DBDeadlock):
+            if isinstance(exc_type, db_exc.DBDeadlock):
                 LOG.debug('Database reports deadlock. Skipping.')
                 self._lock_session.rollback()
-            elif exc_type.is_instance(db_exc.RetryRequest):
+            elif isinstance(exc_type, db_exc.RetryRequest):
                 LOG.debug('Database is requesting a retry. Skipping.')
                 self._lock_session.rollback()
             else:
                 with excutils.save_and_reraise_exception():
                     self._lock_session.rollback()
+
 
 def update_health(obj):
     handler = stevedore_driver.DriverManager(
@@ -71,13 +77,10 @@ def update_stats(obj):
     handler.update_stats(obj, '127.0.0.1')
 
 
-class StatusManager(BigipAS3RestClient):
+class StatusManager(object):
     def __init__(self):
-        super(StatusManager, self).__init__(bigip_urls=CONF.f5_agent.bigip_urls,
-                                            enable_verify=CONF.f5_agent.bigip_verify,
-                                            enable_token=CONF.f5_agent.bigip_token)
+        LOG.info('Health Manager starting.')
         self.seq = 0
-        LOG.info('Health Manager Sender starting.')
         self.amp_repo = repo.AmphoraRepository()
         self.amp_health_repo = repo.AmphoraHealthRepository()
         self.lb_repo = repo.LoadBalancerRepository()
@@ -85,6 +88,18 @@ class StatusManager(BigipAS3RestClient):
             max_workers=CONF.health_manager.health_update_threads)
         self.stats_executor = futurist.ThreadPoolExecutor(
             max_workers=CONF.health_manager.stats_update_threads)
+        self.bigips = [as3restclient.BigipAS3RestClient(
+            url=bigip_url,
+            enable_verify=CONF.f5_agent.bigip_verify,
+            enable_token=CONF.f5_agent.bigip_token)
+            for bigip_url in CONF.f5_agent.bigip_urls
+        ]
+        # Cache reachability of every bigip
+        self.bigip_status = {bigip.hostname: False
+                             for bigip in self.bigips}
+        self._active_bigip = None
+        self._last_failover_check = time.time() - int(CONF.status_manager.failover_check_interval)
+        self.cleanup()
 
         if cfg.CONF.f5_agent.prometheus:
             prometheus_port = CONF.f5_agent.prometheus_port
@@ -97,12 +112,8 @@ class StatusManager(BigipAS3RestClient):
         'octavia_status_heartbeat_duration', 'Time it needs for one heartbeat')
     _metric_heartbeat_exceptions = prometheus.metrics.Counter(
         'octavia_status_heartbeat_exceptions', 'Number of exceptions at heartbeat')
-
-    @authorized
-    def get(self, **kwargs):
-        path = self._url('mgmt/{}'.format(kwargs.pop('path')))
-        LOG.debug("Calling GET '%s'", path)
-        return self.session.get(path, **kwargs)
+    _metric_failover = prometheus.metrics.Counter(
+        'octavia_status_failover', 'Number of failovers')
 
     @staticmethod
     def _listener_from_path(path):
@@ -131,44 +142,67 @@ class StatusManager(BigipAS3RestClient):
             'name': pool
         }
 
-    @_metric_heartbeat_exceptions.count_exceptions()
-    @_metric_heartbeat_duration.time()
-    def heartbeat(self):
-        """Sends heartbeat and status information to running octavia healthmanager via UDP. The format can be seen in
-        octavia.amphorae.drivers.health.heartbeat_udp.UDPStatusGetter.dorecv.
-        Scrapes Virtual, Pool and Pool Member statistics and status\.
-        Also updates listener_count for amphora database via update_listener_count() function. This is needed for
-        scheduling decisions.
+    @property
+    def bigip(self):
         """
-        self._metric_heartbeat.inc()
+        returns AS3RestClient instance for currently active bigip
+
+        :rtype: AS3RestClient
+        """
+        if not self._active_bigip:
+            # Always set one bigip even none of them are active
+            self._active_bigip = self.bigips[0]
+            for b in self.bigips:
+                if b.is_active:
+                    self._active_bigip = b
+
+        return self._active_bigip
+
+    def failover_check(self):
+        # Force recheck of active device
+        self._active_bigip = None
 
         # Check availability of all devices
-        for device in self.bigips:
-            device_name = device.hostname
-            LOG.debug('Checking availability of device with URL {}'.format(device_name))
-            timeout = CONF.f5_agent.availability_timeout
+        for bigip in self.bigips:
+            LOG.debug('Checking availability of device with URL {}'.format(bigip.hostname))
+            timeout = CONF.status_manager.failover_timeout
 
             # Try reaching device
             available = True
             try:
-                requests.get(device.scheme + '://' + device.hostname,
-                             timeout=timeout, verify=CONF.f5_agent.bigip_verify);
-            except requests.exceptions.Timeout as e:
+                requests.get(bigip.scheme + '://' + bigip.hostname,
+                             timeout=timeout, verify=False)
+            except requests.exceptions.Timeout:
                 LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
-                         timeout, device.hostname));
+                         timeout, bigip.hostname))
                 available = False
 
-            # Update database entry
-            self.update_availability(device_name, available)
+            # Update availability / failover only in case status changes
+            if self.bigip_status[bigip.hostname] != available:
+                # Check for failover
+                if available and not self.bigip.is_active:
+                    self._metric_failover.inc()
+                    self._active_bigip = bigip
 
-        # Check for failover
-        device_json = self.get(path='/tm/cm/device').json()
-        for device in device_json['items']:
-            if device['name'] == self.active_bigip.hostname and device['failoverState'] != 'active':
-                self._failover()
-                return
+                # Update database entry
+                self.bigip_status[bigip.hostname] = available
+                self.update_availability()
 
+    @_metric_heartbeat_exceptions.count_exceptions()
+    @_metric_heartbeat_duration.time()
+    def heartbeat(self):
+        """Sends heartbeat and status information to healthmanager api. The format is specified in
+        octavia.amphorae.drivers.health.heartbeat_udp.UDPStatusGetter.dorecv.
+        Scrapes Virtual, Pool and Pool Member statistics and status.
+        Also updates listener_count for amphora database via update_listener_count() function. This is needed for
+        scheduling decisions.
+        """
         amphora_messages = {}
+
+        self._metric_heartbeat.inc()
+        if time.time() - self._last_failover_check >= CONF.status_manager.failover_check_interval:
+            self._last_failover_check = time.time()
+            self.failover_check()
 
         def _get_lb_msg(lb_id):
             if lb_id not in amphora_messages:
@@ -182,7 +216,7 @@ class StatusManager(BigipAS3RestClient):
             return amphora_messages[lb_id]
 
         # update listener count
-        vipstats = self.get(path='tm/ltm/virtual/stats').json()
+        vipstats = self.bigip.get(path=F5_VIRTUAL_STATS).json()
         if 'entries' not in vipstats:
             self.update_listener_count(0)
             return
@@ -209,7 +243,7 @@ class StatusManager(BigipAS3RestClient):
                 }
             }
 
-        poolstats = self.get(path='tm/ltm/pool/stats').json()
+        poolstats = self.bigip.get(path=F5_POOL_STATS).json()
         for selfurl, statobj in poolstats['entries'].items():
             stats = statobj['nestedStats']['entries']
 
@@ -226,8 +260,8 @@ class StatusManager(BigipAS3RestClient):
             }
 
             sub_path = stats['tmName'].get('description').replace('/', '~')
-            members = self.get(path='tm/ltm/pool/{}/members'.format(sub_path)).json()
-            memberstats = self.get(path='tm/ltm/pool/{}/members/stats'.format(sub_path)).json()
+            members = self.bigip.get(path=F5_POOL_MEMBERS.format(sub_path)).json()
+            memberstats = self.bigip.get(path=F5_POOL_MEMBER_STATS.format(sub_path)).json()
             for member in members['items']:
                 if 'description' in member:
                     member_id = member['description']
@@ -257,7 +291,7 @@ class StatusManager(BigipAS3RestClient):
         :param num_listeners: number of listener for the bigip device
         """
         with DatabaseLockSession() as session:
-            device_name = self.active_bigip.hostname
+            device_name = self.bigip.hostname
             device_entry = self.amp_repo.get(session,
                                              compute_flavor=CONF.host,
                                              load_balancer_id=None,
@@ -267,42 +301,55 @@ class StatusManager(BigipAS3RestClient):
                     session,
                     compute_flavor=CONF.host,
                     vrrp_priority=num_listeners,
-                    cached_zone=device_name)
+                    cached_zone=device_name,
+                    status=constants.AMPHORA_ALLOCATED)
             else:
-                self.amp_repo.update(session, device_entry.id,
-                                     vrrp_priority=num_listeners)
+                self.amp_repo.update(
+                    session,
+                    device_entry.id,
+                    vrrp_priority=num_listeners)
 
-    def update_availability(self, device_name, available):
+    def update_availability(self):
         """ updates availability status of bigip device (status column in amphora table).
         The values for 'status' are used as follows:
         - 'READY': Device is online, everything is ok.
         - 'ALLOCATED': Device is offline.
         - 'BOOTING': Device is online but needs a full sync, because it was offline before.
           It is the responsibility of the syncing mechanism to set the status to 'READY' again.
-
-        :param device_name: Name of device. This usually is the domain under which the device can be reached.
-        :param available: Whether the device is available or not
         """
         with DatabaseLockSession() as session:
-            # update table entry
-            device_entry = self.amp_repo.get(session,
-                                             compute_flavor=CONF.host,
-                                             load_balancer_id=None,
-                                             cached_zone=device_name)
+            for bigip in self.bigips:
+                amp_dict = {
+                    'compute_flavor': CONF.host,
+                    'load_balancer_id': None,
+                    'cached_zone': bigip.hostname
+                }
 
-            # determine status
-            status = constants.AMPHORA_ALLOCATED  # offline if not available
-            if available:
-                status = constants.AMPHORA_READY  # back online if available
-                if device_entry is None or device_entry.status != constants.AMPHORA_READY:
-                    status = constants.AMPHORA_BOOTING  # needs full sync if no DB entry or not yet marked as ready
+                # fetch table entry
+                device_entry = self.amp_repo.get(session, **amp_dict)
 
-            # create/modify entry
-            if not device_entry:
-                self.amp_repo.create(
-                    session,
-                    compute_flavor=CONF.host,
-                    status=status,
-                    cached_zone=device_name)
-            else:
-                self.amp_repo.update(session, device_entry.id, status=status)
+                # determine status
+                status = constants.AMPHORA_ALLOCATED  # offline if not available
+                if self.bigip_status[bigip.hostname]:
+                    status = constants.AMPHORA_READY  # back online if available
+                    if device_entry is None or device_entry.status != constants.AMPHORA_READY:
+                        status = constants.AMPHORA_BOOTING  # needs full sync if no DB entry or not yet marked as ready
+
+                # update attributes
+                amp_dict['status'] = status
+                if self._active_bigip == bigip:
+                    amp_dict['role'] = constants.ROLE_MASTER
+                else:
+                    amp_dict['role'] = constants.ROLE_BACKUP
+
+                # create/modify entry
+                if not device_entry:
+                    self.amp_repo.create(session, **amp_dict)
+                else:
+                    self.amp_repo.update(session, device_entry.id, **amp_dict)
+
+    def cleanup(self):
+        """ cleanups old entries without correct role/cached_zone """
+        with DatabaseLockSession() as session:
+            filters = {'load_balancer_id': None, 'cached_zone': None}
+            self.amp_repo.delete(session, **filters)

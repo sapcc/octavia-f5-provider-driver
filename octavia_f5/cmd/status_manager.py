@@ -57,7 +57,7 @@ def main():
     sm = status_manager.StatusManager()
     signal.signal(signal.SIGHUP, _mutate_config)
 
-    @periodics.periodic(CONF.health_manager.health_check_interval,
+    @periodics.periodic(CONF.status_manager.health_check_interval,
                         run_immediately=True)
     def periodic_status():
         sm.heartbeat()

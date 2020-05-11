@@ -145,8 +145,21 @@ f5_networking_opts = [
                       'to a specific physical network name.')),
 ]
 
+f5_status_manager_opts = [
+    cfg.IntOpt('health_check_interval',
+               default=5,
+               help=_('Sleep time between health checks in seconds.')),
+    cfg.IntOpt('failover_check_interval',
+               default=30,
+               help=_('Sleep time between failover checks in seconds.')),
+    cfg.IntOpt('failover_timeout',
+               default=5,
+               help=_("Time in seconds before a device is marked as offline.")),
+]
+
 # Register the configuration options
 cfg.CONF.register_opts(f5_tls_server_opts, group='f5_tls_server')
 cfg.CONF.register_opts(f5_tls_client_opts, group='f5_tls_client')
 cfg.CONF.register_opts(f5_agent_opts, group='f5_agent')
 cfg.CONF.register_opts(f5_networking_opts, group='networking')
+cfg.CONF.register_opts(f5_status_manager_opts, group='status_manager')
