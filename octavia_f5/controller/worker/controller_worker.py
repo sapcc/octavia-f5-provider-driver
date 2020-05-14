@@ -360,7 +360,7 @@ class ControllerWorker(object):
 
         if not member.backup:
             try:
-                if member_create(self.bigip, member).ok:
+                if self.sync.member_create(member).ok:
                     self.status.set_active(member)
                     return
             except exceptions.AS3Exception:

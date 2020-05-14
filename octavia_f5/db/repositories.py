@@ -98,7 +98,7 @@ class L7PolicyRepository(repositories.L7PolicyRepository):
         return [model.to_data_model() for model in query.all()]
 
 
-class ListenerRepository(object):
+class ListenerRepository(repositories.ListenerRepository):
     def get_pending_from_host(self, session, host=CONF.host):
         """Get a list of pending listener from specific host
 
