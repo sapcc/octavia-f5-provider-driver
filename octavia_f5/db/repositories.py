@@ -96,3 +96,22 @@ class L7PolicyRepository(repositories.L7PolicyRepository):
                              ]))
 
         return [model.to_data_model() for model in query.all()]
+
+
+class ListenerRepository(object):
+    def get_pending_from_host(self, session, host=CONF.host):
+        """Get a list of pending listener from specific host
+
+        :param session: A Sql Alchemy database session.
+        :param host: specify amphora host to fetch loadbalancer from.
+        :returns: [octavia.common.data_model]
+        """
+
+        query = session.query(models.Listener)
+        query = query.filter(models.LoadBalancer.server_group_id == host,
+                             models.Listener.provisioning_status.in_([
+                                 lib_consts.PENDING_UPDATE,
+                                 lib_consts.PENDING_CREATE
+                             ]))
+
+        return [model.to_data_model() for model in query.all()]

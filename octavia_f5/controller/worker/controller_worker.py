@@ -51,7 +51,7 @@ class ControllerWorker(object):
         self._amphora_repo = repo.AmphoraRepository()
         self._health_mon_repo = repo.HealthMonitorRepository()
         self._lb_repo = repo.LoadBalancerRepository()
-        self._listener_repo = repo.ListenerRepository()
+        self._listener_repo = f5_repos.ListenerRepository()
         self._member_repo = repo.MemberRepository()
         self._pool_repo = f5_repos.PoolRepository()
         self._l7policy_repo = f5_repos.L7PolicyRepository()
@@ -131,7 +131,10 @@ class ControllerWorker(object):
 
     @lockutils.synchronized('tenant_refresh')
     def sync_loadbalancers(self):
-        """Sync loadbalancers that are in a PENDING state"""
+        """Sync loadbalancers that are in a PENDING state
+        """
+
+        # Find pending loadbalancer not yet finally assigned to this host
         lbs = []
         pending_create_lbs = self._loadbalancer_repo.get_all(
             db_apis.get_session(),
@@ -144,17 +147,24 @@ class ControllerWorker(object):
                 self.ensure_amphora_exists(lb.id)
                 lbs.append(lb)
 
+        # Find pending loadbalancer
         lbs.extend(self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_UPDATE))
 
+        # Find pending listener
+        listeners = self._listener_repo.get_pending_from_host(db_apis.get_session())
+        lbs.extend([listener.load_balancer for listener in listeners])
+
+        # Find pending pools
         pools = self._pool_repo.get_pending_from_host(db_apis.get_session())
         lbs.extend([pool.load_balancer for pool in pools])
 
+        # Find pending l7policies
         l7policies = self._l7policy_repo.get_pending_from_host(db_apis.get_session())
         lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
 
-        # deduplicate
+        # Deduplicate
         pending_networks = collections.defaultdict(list)
         for lb in lbs:
             if lb not in pending_networks[lb.vip.network_id]:
