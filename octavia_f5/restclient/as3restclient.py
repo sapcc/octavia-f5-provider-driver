@@ -33,6 +33,7 @@ AS3_LOGIN_PATH = '/mgmt/shared/authn/login'
 AS3_TOKENS_PATH = '/mgmt/shared/authz/tokens/{}'
 AS3_DECLARE_PATH = '/mgmt/shared/appsvcs/declare'
 AS3_INFO_PATH = '/mgmt/shared/appsvcs/info'
+F5_DEVICE_PATH = '/mgmt/tm/cm/device'
 
 
 def check_response(func):
@@ -64,7 +65,8 @@ def check_response(func):
                 if 'results' in text:
                     _check_for_errors(text['results'][0])
             else:
-                LOG.debug(json.dumps(text.get('results'), indent=4, sort_keys=True))
+                if 'results' in text:
+                    LOG.debug(json.dumps(text.get('results'), indent=4, sort_keys=True))
         else:
             LOG.debug(response.text)
         return response
@@ -82,20 +84,6 @@ def authorized(func):
         else:
             return response
 
-    return wrapper
-
-def failover_on_connection_error(func):
-    @functools.wraps(func)
-    def wrapper(self, *args, **kwargs):
-        old_bigip = self.active_bigip
-        # Failover until it works or all BigIPs have been tried
-        while True:
-            try:
-                return func(self, *args, **kwargs)
-            except requests.exceptions.ConnectionError as e:
-                self._failover()
-                if self.active_bigip == old_bigip:
-                    raise e # We've tried all possible BigIPs, so give up
     return wrapper
 
 
@@ -121,27 +109,18 @@ class BigipAS3RestClient(object):
         'octavia_as3_authorization_duration', 'Time it needs to (re)authorize')
     _metric_authorization_exceptions = prometheus.metrics.Counter(
         'octavia_as3_authorization_exceptions', 'Number of exceptions during (re)authorization')
-    _metric_failover = prometheus.metrics.Counter(
-        'octavia_as3_failover',
-        'How often the F5 provider driver switched to another BigIP device')
-    _metric_failover_exceptions = prometheus.metrics.Counter(
-        'octavia_as3_failover_exceptions', 'Number of exceptions during failover')
     _metric_version = prometheus.Info(
         'octavia_as3_version', 'AS3 Version')
 
-    def __init__(self, bigip_urls, enable_verify=True, enable_token=True, esd=None):
-        self.bigips = [parse.urlsplit(url, allow_fragments=False) for url in bigip_urls]
+    def __init__(self, url, enable_verify=True, enable_token=True):
+        self.bigip = parse.urlsplit(url, allow_fragments=False)
         # Use the first BigIP device by default
-        self.active_bigip = self.bigips[0]
         self.enable_verify = enable_verify
         self.enable_token = enable_token
         self.token = None
         self.session = self._create_session()
-        self.esd = esd
         try:
-            info = self.info()
-            info.raise_for_status()
-            info_dict = dict(device=self.active_bigip.hostname, **info.json())
+            info_dict = self.info()
             self._metric_version.info(info_dict)
         except requests.exceptions.HTTPError as e:
             # Failed connecting to AS3 endpoint, gracefully terminate
@@ -150,8 +129,8 @@ class BigipAS3RestClient(object):
 
     def _url(self, path):
         return parse.urlunsplit(
-            parse.SplitResult(scheme=self.active_bigip.scheme,
-                              netloc=self.active_bigip.hostname,
+            parse.SplitResult(scheme=self.bigip.scheme,
+                              netloc=self.bigip.hostname,
                               path=path,
                               query='',
                               fragment='')
@@ -170,23 +149,31 @@ class BigipAS3RestClient(object):
 
     @check_response
     @authorized
-    @failover_on_connection_error
     def _call_method(self, method, url, **kwargs):
         meth = getattr(self.session, method)
         response = meth(url, **kwargs)
         self._metric_httpstatus.labels(method=method, statuscode=response.status_code).inc()
-        LOG.debug("%s to %s finished with %d", method, self.active_bigip.hostname, response.status_code)
+        LOG.debug("%s to %s finished with %d", method, self.bigip.hostname, response.status_code)
         return response
 
-    @_metric_failover_exceptions.count_exceptions()
-    def _failover(self):
-        self._metric_failover.inc()
-        for bigip in self.bigips:
-            if bigip != self.active_bigip:
-                LOG.debug("Failover to {}".format(bigip.hostname))
-                self.active_bigip = bigip
-                return
-        raise exceptions.FailoverException("No BigIP to failover to")
+    @property
+    def hostname(self):
+        return self.bigip.hostname
+
+    @property
+    def scheme(self):
+        return self.bigip.scheme
+
+    @property
+    def is_active(self):
+        try:
+            r = self.get(path=F5_DEVICE_PATH, timeout=3)
+        except requests.exceptions.Timeout:
+            return False
+
+        return any([device['name'] == self.bigip.hostname and
+                    device['failoverState'] == 'active'
+                    for device in r.json().get('items', [])])
 
     @_metric_authorization_exceptions.count_exceptions()
     @_metric_authorization_duration.time()
@@ -194,8 +181,8 @@ class BigipAS3RestClient(object):
         self._metric_authorization.inc()
         # Login
         credentials = {
-            "username": self.active_bigip.username,
-            "password": self.active_bigip.password,
+            "username": self.bigip.username,
+            "password": self.bigip.password,
             "loginProviderName": "tmos"
         }
 
@@ -213,6 +200,11 @@ class BigipAS3RestClient(object):
         r = self.session.patch(self._url(AS3_TOKENS_PATH.format(self.token)), json=patch_timeout)
         self._metric_httpstatus.labels(method='patch', statuscode=r.status_code).inc()
         LOG.debug("Reauthorized!")
+
+    def get(self, path, **kwargs):
+        path = self._url(path)
+        LOG.debug("Calling GET '%s'", path)
+        return self._call_method('get', path)
 
     @_metric_post_exceptions.count_exceptions()
     @_metric_post_duration.time()
@@ -243,4 +235,6 @@ class BigipAS3RestClient(object):
         return self._call_method('delete', url)
 
     def info(self):
-        return self._call_method('get', self._url(AS3_INFO_PATH))
+        info = self.get(AS3_INFO_PATH)
+        info.raise_for_status()
+        return dict(device=self.bigip.hostname, **info.json())

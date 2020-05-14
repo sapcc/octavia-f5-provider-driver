@@ -18,13 +18,10 @@ Extends octavia base repository with enhanced f5-specific queries
 
 from oslo_config import cfg
 from oslo_log import log as logging
-from sqlalchemy.orm import noload
-from sqlalchemy.orm import subqueryload
 
 from octavia.common import constants as consts
 from octavia.db import models
 from octavia.db import repositories
-from octavia_f5.utils import driver_utils
 from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
@@ -34,14 +31,14 @@ LOG = logging.getLogger(__name__)
 
 class AmphoraRepository(repositories.AmphoraRepository):
     def get_candidates(self, session):
-        """ Get F5 BigIP host candidate depending on the load
+        """ Get F5 (active) BigIP host candidate depending on the load
 
         :param session: A Sql Alchemy database session.
         """
 
         candidates = session.query(self.model_class)
         candidates = candidates.filter_by(
-            status=consts.AMPHORA_READY,
+            role=consts.ROLE_MASTER,
             load_balancer_id=None)
         candidates = candidates.order_by(
             self.model_class.vrrp_priority.asc(),
@@ -94,6 +91,25 @@ class L7PolicyRepository(repositories.L7PolicyRepository):
         query = session.query(models.L7Policy)
         query = query.filter(models.LoadBalancer.server_group_id == host,
                              models.L7Policy.provisioning_status.in_([
+                                 lib_consts.PENDING_UPDATE,
+                                 lib_consts.PENDING_CREATE
+                             ]))
+
+        return [model.to_data_model() for model in query.all()]
+
+
+class ListenerRepository(repositories.ListenerRepository):
+    def get_pending_from_host(self, session, host=CONF.host):
+        """Get a list of pending listener from specific host
+
+        :param session: A Sql Alchemy database session.
+        :param host: specify amphora host to fetch loadbalancer from.
+        :returns: [octavia.common.data_model]
+        """
+
+        query = session.query(models.Listener)
+        query = query.filter(models.LoadBalancer.server_group_id == host,
+                             models.Listener.provisioning_status.in_([
                                  lib_consts.PENDING_UPDATE,
                                  lib_consts.PENDING_CREATE
                              ]))

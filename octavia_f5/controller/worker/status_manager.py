@@ -27,8 +27,7 @@ LOG = logging.getLogger(__name__)
 
 
 class StatusManager(object):
-    def __init__(self, bigip):
-        self.bigip = bigip
+    def __init__(self):
         self._octavia_driver_lib = driver_lib.DriverLibrary(
             status_socket=CONF.driver_agent.status_socket_path,
             stats_socket=CONF.driver_agent.stats_socket_path
