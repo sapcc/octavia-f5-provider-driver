@@ -18,6 +18,7 @@ import time
 import futurist
 import prometheus_client as prometheus
 import requests
+import sqlalchemy
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
@@ -352,4 +353,7 @@ class StatusManager(object):
         """ cleanups old entries without correct role/cached_zone """
         with DatabaseLockSession() as session:
             filters = {'load_balancer_id': None, 'cached_zone': None}
-            self.amp_repo.delete(session, **filters)
+            try:
+                self.amp_repo.delete(session, **filters)
+            except sqlalchemy.orm.exc.NoResultFound:
+                pass
