@@ -352,8 +352,8 @@ class StatusManager(object):
     def cleanup(self):
         """ cleanups old entries without correct role/cached_zone """
         with DatabaseLockSession() as session:
-            filters = {'load_balancer_id': None, 'cached_zone': None}
+            filters = {'load_balancer_id': None, 'cached_zone': None, 'compute_flavor': CONF.host,}
             try:
                 self.amp_repo.delete(session, **filters)
-            except sqlalchemy.orm.exc.NoResultFound:
+            except sqlalchemy.exc.InvalidRequestError:
                 pass
