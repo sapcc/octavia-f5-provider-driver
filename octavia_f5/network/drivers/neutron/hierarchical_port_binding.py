@@ -64,7 +64,7 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
         try:
             session = db_apis.get_session()
             candidate = self.amp_repo.get_candidates(session)[0]
-        except ValueError as e:
+        except (ValueError, IndexError) as e:
             message = _('Scheduling failed, no ready candidates found')
             LOG.exception(message)
             raise base.AllocateVIPException(
