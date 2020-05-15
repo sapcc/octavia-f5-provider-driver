@@ -30,7 +30,7 @@ from octavia_f5.utils import exceptions
 LOG = logging.getLogger(__name__)
 
 AS3_LOGIN_PATH = '/mgmt/shared/authn/login'
-AS3_TOKENS_PATH = '/mgmt/shared/authz/tokens/{}'
+AS3_TOKENS_PATH = '/mgmt/shared/authz/tokens'
 AS3_DECLARE_PATH = '/mgmt/shared/appsvcs/declare'
 AS3_INFO_PATH = '/mgmt/shared/appsvcs/info'
 F5_DEVICE_PATH = '/mgmt/tm/cm/device'
@@ -186,9 +186,14 @@ class BigipAS3RestClient(object):
             "loginProviderName": "tmos"
         }
 
-        self.session.headers.pop('X-F5-Auth-Token', None)
+        self.session = self._create_session()
         r = self.session.post(self._url(AS3_LOGIN_PATH), json=credentials)
         self._metric_httpstatus.labels(method='post', statuscode=r.status_code).inc()
+        if r.status_code == 400 and 'maximum active login tokens' in r.text:
+            self.session.delete(self._url(AS3_TOKENS_PATH), auth=(
+                self.bigip.username, self.bigip.password))
+            r = self.session.post(self._url(AS3_LOGIN_PATH), json=credentials)
+
         r.raise_for_status()
         self.token = r.json()['token']['token']
 
@@ -197,7 +202,7 @@ class BigipAS3RestClient(object):
         patch_timeout = {
             "timeout": "36000"
         }
-        r = self.session.patch(self._url(AS3_TOKENS_PATH.format(self.token)), json=patch_timeout)
+        r = self.session.patch(self._url(AS3_TOKENS_PATH + "/{}".format(self.token)), json=patch_timeout)
         self._metric_httpstatus.labels(method='patch', statuscode=r.status_code).inc()
         LOG.debug("Reauthorized!")
 
