@@ -113,7 +113,7 @@ class SyncManager(object):
             # Attach Octavia listeners as AS3 service objects
             for listener in loadbalancer.listeners:
                 if not driver_utils.pending_delete(listener):
-                    service_entities = m_service.get_service(listener, cert_manager, self._esd_repo)
+                    service_entities = m_service.get_service(listener, self.cert_manager, self._esd_repo)
                     app.add_entities(service_entities)
 
             # Attach pools
