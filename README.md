@@ -12,11 +12,11 @@ The worker uses the driver-agent API, but it hooks more deeply into Octavia (sim
 - `octavia_f5/controller`: Communication with BigIP device
   - `status_manager`: Manages table entries representing BigIP devices
   - `controller_worker`: REST endpoints for Octavia, synchronization loop
-  - `f5agent_driver`: Builds AS3 declarations and sends them to the BigIP device.
+  - `sync_manager`: Builds AS3 declarations and sends them to the BigIP device.
   - `status`: Methods for setting status in database. Used by `controller_worker`.
 - `db`: Repository classes, scripts for migration from Neutron to Octavia
 - `network`: Layer 2 network drivers (Neutron hierarchical port binding driver, no-op driver)
-- `restclient`: Classes for building AS3 declarations. Used by `f5agent_driver` and `status_manager`.
+- `restclient`: Classes for building AS3 declarations. Used by `sync_manager` and `status_manager`.
 
 
 # F5-specific configuration options
