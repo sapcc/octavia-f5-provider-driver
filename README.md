@@ -14,7 +14,7 @@ The worker uses the driver-agent API, but it hooks more deeply into Octavia (sim
   - `controller_worker`: REST endpoints for Octavia, synchronization loop
   - `sync_manager`: Builds AS3 declarations and sends them to the BigIP device.
   - `status`: Methods for setting status in database. Used by `controller_worker`.
-- `db`: Repository classes, scripts for migration from Neutron to Octavia
+- `db`: Repository classes (CRUD abstractions over sqlalchemy ORM objects)
 - `network`: Layer 2 network drivers (Neutron hierarchical port binding driver, no-op driver)
 - `restclient`: Classes for building AS3 declarations. Used by `sync_manager` and `status_manager`.
 
