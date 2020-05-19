@@ -107,6 +107,10 @@ class ControllerWorker(object):
             compute_flavor=CONF.host, load_balancer_id=None)
 
         for device in booting_devices[0]:
+            if CONF.f5_agent.migration and device.role != constants.ROLE_BACKUP:
+                LOG.warning("[Migration Mode] Skipping full sync of active device %s", device.cached_zone)
+                continue
+
             LOG.info("Device reappeared: %s. Doing a full sync.", device.cached_zone)
 
             # get all load balancers (of this host)
