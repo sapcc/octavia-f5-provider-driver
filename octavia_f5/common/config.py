@@ -93,6 +93,8 @@ f5_agent_opts = [
                 help=_("Run in dry-run, do not realize AS3 definitions.")),
     cfg.BoolOpt('snat_virtual', default=False,
                 help=_("Use the virtual-server address as SNAT address.")),
+    cfg.BoolOpt('migration', default=False,
+                help=_("Enable migration mode (disable syncing active devices)")),
 ]
 
 f5_tls_shared = {

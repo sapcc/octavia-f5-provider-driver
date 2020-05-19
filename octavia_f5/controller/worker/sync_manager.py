@@ -60,8 +60,14 @@ class SyncManager(object):
 
     def failover_to_active_bigip(self):
         for bigip in self._bigips:
-            if bigip.is_active:
-                self.bigip = bigip
+            if CONF.f5_agent.migration:
+                # Migration mode, sync only passive device
+                if not bigip.is_active:
+                    LOG.warning("[Migration Mode] using passive device %s", bigip.hostname)
+                    self.bigip = bigip
+            else:
+                if bigip.is_active:
+                    self.bigip = bigip
 
         return self.bigip
 
@@ -89,12 +95,15 @@ class SyncManager(object):
         decl = AS3(
             persist=True,
             action=action,
-            syncToGroup=CONF.f5_agent.sync_to_group,
             _log_level=LOG.logger.level)
         adc = ADC(
             id="urn:uuid:{}".format(uuid.uuid4()),
             label="F5 BigIP Octavia Provider")
         decl.set_adc(adc)
+
+        if not CONF.f5_agent.migration and CONF.f5_agent.sync_to_group:
+            # No group syncing if we are in migration mode
+            decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
         segmentation_id = self.network_driver.get_segmentation_id(network_id)
         tenant = adc.get_or_create_tenant(

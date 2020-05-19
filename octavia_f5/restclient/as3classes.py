@@ -92,6 +92,9 @@ class AS3(BaseDescription):
     def set_adc(self, adc):
         setattr(self, 'declaration', adc)
 
+    def set_sync_to_group(self, group):
+        setattr(self, 'syncToGroup', group)
+
 
 class ADC(BaseDescription):
     def __init__(self, schemaVersion='3.0.0', updateMode='selective', **kwargs):  # noqa
