@@ -37,13 +37,22 @@ def get_certificate(remark, tlscontainer):
     """
     def _decode(pem):
         try:
-            return pem.decode('utf-8')
+            return pem.decode('utf-8').replace('\r', '')
         except AttributeError:
-            return pem
+            return pem.replace('\r', '')
+
+
+    # TLS certificate is always the first one
+    certificates = [_decode(tlscontainer.certificate)]
+
+    for intermediate in tlscontainer.intermediates:
+        intermediate = _decode(intermediate)
+        if intermediate not in certificates:
+            certificates.append(intermediate)
 
     service_args = {
         'remark': as3types.f5remark(remark),
-        'certificate': _decode(tlscontainer.certificate)
+        'certificate': '\n'.join(certificates)
     }
 
     if tlscontainer.private_key:
