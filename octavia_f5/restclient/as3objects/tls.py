@@ -63,16 +63,26 @@ def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode=
     if CONF.f5_tls_server.default_ciphers:
         service_args['ciphers'] = CONF.f5_tls_server.default_ciphers
 
-    service_args['forwardProxyBypassEnabled'] = CONF.f5_tls_server.forward_proxy_bypass
-    service_args['forwardProxyEnabled'] = CONF.f5_tls_server.forward_proxy
-    service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_server.insert_empty_fragments
-    service_args['singleUseDhEnabled'] = CONF.f5_tls_server.single_use_dh
-    service_args['tls1_0Enabled'] = CONF.f5_tls_server.tls_1_0
-    service_args['tls1_1Enabled'] = CONF.f5_tls_server.tls_1_1
-    service_args['tls1_2Enabled'] = CONF.f5_tls_server.tls_1_2
-    service_args['tls1_3Enabled'] = CONF.f5_tls_server.tls_1_3
-    service_args['cacheCertificateEnabled'] = CONF.f5_tls_server.cache_certificate
-    service_args['staplerOCSPEnabled'] = CONF.f5_tls_server.stapler_ocsp
+    if CONF.f5_tls_server.forward_proxy_bypass is not None:
+        service_args['forwardProxyBypassEnabled'] = CONF.f5_tls_server.forward_proxy_bypass
+    if CONF.f5_tls_server.forward_proxy is not None:
+        service_args['forwardProxyEnabled'] = CONF.f5_tls_server.forward_proxy
+    if CONF.f5_tls_server.insert_empty_fragments is not None:
+        service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_server.insert_empty_fragments
+    if CONF.f5_tls_server.single_use_dh is not None:
+        service_args['singleUseDhEnabled'] = CONF.f5_tls_server.single_use_dh
+    if CONF.f5_tls_server.tls_1_0 is not None:
+        service_args['tls1_0Enabled'] = CONF.f5_tls_server.tls_1_0
+    if CONF.f5_tls_server.tls_1_1 is not None:
+        service_args['tls1_1Enabled'] = CONF.f5_tls_server.tls_1_1
+    if CONF.f5_tls_server.tls_1_2 is not None:
+        service_args['tls1_2Enabled'] = CONF.f5_tls_server.tls_1_2
+    if CONF.f5_tls_server.tls_1_3 is not None:
+        service_args['tls1_3Enabled'] = CONF.f5_tls_server.tls_1_3
+    if CONF.f5_tls_server.cache_certificate is not None:
+        service_args['cacheCertificateEnabled'] = CONF.f5_tls_server.cache_certificate
+    if CONF.f5_tls_server.stapler_ocsp is not None:
+        service_args['staplerOCSPEnabled'] = CONF.f5_tls_server.stapler_ocsp
 
     return TLS_Server(**service_args)
 
@@ -97,13 +107,21 @@ def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
     if CONF.f5_tls_client.default_ciphers:
         service_args['ciphers'] = CONF.f5_tls_client.default_ciphers
 
-    service_args['forwardProxyBypassEnabled'] = CONF.f5_tls_client.forward_proxy_bypass
-    service_args['forwardProxyEnabled'] = CONF.f5_tls_client.forward_proxy
-    service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_client.insert_empty_fragments
-    service_args['singleUseDhEnabled'] = CONF.f5_tls_client.single_use_dh
-    service_args['tls1_0Enabled'] = CONF.f5_tls_client.tls_1_0
-    service_args['tls1_1Enabled'] = CONF.f5_tls_client.tls_1_1
-    service_args['tls1_2Enabled'] = CONF.f5_tls_client.tls_1_2
-    service_args['tls1_3Enabled'] = CONF.f5_tls_client.tls_1_3
+    if CONF.f5_tls_client.forward_proxy_bypass is not None:
+        service_args['forwardProxyBypassEnabled'] = CONF.f5_tls_client.forward_proxy_bypass
+    if CONF.f5_tls_client.forward_proxy is not None:
+        service_args['forwardProxyEnabled'] = CONF.f5_tls_client.forward_proxy
+    if CONF.f5_tls_client.insert_empty_fragments is not None:
+        service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_client.insert_empty_fragments
+    if CONF.f5_tls_client.single_use_dh is not None:
+        service_args['singleUseDhEnabled'] = CONF.f5_tls_client.single_use_dh
+    if CONF.f5_tls_client.tls_1_0 is not None:
+        service_args['tls1_0Enabled'] = CONF.f5_tls_client.tls_1_0
+    if CONF.f5_tls_client.tls_1_1 is not None:
+        service_args['tls1_1Enabled'] = CONF.f5_tls_client.tls_1_1
+    if CONF.f5_tls_client.tls_1_2 is not None:
+        service_args['tls1_2Enabled'] = CONF.f5_tls_client.tls_1_2
+    if CONF.f5_tls_client.tls_1_3 is not None:
+        service_args['tls1_3Enabled'] = CONF.f5_tls_client.tls_1_3
 
     return TLS_Client(**service_args)
