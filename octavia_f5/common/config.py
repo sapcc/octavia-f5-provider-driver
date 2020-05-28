@@ -85,6 +85,10 @@ f5_agent_opts = [
                       "this request deploys any changes."
                       "When empty (default) this request will not affect "
                       "config-sync at all.")),
+    cfg.StrOpt('service_address_icmp_echo', default=None,
+               choices=['enable', 'disable', 'selective'],
+               help=_("If set, the system answers ICMP echo requests on this "
+                      "address always, selective or never.")),
     cfg.BoolOpt('prometheus', default=True,
                 help=_("Enable prometheus metrics exporter")),
     cfg.PortOpt('prometheus_port', default=8000,
