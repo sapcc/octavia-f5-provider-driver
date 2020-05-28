@@ -76,7 +76,10 @@ f5_agent_opts = [
     cfg.StrOpt('profile_multiplex', default=None,
                help=_("Path to default multiplex (oneconnect) acceleration"
                       " profile (e.g. /Common/custom_oneconnect)")),
-    cfg.StrOpt('healthmonitor_receive', default='"HTTP/1.(0|1) 200',
+    cfg.StrOpt('profile_healthmonitor_tls', default=None,
+               help=_("Path to default Client TLS profile"
+                      "e.g. custom_https")),
+    cfg.StrOpt('healthmonitor_receive', default='HTTP/1.(0|1) 200',
                help=_("Default HTTP health monitor receive string")),
     cfg.StrOpt('sync_to_group', default='',
                help=_("Name (like /Common/my_dg) of the config-sync "

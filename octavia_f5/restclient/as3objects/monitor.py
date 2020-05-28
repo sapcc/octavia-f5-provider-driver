@@ -18,7 +18,7 @@ from oslo_log import log as logging
 
 from octavia_f5.common import constants
 from octavia_f5.restclient import as3types
-from octavia_f5.restclient.as3classes import Monitor
+from octavia_f5.restclient import as3classes as as3
 from octavia_f5.utils import driver_utils as utils
 
 CONF = cfg.CONF
@@ -161,9 +161,12 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
     if target_port:
         args["targetPort"] = target_port
 
+    if CONF.f5_agent.profile_healthmonitor_tls:
+        args["clientTLS"] = as3.BigIP(CONF.f5_agent.profile_healthmonitor_tls)
+
     args['label'] = as3types.f5label(health_monitor.name or health_monitor.id)
 
-    return Monitor(**args)
+    return as3.Monitor(**args)
 
 
 def _get_recv_text(healthmonitor):
