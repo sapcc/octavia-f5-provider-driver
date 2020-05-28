@@ -254,17 +254,16 @@ def get_service(listener, cert_manager, esd_repository):
             else:
                 service_args[entity_name] = esd_entities[entity_name]
 
+    endpoint_policies = []
     # Map special L7policies to ESDs
     # TODO: Remove this as soon as all customers have migrated their scripts.
-    #  Triggering ESDs via L7policies is considered deprecated. Tags should be used instead. See the code above.
+    # Triggering ESDs via L7policies is considered deprecated. Tags should be used instead. See the code above.
     for policy in listener.l7policies:
-
         # get ESD of same name
         esd = esd_repository.get_esd(policy.name)
 
         # Add ESD or regular endpoint policy
         if esd:
-
             # enrich service with iRules and other things defined in ESD
             esd_entities = get_esd_entities(service_args['_servicetype'], esd)
             for entity_name in esd_entities:
@@ -272,17 +271,19 @@ def get_service(listener, cert_manager, esd_repository):
                     service_args['iRules'].extend(esd_entities['iRules'])
                 else:
                     service_args[entity_name] = esd_entities[entity_name]
-
         elif policy.provisioning_status != lib_consts.PENDING_DELETE:
-            # add a regular endpoint policy
-            policy_name = m_policy.get_name(policy.id)
+            endpoint_policies.append(policy)
 
-            # make endpoint policy object
-            endpoint_policy = (policy_name, m_policy.get_endpoint_policy(policy))
-            entities.append(endpoint_policy)
+    if endpoint_policies:
+        # add a regular endpoint policy
+        policy_name = m_policy.get_wrapper_name(listener.id)
 
-            # reference endpoint policy object in service
-            service_args['policyEndpoint'].append(policy_name)
+        # make endpoint policy object
+        endpoint_policy = (policy_name, m_policy.get_endpoint_policy(endpoint_policies))
+        entities.append(endpoint_policy)
+
+        # reference endpoint policy object in service
+        service_args['policyEndpoint'].append(policy_name)
 
     # Ensure no duplicate iRules
     service_args['iRules'] = list(set(service_args['iRules']))
