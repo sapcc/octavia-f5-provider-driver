@@ -23,6 +23,15 @@ from octavia_f5.restclient import as3exceptions
 LOG = logging.getLogger(__name__)
 
 
+def unpack(obj):
+    if isinstance(obj, BaseDescription):
+        return obj.to_dict()
+    elif isinstance(obj, list):
+        return [unpack(o) for o in obj]
+    else:
+        return obj
+
+
 class BaseDescription(object):
     def __init__(self, data):
         for item in data:
@@ -56,10 +65,7 @@ class BaseDescription(object):
             elif isinstance(value, list):
                 data[key] = []
                 for item in self.__dict__[key]:
-                    if isinstance(item, BaseDescription):
-                        data[key].append(item.to_dict())
-                    else:
-                        data[key].append(item)
+                    data[key].append(unpack(item))
         return data
 
     def to_json(self):
@@ -160,6 +166,12 @@ class Service(BaseDescription):
 
         super(Service, self).__init__(locals())
         setattr(self, 'class', _servicetype)
+
+
+class ServiceAddress(BaseDescription):
+    def __init__(self, **kwargs):
+        super(ServiceAddress, self).__init__(locals())
+        setattr(self, 'class', 'Service_Address')
 
 
 class Pool(BaseDescription):

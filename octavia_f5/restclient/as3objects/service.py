@@ -25,6 +25,7 @@ from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import tls as m_tls
+from octavia_f5.restclient.as3objects import application as m_app
 from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
@@ -99,14 +100,23 @@ def get_service(listener, cert_manager, esd_repository):
     vip = listener.load_balancer.vip
     project_id = listener.load_balancer.project_id
     label = as3types.f5label(listener.description or listener.id)
+    virtual_address = '{}/32'.format(vip.ip_address)
     service_args = {
         'virtualPort': listener.protocol_port,
-        'virtualAddresses': [vip.ip_address],
         'persistenceMethods': [],
         'iRules': [],
         'policyEndpoint': [],
         'label': label
     }
+
+    # Custom virtual address settings
+    if CONF.f5_agent.service_address_icmp_echo:
+        service_address = as3.ServiceAddress(virtualAddress=virtual_address,
+                                             icmpEcho=CONF.f5_agent.service_address_icmp_echo)
+        entities.append((m_app.get_name(listener.load_balancer.id), service_address))
+        service_args['virtualAddresses'] = [[as3.Pointer(m_app.get_name(listener.load_balancer.id)), virtual_address]]
+    else:
+        service_args['virtualAddresses'] = [virtual_address]
 
     # Determine service type
     if listener.protocol == const.PROTOCOL_TCP:
