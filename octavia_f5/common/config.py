@@ -149,9 +149,9 @@ f5_networking_opts = [
                 help=_('Enable caching of segmentation ids and ports')),
     cfg.IntOpt('cache_time', default=3600,
                help=_('Caching time in seconds (default=3600)')),
-    cfg.StrOpt('f5_network_segment_physical_network', default="",
+    cfg.StrOpt('f5_network_segment_physical_network', default=None,
                help=_('Restrict discovery of network segmentation ID '
-                      'to a specific physical network name.')),
+                      'to a specific physical network name, autodiscovery by default.')),
 ]
 
 f5_status_manager_opts = [

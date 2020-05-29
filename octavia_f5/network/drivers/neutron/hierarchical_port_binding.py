@@ -40,6 +40,7 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
     def __init__(self):
         super(HierachicalPortBindingDriver, self).__init__()
         self.amp_repo = repositories.AmphoraRepository()
+        self.physical_network = self.get_physical_network()
 
     def allocate_vip(self, load_balancer):
         port_id = load_balancer.vip.port_id
@@ -137,14 +138,31 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
 
     @MEMOIZE
     def get_segmentation_id(self, network_id):
-        physical_network = CONF.networking.f5_network_segment_physical_network
         # List neutron ports associated with the Amphora
         try:
             network = self.neutron_client.show_network(network_id)
             for segment in network['network']['segments']:
-                if segment['provider:physical_network'] == physical_network:
+                if segment['provider:physical_network'] == self.physical_network:
                     return segment['provider:segmentation_id']
         except Exception as e:
             LOG.error('Error retrieving segmentation id for network "%s": %s', network_id, e)
             raise e
         raise base.NetworkException('No segmentation id for network "{}" found'.format(network_id))
+
+    def get_physical_network(self):
+        """
+        This function tries to figure out it's own physical network via the networking-f5 agent
+        driver's device_mappings
+        """
+
+        if CONF.networking.f5_network_segment_physical_network:
+            return CONF.networking.f5_network_segment_physical_network
+
+        try:
+            f5_agents = self.neutron_client.list_agents(agent_type=constants.F5_NETWORK_AGENT_TYPE, host=CONF.host)
+            device_mappings = f5_agents['agents'][0]['configurations']['device_mappings']
+            for physical_network in device_mappings.keys():
+                return physical_network
+        except Exception as e:
+            LOG.error('Error retrieving physical network dict for f5 network agent "%s": %s', CONF.host, e)
+            raise e
