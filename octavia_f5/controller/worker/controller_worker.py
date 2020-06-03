@@ -22,6 +22,7 @@ from futurist import periodics
 from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
+from oslo_utils import excutils
 from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.common import exceptions as o_exceptions
@@ -57,6 +58,7 @@ class ControllerWorker(object):
         self._l7policy_repo = f5_repos.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
         self._vip_repo = repo.VipRepository()
+        self._quota_repo = repo.QuotasRepository()
 
         self.sync = sync_manager.SyncManager()
         self.status = status_manager.StatusManager()
@@ -95,6 +97,7 @@ class ControllerWorker(object):
         for lb in lbs_to_delete:
             LOG.info("Found pending deletion of lb %s", lb.id)
             self.delete_load_balancer(lb.id)
+            self._decrement_quota(self._loadbalancer_repo, lb.project_id)
 
     @periodics.periodic(240, run_immediately=True)
     @lockutils.synchronized('tenant_refresh')
@@ -179,6 +182,8 @@ class ControllerWorker(object):
             try:
                 if self._refresh(network_id).ok:
                     self.status.update_status(loadbalancers)
+                    for lb in loadbalancers:
+                        self._reset_in_use_quota(lb.project_id)
             except exceptions.AS3Exception as e:
                 LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
                 for lb in loadbalancers:
@@ -213,6 +218,44 @@ class ControllerWorker(object):
         except o_exceptions.CertificateRetrievalException as e:
             LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
             raise e
+
+    @staticmethod
+    def _decrement_quota(repository, project_id):
+        lock_session = db_apis.get_session(autocommit=False)
+        try:
+            repo.Repositories.decrement_quota(None, lock_session, repository.model_class, project_id)
+            lock_session.commit()
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                LOG.error('Failed to decrement %(model) quota for '
+                          'project: %(proj)s the project may have excess '
+                          'quota in use.', {'model': repository.model_class,
+                                            'proj': project_id})
+                lock_session.rollback()
+
+    def _reset_in_use_quota(self, project_id):
+        """ reset in_use quota to None, so it will be recalculated the next time
+        :param project_id: project id
+        """
+        reset_dict = {
+            'in_use_load_balancer': None,
+            'in_use_listener': None,
+            'in_use_pool': None,
+            'in_use_health_monitor': None,
+            'in_use_member': None,
+        }
+
+        lock_session = db_apis.get_session(autocommit=False)
+        try:
+            self._quota_repo.update(lock_session, project_id=project_id, quota=reset_dict)
+            lock_session.commit()
+        except Exception:
+            with excutils.save_and_reraise_exception():
+                LOG.error('Failed to reset quota for '
+                          'project: %(proj)s the project may have excess '
+                          'quota in use.', {'proj': project_id})
+                lock_session.rollback()
+
     """
     Loadbalancer
     """
@@ -262,6 +305,7 @@ class ControllerWorker(object):
 
         if ret.ok:
             self.status.set_deleted(lb)
+            self._decrement_quota(self._lb_repo, lb.project_id)
 
     """
     Listener
@@ -302,6 +346,7 @@ class ControllerWorker(object):
 
         if self._refresh(listener.load_balancer.vip.network_id).ok:
             self.status.set_deleted(listener)
+            self._decrement_quota(self._listener_repo, listener.project_id)
 
     """
     Pool
@@ -412,6 +457,7 @@ class ControllerWorker(object):
                                        id=member_id)
         if self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_deleted(member)
+            self._decrement_quota(self._member_repo, member.project_id)
 
     """
     Health Monitor
@@ -452,6 +498,7 @@ class ControllerWorker(object):
         load_balancer = pool.load_balancer
         if self._refresh(load_balancer.vip.network_id).ok:
             self.status.set_deleted(health_mon)
+            self._decrement_quota(self._health_mon_repo, load_balancer.project_id)
 
     """
     l7policy
