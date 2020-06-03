@@ -298,9 +298,9 @@ def get_service(listener, cert_manager, esd_repository):
     # Ensure no duplicate iRules
     service_args['iRules'] = list(set(service_args['iRules']))
 
-    # fastL4 profile don't support header insertion, fallback to TCP Profile when iRules detected
-    if service_args['_servicetype'] == const.SERVICE_L4 and len(service_args['iRules']) > 0:
-        service_args['_servicetype'] = const.SERVICE_TCP
+    # fastL4/TCP profile don't support header insertion, fallback to HTTP Profile when iRules detected
+    if service_args['_servicetype'] in [const.SERVICE_L4, const.SERVICE_TCP] and len(service_args['iRules']) > 0:
+        service_args['_servicetype'] = const.SERVICE_HTTP
 
     # add default profiles to supported listeners
     if CONF.f5_agent.profile_http and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
