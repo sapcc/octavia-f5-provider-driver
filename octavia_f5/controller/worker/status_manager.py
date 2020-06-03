@@ -167,10 +167,15 @@ class StatusManager(object):
         :param provisioning_status: provisioning status
         :return: status object
         """
-        return {
+        status_obj = {
             lib_consts.ID: obj.id,
             lib_consts.PROVISIONING_STATUS: provisioning_status
         }
+
+        if isinstance(obj, data_models.LoadBalancer) and provisioning_status == lib_consts.ACTIVE:
+            status_obj[lib_consts.OPERATING_STATUS] = lib_consts.ACTIVE
+
+        return status_obj
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(),
