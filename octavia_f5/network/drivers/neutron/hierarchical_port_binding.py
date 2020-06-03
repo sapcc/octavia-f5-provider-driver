@@ -27,6 +27,7 @@ from octavia_f5.db import repositories
 
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
+CONF.import_group('networking', 'octavia_f5.common.config')
 PROJECT_ID_ALIAS = 'project-id'
 
 cache.configure(CONF)
