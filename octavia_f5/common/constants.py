@@ -82,3 +82,5 @@ DOWN = 'DOWN'
 DRAIN = 'DRAIN'
 NO_CHECK = 'no check'
 MAINT = 'MAINT'
+
+F5_NETWORK_AGENT_TYPE = 'F5 Agent'
