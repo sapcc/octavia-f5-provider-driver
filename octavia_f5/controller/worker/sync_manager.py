@@ -14,6 +14,7 @@
 
 import uuid
 
+import prometheus_client as prometheus
 from oslo_config import cfg
 from oslo_log import log as logging
 from requests import ConnectionError
@@ -31,6 +32,7 @@ from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import tenant as m_part
 from octavia_f5.utils import driver_utils, exceptions, cert_manager, esd_repo
+from octavia_f5.utils.decorators import RunHookOnException
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -45,8 +47,6 @@ class SyncManager(object):
 
     _metric_failover = prometheus.metrics.Counter(
         'octavia_as3_failover', 'How often the F5 provider driver switched to another BigIP device')
-    _metric_failover_exceptions = prometheus.metrics.Counter(
-        'octavia_as3_failover_exception', 'Number of exceptions during failover')
 
     def __init__(self):
         self._amphora_repo = repo.AmphoraRepository()
@@ -60,32 +60,31 @@ class SyncManager(object):
         ]
         self.network_driver = driver_utils.get_network_driver()
         self.cert_manager = cert_manager.CertManagerWrapper()
-        # Active bigip
-        self.bigip = self._bigips[0]
-        self.failover_to_active_bigip()
+        self.bigip = None
+        if CONF.f5_agent.migration:
+            self.failover(active_device=False)
+            LOG.warning("[Migration Mode] using passive device %s", self.bigip.hostname)
+        else:
+            self.failover()
 
-    @_metric_failover_exceptions.count_exceptions()
-    def failover_to_active_bigip(self):
-        for bigip in self._bigips:
-            if CONF.f5_agent.migration:
-                # Migration mode, sync only passive device
-                if not bigip.is_active:
-                    LOG.warning("[Migration Mode] using passive device %s", bigip.hostname)
-                    self._metric_failover.inc()
-                    self.bigip = bigip
-            else:
-                if bigip.is_active:
-                    self._metric_failover.inc()
-                    self.bigip = bigip
+    def failover(self, active_device=True):
+        # Failover to bigip which is active (if active_device == True) or passive (if active_device == False)
+        self.bigip = next(iter([bigip for bigip in self._bigips if bigip.is_active == active_device]))
 
-        return self.bigip
+    def force_failover(self, *args, **kwargs):
+        # If not in migration mode: force fail-over
+        if not CONF.f5_agent.migration:
+            self.bigip = next(iter([bigip for bigip in self._bigips if bigip != self.bigip]))
 
+            self._metric_failover.inc()
+            LOG.warning("Force failover to device %s due to connection/response error", self.bigip.hostname)
+
+    @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
         retry=retry_if_exception_type(ConnectionError),
         wait=wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS),
-        after=failover_to_active_bigip
+        stop=stop_after_attempt(RETRY_ATTEMPTS)
     )
     def tenant_update(self, network_id, loadbalancers, device=None):
         """Task to update F5s with all specified loadbalancers' configurations
@@ -163,12 +162,12 @@ class SyncManager(object):
                     tenant.add_application(e.application, application)
                 application.add_entities([(e.monitor, Monitor(monitorType='icmp', interval=0))])
 
+    @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
         retry=retry_if_exception_type(ConnectionError),
         wait=wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS),
-        after=failover_to_active_bigip
+        stop=stop_after_attempt(RETRY_ATTEMPTS)
     )
     def tenant_delete(self, network_id):
         """ Delete a Tenant
@@ -188,12 +187,12 @@ class SyncManager(object):
         except exceptions.MonitorDeletionException:
             return FakeOK()
 
+    @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
         retry=retry_if_exception_type(ConnectionError),
         wait=wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS),
-        after=failover_to_active_bigip
+        stop=stop_after_attempt(RETRY_ATTEMPTS)
     )
     def member_create(self, member):
         """Patches new member into existing pool
