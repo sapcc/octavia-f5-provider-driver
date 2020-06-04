@@ -58,7 +58,7 @@ def check_response(func):
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         response = func(self, *args, **kwargs)
-        if response.headers.get('Content-Type') == 'application/json':
+        if 'application/json' in response.headers.get('Content-Type'):
             text = response.json()
             if not response.ok:
                 _check_for_errors(text)
