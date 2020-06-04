@@ -141,12 +141,17 @@ class SyncManager(object):
                     bigip = b
 
         # Workaround for Monitor deletion bug, inject no-op Monitor
+        # tracked https://github.com/F5Networks/f5-appsvcs-extension/issues/110
         while True:
             try:
                 return bigip.post(json=decl.to_json())
             except exceptions.MonitorDeletionException as e:
                 tenant = getattr(decl.declaration, e.tenant)
-                application = getattr(tenant, e.application)
+                application = getattr(tenant, e.application, None)
+                if not application:
+                    # create fake application
+                    application = Application(constants.APPLICATION_GENERIC, label='HM Workaround App')
+                    tenant.add_application(e.application, application)
                 application.add_entities([(e.monitor, Monitor(monitorType='icmp', interval=0))])
 
     @retry(
