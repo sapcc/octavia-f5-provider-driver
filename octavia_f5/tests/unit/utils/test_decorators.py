@@ -18,7 +18,6 @@ from octavia_f5.utils.decorators import RunHookOnException
 
 class ToMockedClass(object):
     def __init__(self):
-        super(ToMockedClass).__init__()
         self.hooked_func_calls = 0
         self.hook_called = False
 
