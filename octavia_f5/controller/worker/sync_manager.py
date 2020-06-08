@@ -20,6 +20,7 @@ from requests import ConnectionError
 from tenacity import *
 
 from octavia.db import repositories as repo
+import prometheus_client as prometheus
 from octavia_f5.common import constants
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.restclient import as3restclient
@@ -42,6 +43,11 @@ RETRY_MAX = 5
 class SyncManager(object):
     """Manager class maintaining connection to BigIPs and transparently controls failover case"""
 
+    _metric_failover = prometheus.metrics.Counter(
+        'octavia_as3_failover', 'How often the F5 provider driver switched to another BigIP device')
+    _metric_failover_exceptions = prometheus.metrics.Counter(
+        'octavia_as3_failover_exception', 'Number of exceptions during failover')
+
     def __init__(self):
         self._amphora_repo = repo.AmphoraRepository()
         self._esd_repo = esd_repo.EsdRepository()
@@ -58,15 +64,18 @@ class SyncManager(object):
         self.bigip = self._bigips[0]
         self.failover_to_active_bigip()
 
+    @_metric_failover_exceptions.count_exceptions()
     def failover_to_active_bigip(self):
         for bigip in self._bigips:
             if CONF.f5_agent.migration:
                 # Migration mode, sync only passive device
                 if not bigip.is_active:
                     LOG.warning("[Migration Mode] using passive device %s", bigip.hostname)
+                    self._metric_failover.inc()
                     self.bigip = bigip
             else:
                 if bigip.is_active:
+                    self._metric_failover.inc()
                     self.bigip = bigip
 
         return self.bigip
