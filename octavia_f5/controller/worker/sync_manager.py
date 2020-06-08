@@ -168,7 +168,16 @@ class SyncManager(object):
         :return: requests delete result
         """
         tenant = m_part.get_name(network_id)
-        return self.bigip.delete(tenants=[tenant])
+
+        # Workaround for Monitor deletion, fake successfull deletion
+        class FakeOK(object):
+            def ok(self):
+                return True
+
+        try:
+            return self.bigip.delete(tenants=[tenant])
+        except exceptions.MonitorDeletionException:
+            return FakeOK()
 
     @retry(
         retry=retry_if_exception_type(ConnectionError),
