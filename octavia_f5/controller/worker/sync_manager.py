@@ -120,8 +120,8 @@ class SyncManager(object):
         )
 
         for loadbalancer in loadbalancers:
-            # Skip load balancer in pending deletion
-            if driver_utils.pending_delete(loadbalancer):
+            # Skip load balancer in (pending) deletion
+            if loadbalancer.provisioning_status in [constants.PENDING_DELETE, constants.DELETED]:
                 continue
 
             # Create generic application
