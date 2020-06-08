@@ -339,7 +339,7 @@ class ControllerWorker(object):
     def delete_pool(self, pool_id):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
-        if self._refresh(pool.load_balancer.vip.network_id).ok:
+        if pool and self._refresh(pool.load_balancer.vip.network_id).ok:
             self.status.set_deleted(pool)
 
     """

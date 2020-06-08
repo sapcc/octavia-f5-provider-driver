@@ -20,6 +20,7 @@ import signal
 
 import prometheus_client as prometheus
 import requests
+import simplejson
 from oslo_log import log as logging
 from requests.adapters import HTTPAdapter
 from six.moves.urllib import parse
@@ -59,7 +60,13 @@ def check_response(func):
     def wrapper(self, *args, **kwargs):
         response = func(self, *args, **kwargs)
         if 'application/json' in response.headers.get('Content-Type'):
-            text = response.json()
+            try:
+                text = response.json()
+            except (json.JSONDecodeError, ValueError) as e:
+                # AS3 returns malformed json, failover
+                LOG.error(e)
+                raise exceptions.FailoverException(e)
+
             if not response.ok:
                 _check_for_errors(text)
                 if 'results' in text:
