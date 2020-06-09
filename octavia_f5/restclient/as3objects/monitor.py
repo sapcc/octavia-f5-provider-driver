@@ -161,7 +161,7 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
     if target_port:
         args["targetPort"] = target_port
 
-    if CONF.f5_agent.profile_healthmonitor_tls:
+    if CONF.f5_agent.profile_healthmonitor_tls and health_monitor.type == 'HTTPS':
         args["clientTLS"] = as3.BigIP(CONF.f5_agent.profile_healthmonitor_tls)
 
     args['label'] = as3types.f5label(health_monitor.name or health_monitor.id)
