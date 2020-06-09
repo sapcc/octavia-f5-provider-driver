@@ -160,7 +160,7 @@ class SyncManager(object):
                     # create fake application
                     application = Application(constants.APPLICATION_GENERIC, label='HM Workaround App')
                     tenant.add_application(e.application, application)
-                application.add_entities([(e.monitor, Monitor(monitorType='icmp', interval=0))])
+                application.add_entities([(e.monitor, Monitor(monitorType='http'))])
 
     @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
