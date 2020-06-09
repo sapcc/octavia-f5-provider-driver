@@ -48,6 +48,7 @@ class ControllerWorker(object):
     """Worker class to update load balancers."""
 
     def __init__(self):
+        self._repositories = repo.Repositories()
         self._loadbalancer_repo = f5_repos.LoadBalancerRepository()
         self._amphora_repo = repo.AmphoraRepository()
         self._health_mon_repo = repo.HealthMonitorRepository()
@@ -219,18 +220,16 @@ class ControllerWorker(object):
             LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
             raise e
 
-    @staticmethod
-    def _decrement_quota(repository, project_id):
+    def _decrement_quota(self, repository, project_id):
         lock_session = db_apis.get_session(autocommit=False)
         try:
-            repo.Repositories.decrement_quota(None, lock_session, repository.model_class, project_id)
+            self._repositories.decrement_quota(lock_session, repository.model_class, project_id)
             lock_session.commit()
         except Exception:
             with excutils.save_and_reraise_exception():
-                LOG.error('Failed to decrement %(model) quota for '
-                          'project: %(proj)s the project may have excess '
-                          'quota in use.', {'model': repository.model_class,
-                                            'proj': project_id})
+                LOG.error('Failed to decrement %s quota for '
+                          'project: %s the project may have excess '
+                          'quota in use.', repository.model_class, project_id)
                 lock_session.rollback()
 
     def _reset_in_use_quota(self, project_id):
