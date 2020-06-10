@@ -43,7 +43,8 @@ class AmphoraRepository(repositories.AmphoraRepository):
         candidates = candidates.order_by(
             self.model_class.vrrp_priority.asc(),
             self.model_class.updated_at.desc())
-        return [candidate.compute_flavor for candidate in candidates.all()]
+        return [candidate.compute_flavor for candidate in candidates.all()
+                if candidate.vrrp_interface != 'disabled']
 
 
 class LoadBalancerRepository(repositories.LoadBalancerRepository):
