@@ -61,11 +61,8 @@ def main():
     session = db_apis.get_session()
     if CONF.lb_id:
         lbs = _loadbalancer_repo.get_all_from_host(session, id=CONF.lb_id)
-        LOG.info('Starting manual sync for loadbalancer "{}" on host "{}".'.format(CONF.lb_id, CONF.host))
     elif CONF.project_id:
         lbs = _loadbalancer_repo.get_all_from_host(session, project_id=CONF.project_Id)
-        LOG.info('Starting manual sync for loadbalancers "{}" on host "{}".'.format([
-            lb.id for lb in lbs], CONF.host))
     elif CONF.agent_host:
         lbs = _loadbalancer_repo.get_all_from_host(session, host=CONF.agent_host)
     else:  # CONF.ALL
