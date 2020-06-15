@@ -99,8 +99,8 @@ class StatusManager(object):
         self.bigip_status = {bigip.hostname: False
                              for bigip in self.bigips}
         self._active_bigip = None
-        self._last_failover_check = time.time() - int(CONF.status_manager.failover_check_interval)
-        self.cleanup()
+        self._last_failover_check = 0
+        self._last_cleanup_check = 0
 
         if cfg.CONF.f5_agent.prometheus:
             prometheus_port = CONF.f5_agent.prometheus_port
@@ -204,6 +204,10 @@ class StatusManager(object):
         if time.time() - self._last_failover_check >= CONF.status_manager.failover_check_interval:
             self._last_failover_check = time.time()
             self.failover_check()
+
+        if time.time() - self._last_cleanup_check >= CONF.status_manager.cleanup_check_interval:
+            self._last_cleanup_check = time.time()
+            self.cleanup()
 
         def _get_lb_msg(lb_id):
             if lb_id not in amphora_messages:
