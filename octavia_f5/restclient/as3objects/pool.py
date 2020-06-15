@@ -48,8 +48,8 @@ def get_pool(pool):
     lbmode = _set_lb_method(lbaas_lb_method, pool.members)
 
     service_args = {
-        'label': as3types.f5label(pool.name or pool.id),
-        'remark': as3types.f5remark(pool.description or pool.id),
+        'label': as3types.f5label(pool.name or pool.description),
+        'remark': as3types.f5remark(pool.description or pool.name),
         'loadBalancingMode': lbmode,
         'members': [],
     }
