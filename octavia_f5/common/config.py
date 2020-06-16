@@ -170,11 +170,11 @@ f5_util_opts = [
     cfg.BoolOpt('all', default=False,
                 help='Sync all load balancers'),
     cfg.StrOpt('lb_id',
-               help='Load balancer ID to migrate'),
+               help='Load balancer ID to sync'),
     cfg.StrOpt('project_id',
-               help='Migrate all load balancers owned by this project'),
+               help='Sync all load balancers owned by this project'),
     cfg.StrOpt('agent_host',
-               help='Migrate all load balancers hosted on this agent'),
+               help='Sync all load balancers hosted on this agent'),
 ]
 
 # Register the configuration options
