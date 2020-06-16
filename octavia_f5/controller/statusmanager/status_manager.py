@@ -354,7 +354,9 @@ class StatusManager(object):
                     self.amp_repo.update(session, device_entry.id, **amp_dict)
 
     def cleanup(self):
-        """ cleanups old entries without correct role/cached_zone """
+        """ Deletes old amphora entries whose load balancers don't exist anymore.
+        See controller_worker.ensure_amphora_exists for details.
+        """
         with DatabaseLockSession() as session:
             filters = {'load_balancer_id': None, 'cached_zone': None, 'compute_flavor': CONF.host,}
             try:

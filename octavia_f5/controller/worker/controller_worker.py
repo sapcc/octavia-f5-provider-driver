@@ -585,6 +585,7 @@ class ControllerWorker(object):
         """
         Octavia health manager makes some assumptions about the existence of amphorae.
         That's why even the F5 provider driver has to care about amphora DB entries.
+        Otherwise status updates won't work correctly.
 
         This function creates an amphora entry in the database, if it doesn't already exist.
         """
