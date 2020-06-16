@@ -166,6 +166,17 @@ f5_status_manager_opts = [
                help=_("Time in seconds before a device is marked as offline.")),
 ]
 
+f5_util_opts = [
+    cfg.BoolOpt('all', default=False,
+                help='Sync all load balancers'),
+    cfg.StrOpt('lb_id',
+               help='Load balancer ID to sync'),
+    cfg.StrOpt('project_id',
+               help='Sync all load balancers owned by this project'),
+    cfg.StrOpt('agent_host',
+               help='Sync all load balancers hosted on this agent'),
+]
+
 # Register the configuration options
 cfg.CONF.register_opts(f5_tls_server_opts, group='f5_tls_server')
 cfg.CONF.register_opts(f5_tls_client_opts, group='f5_tls_client')
