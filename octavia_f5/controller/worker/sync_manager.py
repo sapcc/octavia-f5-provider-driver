@@ -21,7 +21,6 @@ from requests import ConnectionError
 from tenacity import *
 
 from octavia.db import repositories as repo
-import prometheus_client as prometheus
 from octavia_f5.common import constants
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.restclient import as3restclient
