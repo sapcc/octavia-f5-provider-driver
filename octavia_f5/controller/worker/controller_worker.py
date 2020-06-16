@@ -182,7 +182,6 @@ class ControllerWorker(object):
             LOG.info("Found pending tenant network %s, syncing...", network_id)
             try:
                 if self._refresh(network_id).ok:
-                    self.status.update_status(loadbalancers)
                     for lb in loadbalancers:
                         self._reset_in_use_quota(lb.project_id)
             except exceptions.AS3Exception as e:
@@ -212,7 +211,10 @@ class ControllerWorker(object):
     def _refresh(self, network_id):
         loadbalancers = self._get_all_loadbalancer(network_id)
         try:
-            return self.sync.tenant_update(network_id, loadbalancers)
+            ret =  self.sync.tenant_update(network_id, loadbalancers)
+            if ret.ok:
+                self.status.update_status(loadbalancers)
+            return ret
         except exceptions.RetryException as e:
             LOG.warning("Device is busy, retrying with next sync: %s", e)
             raise e
@@ -276,17 +278,13 @@ class ControllerWorker(object):
 
         self.ensure_amphora_exists(lb.id)
         self.ensure_host_set(lb)
-        if self._refresh(lb.vip.network_id).ok:
-            self.status.set_active(lb)
-        else:
+        if not self._refresh(lb.vip.network_id).ok:
             self.status.set_error(lb)
 
     @lockutils.synchronized('tenant_refresh')
     def update_load_balancer(self, load_balancer_id, load_balancer_updates):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
-        if self._refresh(lb.vip.network_id).ok:
-            self.status.set_active(lb)
-        else:
+        if not self._refresh(lb.vip.network_id).ok:
             self.status.set_error(lb)
 
     @lockutils.synchronized('tenant_refresh')
@@ -324,18 +322,14 @@ class ControllerWorker(object):
                         '60 seconds.', 'listener', listener_id)
             raise db_exceptions.NoResultFound
 
-        if self._refresh(listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(listener)
-        else:
+        if not self._refresh(listener.load_balancer.vip.network_id).ok:
             self.status.set_error(listener)
 
     @lockutils.synchronized('tenant_refresh')
     def update_listener(self, listener_id, listener_updates):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
-        if self._refresh(listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(listener)
-        else:
+        if not self._refresh(listener.load_balancer.vip.network_id).ok:
             self.status.set_error(listener)
 
     @lockutils.synchronized('tenant_refresh')
@@ -365,18 +359,14 @@ class ControllerWorker(object):
                         '60 seconds.', 'pool', pool_id)
             raise db_exceptions.NoResultFound
 
-        if self._refresh(pool.load_balancer.vip.network_id).ok:
-            self.status.set_active(pool)
-        else:
+        if not self._refresh(pool.load_balancer.vip.network_id).ok:
             self.status.set_error(pool)
 
     @lockutils.synchronized('tenant_refresh')
     def update_pool(self, pool_id, pool_updates):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
-        if self._refresh(pool.load_balancer.vip.network_id).ok:
-            self.status.set_active(pool)
-        else:
+        if not self._refresh(pool.load_balancer.vip.network_id).ok:
             self.status.set_error(pool)
 
     @lockutils.synchronized('tenant_refresh')
@@ -413,9 +403,7 @@ class ControllerWorker(object):
                     return
             except exceptions.AS3Exception:
                 pass
-        elif self._refresh(member.pool.load_balancer.vip.network_id).ok:
-            self.status.set_active(member)
-        else:
+        elif not self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_error(member)
 
     @lockutils.synchronized('tenant_refresh')
@@ -438,16 +426,13 @@ class ControllerWorker(object):
             return
         load_balancer = pool.load_balancer
         network_id = load_balancer.vip.network_id
-        if self._refresh(network_id).ok:
-            self.status.update_status([load_balancer])
+        self._refresh(network_id)
 
     @lockutils.synchronized('tenant_refresh')
     def update_member(self, member_id, member_updates):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
-        if self._refresh(member.pool.load_balancer.vip.network_id).ok:
-            self.status.set_active(member)
-        else:
+        if not self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_error(member)
 
     @lockutils.synchronized('tenant_refresh')
@@ -473,9 +458,7 @@ class ControllerWorker(object):
 
         pool = health_mon.pool
         load_balancer = pool.load_balancer
-        if self._refresh(load_balancer.vip.network_id).ok:
-            self.status.set_active(health_mon)
-        else:
+        if not self._refresh(load_balancer.vip.network_id).ok:
             self.status.set_error(health_mon)
 
     @lockutils.synchronized('tenant_refresh')
@@ -484,9 +467,7 @@ class ControllerWorker(object):
                                                id=health_monitor_id)
         pool = health_mon.pool
         load_balancer = pool.load_balancer
-        if self._refresh(load_balancer.vip.network_id).ok:
-            self.status.set_active(health_mon)
-        else:
+        if not self._refresh(load_balancer.vip.network_id).ok:
             self.status.set_error(health_mon)
 
     @lockutils.synchronized('tenant_refresh')
@@ -517,18 +498,14 @@ class ControllerWorker(object):
                         '60 seconds.', 'l7policy', l7policy_id)
             raise db_exceptions.NoResultFound
 
-        if self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(l7policy)
-        else:
+        if not self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_error(l7policy)
 
     @lockutils.synchronized('tenant_refresh')
     def update_l7policy(self, l7policy_id, l7policy_updates):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
-        if self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(l7policy)
-        else:
+        if not self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_error(l7policy)
 
     @lockutils.synchronized('tenant_refresh')
@@ -556,18 +533,14 @@ class ControllerWorker(object):
                         '60 seconds.', 'l7rule', l7rule_id)
             raise db_exceptions.NoResultFound
 
-        if self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(l7rule)
-        else:
+        if not self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_error(l7rule)
 
     @lockutils.synchronized('tenant_refresh')
     def update_l7rule(self, l7rule_id, l7rule_updates):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
-        if self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(l7rule)
-        else:
+        if not self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_error(l7rule)
 
     @lockutils.synchronized('tenant_refresh')

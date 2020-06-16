@@ -17,7 +17,6 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia.common import data_models
-from octavia_f5.utils import driver_utils as utils
 from octavia_lib.api.drivers import driver_lib
 from octavia_lib.api.drivers import exceptions as driver_exceptions
 from octavia_lib.common import constants as lib_consts
@@ -26,137 +25,67 @@ CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
 
-class StatusManager(object):
+class Status(object):
+    STATUS_MAPPING = {
+        'LoadBalancer': lib_consts.LOADBALANCERS,
+        'Listener': lib_consts.LISTENERS,
+        'Pool': lib_consts.POOLS,
+        'Member': lib_consts.MEMBERS,
+        'HealthMonitor': lib_consts.HEALTHMONITORS,
+        'L7Policy': lib_consts.L7POLICIES,
+        'L7Rule': lib_consts.L7RULES,
+    }
+
     def __init__(self):
-        self._octavia_driver_lib = driver_lib.DriverLibrary(
-            status_socket=CONF.driver_agent.status_socket_path,
-            stats_socket=CONF.driver_agent.stats_socket_path
-        )
+        self.status = dict()
 
-    def set_active(self, obj):
-        """Set provisioning_state of octavia object and all ancestors to
-        ACTIVE.
+    def update(self, obj, recursive=True, provisioning_status=None):
+        status_type = self.STATUS_MAPPING[type(obj).__name__]
 
-        :param obj: octavia object like loadbalancer, pools, etc.
-        """
-        self._set_obj_and_ancestors(obj)
+        # get existing status objects for givin status type
+        status_objs = self.status.get(status_type, [])
 
-    def set_deleted(self, obj):
-        """Set provisioning_state of octavia object to DELETED and all
-        ancestors to ACTIVE.
+        if recursive:
+            # also transit status of all children objects
+            if status_type == lib_consts.LOADBALANCERS:
+                for listener in obj.listeners:
+                    self.update(listener)
+                for pool in obj.pools:
+                    self.update(pool)
+            if status_type == lib_consts.LISTENERS:
+                for l7policy in obj.l7policies:
+                    self.update(l7policy)
+            if status_type == lib_consts.L7POLICIES:
+                for l7rule in obj.l7rules:
+                    self.update(l7rule)
+            if status_type == lib_consts.POOLS:
+                for member in obj.members:
+                    self.update(member)
+                if obj.health_monitor:
+                    self.update(obj.health_monitor)
 
-        :param obj: octavia object like loadbalancer, pools, etc.
-        """
-        self._set_obj_and_ancestors(obj, lib_consts.DELETED)
+        current_prov_status = getattr(obj, 'provisioning_status', None)
+        if not current_prov_status:
+            # No prov-status found, skip
+            return
 
-    def set_error(self, obj):
-        """Set provisioning_state of octavia object to ERROR and all
-        ancestors to ACTIVE.
-
-        :param obj: octavia object like loadbalancer, pools, etc.
-        """
-        self._set_obj_and_ancestors(obj, lib_consts.ERROR)
-
-    def update_status(self, loadbalancers):
-        """Set provisioning_state of loadbalancers and all it's
-        children to ACTIVE if PENDING_UPDATE or PENDING_CREATE, else
-        DELETED for PENDING_DELETED.
-
-        :param loadbalancers: octavia loadbalancers list
-        """
-
-        def _set_deleted_or_active(obj):
-            """Sets octavia object to deleted if status was PENDING_DELETE
-
-            :param obj: octavia object
-            """
-            if utils.pending_delete(obj):
-                self.set_deleted(obj)
+        if not provisioning_status:
+            # Auto select transition
+            if current_prov_status == lib_consts.PENDING_DELETE:
+                # Transition to deleted
+                provisioning_status = lib_consts.DELETED
+            elif current_prov_status == lib_consts.PENDING_UPDATE:
+                # Transition to active
+                provisioning_status = lib_consts.ACTIVE
+            elif current_prov_status == lib_consts.PENDING_CREATE:
+                # Transition to active
+                provisioning_status = lib_consts.ACTIVE
             else:
-                self.set_active(obj)
+                # Skip
+                return
 
-        for loadbalancer in loadbalancers:
-            _set_deleted_or_active(loadbalancer)
-
-            for listener in loadbalancer.listeners:
-                _set_deleted_or_active(listener)
-
-                for l7policy in listener.l7policies:
-                    _set_deleted_or_active(l7policy)
-
-                    for l7rule in l7policy.l7rules:
-                        _set_deleted_or_active(l7rule)
-
-            for pool in loadbalancer.pools:
-                _set_deleted_or_active(pool)
-
-                for member in pool.members:
-                    _set_deleted_or_active(member)
-
-                if pool.health_monitor:
-                    _set_deleted_or_active(pool.health_monitor)
-
-    def _set_obj_and_ancestors(self, obj, state=lib_consts.ACTIVE):
-        """Set provisioning_state of octavia object to state and set all ancestors
-        to ACTIVE.
-
-        :param obj: octavia object like loadbalancer, pools, etc.
-        """
-        obj_status = self._status_obj(obj, state)
-
-        # Load Balancer
-        if isinstance(obj, data_models.LoadBalancer):
-            self._update_status_to_octavia({
-                lib_consts.LOADBALANCERS: [obj_status]
-            })
-
-        # Listener
-        if isinstance(obj, data_models.Listener):
-            self._update_status_to_octavia({
-                lib_consts.LISTENERS: [obj_status],
-                lib_consts.LOADBALANCERS: [self._status_obj(obj.load_balancer)]
-            })
-
-        # Pool
-        if isinstance(obj, data_models.Pool):
-            self._update_status_to_octavia({
-                lib_consts.POOLS: [obj_status],
-                lib_consts.LOADBALANCERS: [self._status_obj(obj.load_balancer)]
-            })
-
-        # Member
-        if isinstance(obj, data_models.Member):
-            self._update_status_to_octavia({
-                lib_consts.MEMBERS: [obj_status],
-                lib_consts.POOLS: [self._status_obj(obj.pool)],
-                lib_consts.LOADBALANCERS: [self._status_obj(obj.pool.load_balancer)]
-            })
-
-        # Health Monitor
-        if isinstance(obj, data_models.HealthMonitor):
-            self._update_status_to_octavia({
-                lib_consts.HEALTHMONITORS: [obj_status],
-                lib_consts.POOLS: [self._status_obj(obj.pool)],
-                lib_consts.LOADBALANCERS: [self._status_obj(obj.pool.load_balancer)]
-            })
-
-        # L7Policy
-        if isinstance(obj, data_models.L7Policy):
-            self._update_status_to_octavia({
-                lib_consts.L7POLICIES: [obj_status],
-                lib_consts.LISTENERS: [self._status_obj(obj.listener)],
-                lib_consts.LOADBALANCERS: [self._status_obj(obj.listener.load_balancer)]
-            })
-
-        # L7Rule
-        if isinstance(obj, data_models.L7Rule):
-            self._update_status_to_octavia({
-                lib_consts.L7RULES: [obj_status],
-                lib_consts.L7POLICIES: [self._status_obj(obj.l7policy)],
-                lib_consts.LISTENERS: [self._status_obj(obj.l7policy.listener)],
-                lib_consts.LOADBALANCERS: [self._status_obj(
-                    obj.l7policy.listener.load_balancer)]
-            })
+        status_objs.append(self._status_obj(obj, provisioning_status))
+        self.status.update({status_type: status_objs})
 
     @staticmethod
     def _status_obj(obj,
@@ -172,10 +101,21 @@ class StatusManager(object):
             lib_consts.PROVISIONING_STATUS: provisioning_status
         }
 
+        # Set operating state of loadbalancers by default to active
         if isinstance(obj, data_models.LoadBalancer) and provisioning_status == lib_consts.ACTIVE:
             status_obj[lib_consts.OPERATING_STATUS] = lib_consts.ONLINE
 
         return status_obj
+
+
+class StatusManager(object):
+    # long-lived instance for driver-agent communication
+
+    def __init__(self):
+        self._octavia_driver_lib = driver_lib.DriverLibrary(
+            status_socket=CONF.driver_agent.status_socket_path,
+            stats_socket=CONF.driver_agent.stats_socket_path
+        )
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(),
@@ -189,3 +129,91 @@ class StatusManager(object):
                    "%s") % e.fault_string
             LOG.error(msg)
             raise driver_exceptions.UpdateStatusError(msg)
+
+    def update_status(self, loadbalancers):
+        status = Status()
+        for loadbalancer in loadbalancers:
+            status.update(loadbalancer)
+
+        # upload status dict to octavia
+        self._update_status_to_octavia(status.status)
+
+    def _set_ancestor_status_to_active(self, obj, status):
+        if isinstance(obj, data_models.L7Rule):
+            l7policy = obj.l7policy
+            status.update(l7policy, recursive=False, provisioning_status=lib_consts.ACTIVE)
+            listener = l7policy.listener
+            status.update(listener, recursive=False, provisioning_status=lib_consts.ACTIVE)
+            load_balancer = l7policy.listener.load_balancer
+            status.update(load_balancer, recursive=False, provisioning_status=lib_consts.ACTIVE)
+
+        if isinstance(obj, data_models.L7Policy):
+            listener = obj.listener
+            status.update(listener, recursive=False, provisioning_status=lib_consts.ACTIVE)
+            load_balancer = listener.load_balancer
+            status.update(load_balancer, recursive=False, provisioning_status=lib_consts.ACTIVE)
+
+        if isinstance(obj, data_models.Member):
+            pool = obj.pool
+            status.update(pool, recursive=False, provisioning_status=lib_consts.ACTIVE)
+            listeners = pool.listeners
+            for listener in listeners:
+                status.update(listener, recursive=False, provisioning_status=lib_consts.ACTIVE)
+            load_balancer = pool.load_balancer
+            status.update(load_balancer, recursive=False, provisioning_status=lib_consts.ACTIVE)
+
+        if isinstance(obj, data_models.Listener):
+            load_balancer = obj.load_balancer
+            status.update(load_balancer, recursive=False, provisioning_status=lib_consts.ACTIVE)
+
+        if isinstance(obj, data_models.Pool):
+            listeners = obj.listeners
+            for listener in listeners:
+                status.update(listener, recursive=False, provisioning_status=lib_consts.ACTIVE)
+            load_balancer = obj.load_balancer
+            status.update(load_balancer, recursive=False, provisioning_status=lib_consts.ACTIVE)
+
+        if isinstance(obj, data_models.HealthMonitor):
+            pool = obj.pool
+            status.update(pool, recursive=False, provisioning_status=lib_consts.ACTIVE)
+            listeners = pool.listeners
+            for listener in listeners:
+                status.update(listener, recursive=False, provisioning_status=lib_consts.ACTIVE)
+            load_balancer = pool.load_balancer
+            status.update(load_balancer, recursive=False, provisioning_status=lib_consts.ACTIVE)
+
+    def set_active(self, obj):
+        status = Status()
+
+        # set ancestors to active
+        self._set_ancestor_status_to_active(obj, status)
+
+        # transition object itself to active
+        status.update(obj, recursive=False, provisioning_status=lib_consts.ACTIVE)
+
+        # upload status dict to octavia
+        self._update_status_to_octavia(status.status)
+
+    def set_error(self, obj):
+        status = Status()
+
+        # set ancestors to active
+        self._set_ancestor_status_to_active(obj, status)
+
+        # transition object itself to error
+        status.update(obj, recursive=False, provisioning_status=lib_consts.ERROR)
+
+        # upload status dict to octavia
+        self._update_status_to_octavia(status.status)
+
+    def set_deleted(self, obj):
+        status = Status()
+
+        # set ancestors to active
+        self._set_ancestor_status_to_active(obj, status)
+
+        # transition object itself to error
+        status.update(obj, recursive=False, provisioning_status=lib_consts.DELETED)
+
+        # upload status dict to octavia
+        self._update_status_to_octavia(status.status)
