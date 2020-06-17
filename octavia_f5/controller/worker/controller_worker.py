@@ -209,10 +209,10 @@ class ControllerWorker(object):
                 server_group_id=CONF.host))
         return [lb for lb in loadbalancers if lb]
 
-    def _refresh(self, network_id):
+    def _refresh(self, network_id, status=None):
         loadbalancers = self._get_all_loadbalancer(network_id)
         try:
-            return self.sync.tenant_update(network_id, loadbalancers)
+            return self.sync.tenant_update(network_id, loadbalancers, status=self.status)
         except exceptions.RetryException as e:
             LOG.warning("Device is busy, retrying with next sync: %s", e)
             raise e
@@ -324,7 +324,7 @@ class ControllerWorker(object):
                         '60 seconds.', 'listener', listener_id)
             raise db_exceptions.NoResultFound
 
-        if self._refresh(listener.load_balancer.vip.network_id).ok:
+        if self._refresh(listener.load_balancer.vip.network_id, self.status).ok:
             self.status.set_active(listener)
         else:
             self.status.set_error(listener)
@@ -333,7 +333,7 @@ class ControllerWorker(object):
     def update_listener(self, listener_id, listener_updates):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
-        if self._refresh(listener.load_balancer.vip.network_id).ok:
+        if self._refresh(listener.load_balancer.vip.network_id, self.status).ok:
             self.status.set_active(listener)
         else:
             self.status.set_error(listener)

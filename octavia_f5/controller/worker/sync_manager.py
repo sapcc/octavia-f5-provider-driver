@@ -20,6 +20,7 @@ from oslo_log import log as logging
 from requests import ConnectionError
 from tenacity import *
 
+from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
 from octavia_f5.db import repositories as f5_repos
@@ -85,13 +86,14 @@ class SyncManager(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=stop_after_attempt(RETRY_ATTEMPTS)
     )
-    def tenant_update(self, network_id, loadbalancers, device=None):
+    def tenant_update(self, network_id, loadbalancers, device=None, status=None):
         """Task to update F5s with all specified loadbalancers' configurations
            of a tenant (network_id).
 
            :param network_id: the as3 tenant
            :param loadbalancers: loadbalancer to update
            :param device: hostname of the bigip device, if none use active device
+           :param status: (optionally) status manager
            :return: requests post result
 
         """
@@ -129,8 +131,13 @@ class SyncManager(object):
             # Attach Octavia listeners as AS3 service objects
             for listener in loadbalancer.listeners:
                 if not driver_utils.pending_delete(listener):
-                    service_entities = m_service.get_service(listener, self.cert_manager, self._esd_repo)
-                    app.add_entities(service_entities)
+                    try:
+                        service_entities = m_service.get_service(listener, self.cert_manager, self._esd_repo)
+                        app.add_entities(service_entities)
+                    except o_exceptions.CertificateRetrievalException as e:
+                        LOG.error("Could not retrieve certificate, skipping listener '%s': %s", listener.id, e)
+                        if status:
+                            status.set_error(listener)
 
             # Attach pools
             for pool in loadbalancer.pools:
