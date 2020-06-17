@@ -20,6 +20,7 @@ from oslo_log import log as logging
 from requests import ConnectionError
 from tenacity import *
 
+from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
 from octavia_f5.db import repositories as f5_repos
@@ -119,26 +120,29 @@ class SyncManager(object):
         )
 
         for loadbalancer in loadbalancers:
-            # Skip load balancer in (pending) deletion
-            if loadbalancer.provisioning_status in [constants.PENDING_DELETE, constants.DELETED]:
-                continue
+            try:
+                # Skip load balancer in (pending) deletion
+                if loadbalancer.provisioning_status in [constants.PENDING_DELETE, constants.DELETED]:
+                    continue
 
-            # Create generic application
-            app = Application(constants.APPLICATION_GENERIC, label=loadbalancer.id)
+                # Create generic application
+                app = Application(constants.APPLICATION_GENERIC, label=loadbalancer.id)
 
-            # Attach Octavia listeners as AS3 service objects
-            for listener in loadbalancer.listeners:
-                if not driver_utils.pending_delete(listener):
-                    service_entities = m_service.get_service(listener, self.cert_manager, self._esd_repo)
-                    app.add_entities(service_entities)
+                # Attach Octavia listeners as AS3 service objects
+                for listener in loadbalancer.listeners:
+                    if not driver_utils.pending_delete(listener):
+                        service_entities = m_service.get_service(listener, self.cert_manager, self._esd_repo)
+                        app.add_entities(service_entities)
 
-            # Attach pools
-            for pool in loadbalancer.pools:
-                if not driver_utils.pending_delete(pool):
-                    app.add_entities(m_pool.get_pool(pool))
+                # Attach pools
+                for pool in loadbalancer.pools:
+                    if not driver_utils.pending_delete(pool):
+                        app.add_entities(m_pool.get_pool(pool))
 
-            # Attach newly created application
-            tenant.add_application(m_app.get_name(loadbalancer.id), app)
+                # Attach newly created application
+                tenant.add_application(m_app.get_name(loadbalancer.id), app)
+            except o_exceptions.CertificateRetrievalException as e:
+                LOG.error("Could not retrieve certificate, skipping load-balancer '%s': %s", loadbalancer.id, e)
 
         # Optionally temporarly select BigIP
         bigip = self.bigip
