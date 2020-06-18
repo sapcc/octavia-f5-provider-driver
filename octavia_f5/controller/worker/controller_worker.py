@@ -98,7 +98,6 @@ class ControllerWorker(object):
         for lb in lbs_to_delete:
             LOG.info("Found pending deletion of lb %s", lb.id)
             self.delete_load_balancer(lb.id)
-            self._decrement_quota(self._loadbalancer_repo, lb.project_id)
 
     @periodics.periodic(240, run_immediately=True)
     @lockutils.synchronized('tenant_refresh')
