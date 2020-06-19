@@ -61,6 +61,7 @@ class StatusManager(object):
         """Set provisioning_state of loadbalancers and all it's
         children to ACTIVE if PENDING_UPDATE or PENDING_CREATE, else
         DELETED for PENDING_DELETED.
+        Ignores error state.
 
         :param loadbalancers: octavia loadbalancers list
         """
@@ -70,6 +71,9 @@ class StatusManager(object):
 
             :param obj: octavia object
             """
+            if obj.provisioning_status == lib_consts.ERROR:
+                return
+
             if utils.pending_delete(obj):
                 self.set_deleted(obj)
             else:
@@ -121,7 +125,8 @@ class StatusManager(object):
         if isinstance(obj, data_models.Pool):
             self._update_status_to_octavia({
                 lib_consts.POOLS: [obj_status],
-                lib_consts.LOADBALANCERS: [self._status_obj(obj.load_balancer)]
+                lib_consts.LOADBALANCERS: [self._status_obj(obj.load_balancer)],
+                lib_consts.LISTENERS: [self._status_obj(listener) for listener in obj.listeners]
             })
 
         # Member
@@ -129,7 +134,8 @@ class StatusManager(object):
             self._update_status_to_octavia({
                 lib_consts.MEMBERS: [obj_status],
                 lib_consts.POOLS: [self._status_obj(obj.pool)],
-                lib_consts.LOADBALANCERS: [self._status_obj(obj.pool.load_balancer)]
+                lib_consts.LOADBALANCERS: [self._status_obj(obj.pool.load_balancer)],
+                lib_consts.LISTENERS: [self._status_obj(listener) for listener in obj.pool.listeners]
             })
 
         # Health Monitor
@@ -137,7 +143,8 @@ class StatusManager(object):
             self._update_status_to_octavia({
                 lib_consts.HEALTHMONITORS: [obj_status],
                 lib_consts.POOLS: [self._status_obj(obj.pool)],
-                lib_consts.LOADBALANCERS: [self._status_obj(obj.pool.load_balancer)]
+                lib_consts.LOADBALANCERS: [self._status_obj(obj.pool.load_balancer)],
+                lib_consts.LISTENERS:[self._status_obj(listener) for listener in obj.pool.listeners]
             })
 
         # L7Policy
