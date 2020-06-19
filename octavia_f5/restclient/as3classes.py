@@ -103,7 +103,7 @@ class AS3(BaseDescription):
 
 
 class ADC(BaseDescription):
-    def __init__(self, schemaVersion='3.0.0', updateMode='selective', **kwargs):  # noqa
+    def __init__(self, schemaVersion='3.19.0', updateMode='selective', **kwargs):  # noqa
         super(ADC, self).__init__(locals())
         setattr(self, 'class', 'ADC')
 

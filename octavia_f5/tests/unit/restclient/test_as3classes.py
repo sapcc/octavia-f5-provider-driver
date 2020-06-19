@@ -32,7 +32,7 @@ class TestAS3Classes(base.TestCase):
         self.assertRaises(as3exceptions.RequiredKeyMissingException, as3classes.ADC)
 
         # creation
-        adc = {'class': 'ADC', 'schemaVersion': '3.0.0',
+        adc = {'class': 'ADC', 'schemaVersion': '3.19.0',
                'id': 123, 'label': 'test', 'updateMode': 'selective'}
         adc_obj = as3classes.ADC(label='test', id=123)
         self.assertEqual(adc, adc_obj.to_dict())
