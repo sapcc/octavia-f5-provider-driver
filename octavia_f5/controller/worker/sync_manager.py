@@ -114,10 +114,15 @@ class SyncManager(object):
             # No group syncing if we are in migration mode
             decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
+        project_id = None
+        if loadbalancers:
+            project_id = loadbalancers[-1].project_id
+
         segmentation_id = self.network_driver.get_segmentation_id(network_id)
         tenant = adc.get_or_create_tenant(
             m_part.get_name(network_id),
-            defaultRouteDomain=segmentation_id
+            defaultRouteDomain=segmentation_id,
+            label='{}{}'.format(constants.PREFIX_PROJECT, project_id or 'none')
         )
 
         for loadbalancer in loadbalancers:
