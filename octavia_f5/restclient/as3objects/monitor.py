@@ -146,16 +146,9 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
         args['send'] = send
         args['receive'] = _get_recv_text(health_monitor)
 
-    if health_monitor.delay:
-        args["interval"] = health_monitor.delay
-    if health_monitor.timeout:
-        timeout = (int(health_monitor.fall_threshold) *
-                   int(health_monitor.timeout))
-        args["timeout"] = timeout
-    if health_monitor.rise_threshold:
-        time_until_up = (int(health_monitor.rise_threshold) *
-                         int(health_monitor.timeout))
-        args["timeUntilUp"] = time_until_up
+    args["interval"] = health_monitor.delay
+    timeout = int(health_monitor.fall_threshold) * int(health_monitor.delay) + 1
+    args["timeout"] = timeout
     if target_address:
         args["targetAddress"] = target_address
     if target_port:
