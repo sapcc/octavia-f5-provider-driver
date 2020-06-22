@@ -15,10 +15,12 @@
 
 import re
 import string
-import unicodedata
 
 
 def f5remark(remark):
+    if not remark:
+        return ""
+
     # Remove control characters.
     nstr = "".join(ch for ch in remark if ch in string.printable)
 
@@ -27,6 +29,9 @@ def f5remark(remark):
 
 
 def f5label(label):
+    if not label:
+        return ""
+
     # Remove control characters and limit to 64 characters.
     nstr = "".join(ch for ch in label if ch in string.printable and ch != "&")
     return nstr[:64]
