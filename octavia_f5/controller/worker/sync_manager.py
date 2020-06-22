@@ -47,6 +47,8 @@ class SyncManager(object):
 
     _metric_failover = prometheus.metrics.Counter(
         'octavia_as3_failover', 'How often the F5 provider driver switched to another BigIP device')
+    _metric_stuck_monitor = prometheus.metrics.Counter(
+        'octavia_as3_stuck_monitor', 'Stuck monitor workaround applied')
 
     def __init__(self):
         self._amphora_repo = repo.AmphoraRepository()
@@ -165,6 +167,7 @@ class SyncManager(object):
             try:
                 return bigip.post(json=decl.to_json())
             except exceptions.MonitorDeletionException as e:
+                self._metric_stuck_monitor.labels(tenant=network_id).inc()
                 tenant = getattr(decl.declaration, e.tenant)
                 application = getattr(tenant, e.application, None)
                 if not application:
