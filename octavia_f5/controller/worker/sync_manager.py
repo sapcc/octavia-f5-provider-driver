@@ -48,7 +48,7 @@ class SyncManager(object):
     _metric_failover = prometheus.metrics.Counter(
         'octavia_as3_failover', 'How often the F5 provider driver switched to another BigIP device')
     _metric_stuck_monitor = prometheus.metrics.Counter(
-        'octavia_as3_stuck_monitor', 'Stuck monitor workaround applied')
+        'octavia_as3_stuck_monitor', 'Stuck monitor workaround applied', ['tenant'])
 
     def __init__(self):
         self._amphora_repo = repo.AmphoraRepository()

@@ -130,7 +130,7 @@ class ControllerWorker(object):
                 try:
                     self.sync.tenant_update(network_id, loadbalancers, device.cached_zone)
                 except exceptions.AS3Exception as e:
-                    LOG.error("AS3 exception while syncing reappared device %s: %s", network_id, e)
+                    LOG.error("AS3 exception while syncing reappared device %s: %s", device.cached_zone, e)
 
             # Set device ready
             self._amphora_repo.update(session, device.id, status=constants.AMPHORA_READY)
