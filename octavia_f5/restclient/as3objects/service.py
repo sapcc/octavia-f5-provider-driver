@@ -127,12 +127,12 @@ def get_service(listener, cert_manager, esd_repository):
     # HTTP
     elif listener.protocol == const.PROTOCOL_HTTP:
         service_args['_servicetype'] = const.SERVICE_HTTP
-    # HTTPS (non-terminated)
+    # HTTPS (non-terminated, forward TCP traffic)
     elif listener.protocol == const.PROTOCOL_HTTPS:
         service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
     # Proxy
     elif listener.protocol == const.PROTOCOL_PROXY:
-        service_args['_servicetype'] = const.SERVICE_HTTP
+        service_args['_servicetype'] = const.SERVICE_TCP
         name, irule = m_irule.get_proxy_irule()
         service_args['iRules'].append(name)
         entities.append((name, irule))
@@ -298,23 +298,23 @@ def get_service(listener, cert_manager, esd_repository):
     # Ensure no duplicate iRules
     service_args['iRules'] = list(set(service_args['iRules']))
 
-    # fastL4/TCP profile don't support header insertion, fallback to HTTP Profile when iRules detected
-    if service_args['_servicetype'] in [const.SERVICE_L4, const.SERVICE_TCP] and len(service_args['iRules']) > 0:
-        service_args['_servicetype'] = const.SERVICE_HTTP
+    # fastL4 profile doesn't support iRules, fallback to TCP Profile when iRules detected
+    if service_args['_servicetype'] == const.SERVICE_L4 and len(service_args['iRules']) > 0:
+        service_args['_servicetype'] = const.SERVICE_TCP
 
     # add default profiles to supported listeners
     if CONF.f5_agent.profile_http and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
-        service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http)
-    if CONF.f5_agent.profile_http_compression and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
-        service_args['profileHTTPCompression'] = as3.BigIP(CONF.f5_agent.profile_http_compression)
+        if 'profileHTTP' not in service_args:
+            service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http)
     if CONF.f5_agent.profile_l4 and service_args['_servicetype'] == const.SERVICE_L4:
-        service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)
+        if 'profileL4' not in service_args:
+            service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)
     if CONF.f5_agent.profile_tcp and service_args['_servicetype'] in const.SERVICE_TCP_TYPES:
-        service_args['profileTCP'] = as3.BigIP(CONF.f5_agent.profile_tcp)
+        if 'profileTCP' not in service_args:
+            service_args['profileTCP'] = as3.BigIP(CONF.f5_agent.profile_tcp)
     if CONF.f5_agent.profile_udp and service_args['_servicetype'] == const.SERVICE_UDP:
-        service_args['profileUDP'] = as3.BigIP(CONF.f5_agent.profile_udp)
-    if CONF.f5_agent.profile_multiplex and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
-        service_args['profileMultiplex'] = as3.BigIP(CONF.f5_agent.profile_multiplex)
+        if 'profileUDP' not in service_args:
+            service_args['profileUDP'] = as3.BigIP(CONF.f5_agent.profile_udp)
 
     # Use the virtual-server address as SNAT address
     if CONF.f5_agent.snat_virtual:
