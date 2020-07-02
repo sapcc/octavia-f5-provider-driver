@@ -284,7 +284,8 @@ def get_service(listener, cert_manager, esd_repository):
         elif policy.provisioning_status != lib_consts.PENDING_DELETE:
             endpoint_policies.append(policy)
 
-    if endpoint_policies:
+    # UDP listener won't support policies
+    if endpoint_policies and not service_args['_servicetype'] == const.SERVICE_UDP:
         # add a regular endpoint policy
         policy_name = m_policy.get_wrapper_name(listener.id)
 
