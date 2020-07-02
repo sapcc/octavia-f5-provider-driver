@@ -31,7 +31,9 @@ COMPARE_TYPE_INVERT_MAP = {
     'EQUAL_TO': 'does-not-equal'
 }
 COND_TYPE_MAP = {
-    const.L7RULE_TYPE_HOST_NAME: {'match_key': 'host', 'type': 'httpUri'},
+    #const.L7RULE_TYPE_HOST_NAME: {'match_key': 'host', 'type': 'httpUri'},
+    # Workaround for https://github.com/F5Networks/f5-appsvcs-extension/issues/229, match Host in httpHeader
+    const.L7RULE_TYPE_HOST_NAME: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name', 'override_key': 'Host'},
     const.L7RULE_TYPE_PATH: {'match_key': 'path', 'type': 'httpUri'},
     const.L7RULE_TYPE_FILE_TYPE: {'match_key': 'extension', 'type': 'httpUri'},
     const.L7RULE_TYPE_HEADER: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name'},
@@ -75,7 +77,10 @@ def _get_condition(l7rule):
     args[condition['match_key']] = compare_string
     args['type'] = condition['type']
     if 'key_name' in condition:
-        args[condition['key_name']] = l7rule.key
+        if 'override_key' in condition:
+            args[condition['key_name']] = condition['override_key']
+        else:
+            args[condition['key_name']] = l7rule.key
     return Policy_Condition(**args)
 
 
