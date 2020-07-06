@@ -27,6 +27,7 @@ from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
+from octavia.network import base
 from octavia_f5.common import constants
 from octavia_f5.controller.worker import status_manager, sync_manager
 from octavia_f5.db import api as db_apis
@@ -117,7 +118,7 @@ class ControllerWorker(object):
             LOG.info("Device reappeared: %s. Doing a full sync.", device.cached_zone)
 
             # get all load balancers (of this host)
-            lbs = self._loadbalancer_repo.get_all_from_host(session)
+            lbs = self._loadbalancer_repo.get_all_from_host(session, show_deleted=False)
 
             # deduplicate
             networks = collections.defaultdict(list)
@@ -129,6 +130,8 @@ class ControllerWorker(object):
             for network_id, loadbalancers in networks.items():
                 try:
                     self.sync.tenant_update(network_id, loadbalancers, device.cached_zone)
+                except base.NetworkException as e:
+                    LOG.error("Neutron exception while syncing reappared device %s: %s", device.cached_zone, e)
                 except exceptions.AS3Exception as e:
                     LOG.error("AS3 exception while syncing reappared device %s: %s", device.cached_zone, e)
 
