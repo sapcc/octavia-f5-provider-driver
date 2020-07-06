@@ -25,7 +25,7 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 from sqlalchemy.orm import exc as db_exceptions
 
-from octavia.common import exceptions as o_exceptions
+from octavia.common import exceptions as o_exceptions, data_models
 from octavia.db import repositories as repo
 from octavia.network import base
 from octavia_f5.common import constants
@@ -222,16 +222,16 @@ class ControllerWorker(object):
             LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
             raise e
 
-    def _decrement_quota(self, repository, project_id):
+    def _decrement_quota(self, data_model, project_id):
         lock_session = db_apis.get_session(autocommit=False)
         try:
-            self._repositories.decrement_quota(lock_session, repository.model_class, project_id)
+            self._repositories.decrement_quota(lock_session, data_model, project_id)
             lock_session.commit()
         except Exception:
             with excutils.save_and_reraise_exception():
                 LOG.error('Failed to decrement %s quota for '
                           'project: %s the project may have excess '
-                          'quota in use.', repository.model_class, project_id)
+                          'quota in use.', data_model, project_id)
                 lock_session.rollback()
 
     def _reset_in_use_quota(self, project_id):
@@ -306,7 +306,7 @@ class ControllerWorker(object):
 
         if ret.ok:
             self.status.set_deleted(lb)
-            self._decrement_quota(self._lb_repo, lb.project_id)
+            self._decrement_quota(data_models.LoadBalancer, lb.project_id)
 
     """
     Listener
@@ -347,7 +347,7 @@ class ControllerWorker(object):
 
         if self._refresh(listener.load_balancer.vip.network_id).ok:
             self.status.set_deleted(listener)
-            self._decrement_quota(self._listener_repo, listener.project_id)
+            self._decrement_quota(data_models.Listener, listener.project_id)
 
     """
     Pool
@@ -458,7 +458,7 @@ class ControllerWorker(object):
                                        id=member_id)
         if self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_deleted(member)
-            self._decrement_quota(self._member_repo, member.project_id)
+            self._decrement_quota(data_models.Member, member.project_id)
 
     """
     Health Monitor
@@ -499,7 +499,7 @@ class ControllerWorker(object):
         load_balancer = pool.load_balancer
         if self._refresh(load_balancer.vip.network_id).ok:
             self.status.set_deleted(health_mon)
-            self._decrement_quota(self._health_mon_repo, load_balancer.project_id)
+            self._decrement_quota(data_models.HealthMonitor, load_balancer.project_id)
 
     """
     l7policy
