@@ -156,7 +156,7 @@ f5_networking_opts = [
 
 f5_status_manager_opts = [
     cfg.IntOpt('health_check_interval',
-               default=5,
+               default=60,
                help=_('Sleep time between health checks in seconds.')),
     cfg.IntOpt('failover_check_interval',
                default=30,
