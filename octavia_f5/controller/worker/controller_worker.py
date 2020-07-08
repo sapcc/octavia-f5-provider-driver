@@ -154,13 +154,14 @@ class ControllerWorker(object):
             # bind to loadbalancer if scheduled to this host
             if CONF.host == self.network_driver.get_scheduled_host(lb.vip.port_id):
                 self.ensure_host_set(lb)
-                self.ensure_amphora_exists(lb.id)
                 lbs.append(lb)
 
         # Find pending loadbalancer
         lbs.extend(self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_UPDATE))
+        for lb in lbs:
+            self.ensure_amphora_exists(lb.id)
 
         # Find pending listener
         listeners = self._listener_repo.get_pending_from_host(db_apis.get_session())
