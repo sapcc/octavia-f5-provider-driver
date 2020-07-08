@@ -84,6 +84,8 @@ def authorized(func):
     @functools.wraps(func)
     def wrapper(self, *args, **kwargs):
         response = func(self, *args, **kwargs)
+        if not self.auth:
+            return response
         if response.status_code == 401 or 'X-F5-Auth-Token' not in self.session.headers:
             self.reauthorize()
             return func(self, *args, **kwargs)
@@ -118,11 +120,12 @@ class BigipAS3RestClient(object):
     _metric_version = prometheus.Info(
         'octavia_as3_version', 'AS3 Version')
 
-    def __init__(self, url, enable_verify=True, enable_token=True):
+    def __init__(self, url, enable_verify=True, enable_token=True, auth=True):
         self.bigip = parse.urlsplit(url, allow_fragments=False)
         # Use the first BigIP device by default
         self.enable_verify = enable_verify
         self.enable_token = enable_token
+        self.auth = auth
         self.token = None
         self.session = self._create_session()
         try:
@@ -136,7 +139,7 @@ class BigipAS3RestClient(object):
     def _url(self, path):
         return parse.urlunsplit(
             parse.SplitResult(scheme=self.bigip.scheme,
-                              netloc=self.bigip.hostname,
+                              netloc=self.bigip.netloc,
                               path=path,
                               query='',
                               fragment='')

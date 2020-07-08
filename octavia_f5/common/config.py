@@ -51,6 +51,9 @@ f5_agent_opts = [
     cfg.ListOpt('bigip_urls',
                 item_type=cfg.types.URI(schemes=['http', 'https']),
                 help=_('The URL to the bigip host device with AS3 endpoint')),
+    cfg.StrOpt('as3_endpoint',
+               help=_("Use optional AS3 container endpoint for configuring"
+                      "BigIPs.")),
     cfg.StrOpt('esd_dir',
                help=_('Directory of the esd files')),
 

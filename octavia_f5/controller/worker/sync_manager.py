@@ -42,6 +42,12 @@ RETRY_BACKOFF = 1
 RETRY_MAX = 5
 
 
+# Workaround for Monitor deletion, fake successfull deletion
+class FakeOK(object):
+    def ok(self):
+        return True
+
+
 class SyncManager(object):
     """Manager class maintaining connection to BigIPs and transparently controls failover case"""
 
@@ -62,24 +68,65 @@ class SyncManager(object):
         ]
         self.network_driver = driver_utils.get_network_driver()
         self.cert_manager = cert_manager.CertManagerWrapper()
-        self.bigip = None
+        self._bigip = None
+        self._as3 = None
+        if CONF.f5_agent.as3_endpoint:
+            # Use external AS3 Container
+            self._as3 = as3restclient.BigipAS3RestClient(
+                url=CONF.f5_agent.as3_endpoint,
+                enable_verify=CONF.f5_agent.bigip_verify,
+                enable_token=CONF.f5_agent.bigip_token,
+                auth=False)
+
         if CONF.f5_agent.migration:
             self.failover(active_device=False)
-            LOG.warning("[Migration Mode] using passive device %s", self.bigip.hostname)
+            LOG.warning("[Migration Mode] using passive device %s", self.bigip().hostname)
         else:
             self.failover()
 
+    def bigip(self, device=None):
+        """ Returns the (active/specific) BigIP device, e.g.:
+        - active BigIP device (device = None)
+        - specific BigIP device (device != None)
+
+        :param device: specify BigIP device
+        :return: as3 restclient of the requested device
+        """
+        for bigip in self._bigips:
+            if bigip.hostname == device:
+                return bigip
+
+        return self._bigip
+
+    def endpoint(self, device=None):
+        """ Returns the AS3 endpoint which can be:
+        - AS3 Container
+        - active BigIP device (device = None)
+        - specific BigIP device (device != None)
+
+        :param device: specify BigIP device
+        :return: return as3 restclient endpoint to talk with
+        """
+        if CONF.f5_agent.as3_endpoint:
+            # Use external as3 container
+            return self._as3
+        return self.bigip(device)
+
     def failover(self, active_device=True):
-        # Failover to bigip which is active (if active_device == True) or passive (if active_device == False)
-        self.bigip = next(iter([bigip for bigip in self._bigips if bigip.is_active == active_device]))
+        if len(self._bigips) == 1:
+            # Always use same BigIP
+            self._bigip = self._bigips[0]
+        else:
+            # Failover to bigip which is active (if active_device == True) or passive (if active_device == False)
+            self._bigip = next(iter([bigip for bigip in self._bigips if bigip.is_active == active_device]))
 
     def force_failover(self, *args, **kwargs):
         # If not in migration mode: force fail-over
         if not CONF.f5_agent.migration:
-            self.bigip = next(iter([bigip for bigip in self._bigips if bigip != self.bigip]))
+            self._bigip = next(iter([bigip for bigip in self._bigips if bigip != self._bigip]))
 
             self._metric_failover.inc()
-            LOG.warning("Force failover to device %s due to connection/response error", self.bigip.hostname)
+            LOG.warning("Force failover to device %s due to connection/response error", self._bigip.hostname)
 
     @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
@@ -154,18 +201,16 @@ class SyncManager(object):
             # Attach newly created application
             tenant.add_application(m_app.get_name(loadbalancer.id), app)
 
-        # Optionally temporarly select BigIP
-        bigip = self.bigip
-        if device:
-            for b in self._bigips:
-                if b.hostname == device:
-                    bigip = b
+        # Support for as3 container
+        if CONF.f5_agent.as3_endpoint:
+            # Specify target device via as3 property
+            decl.set_bigip_target_device(self.bigip(device).bigip)
 
         # Workaround for Monitor deletion bug, inject no-op Monitor
         # tracked https://github.com/F5Networks/f5-appsvcs-extension/issues/110
         while True:
             try:
-                return bigip.post(json=decl.to_json())
+                return self.endpoint(device).post(json=decl.to_json())
             except exceptions.MonitorDeletionException as e:
                 self._metric_stuck_monitor.labels(tenant=network_id).inc()
                 tenant = getattr(decl.declaration, e.tenant)
@@ -189,15 +234,18 @@ class SyncManager(object):
         :param network_id: network id
         :return: requests delete result
         """
+        if CONF.f5_agent.dry_run:
+            return FakeOK
+
         tenant = m_part.get_name(network_id)
 
-        # Workaround for Monitor deletion, fake successfull deletion
-        class FakeOK(object):
-            def ok(self):
-                return True
-
         try:
-            return self.bigip.delete(tenants=[tenant])
+            if CONF.f5_agent.as3_endpoint:
+                decl = AS3(persist=True, action='remove', _log_level=LOG.logger.level)
+                decl.set_bigip_target_device(self.bigip().bigip)
+                return self.endpoint().post(json=decl.to_json())
+
+            return self.endpoint().delete(tenants=[tenant])
         except exceptions.MonitorDeletionException:
             return FakeOK()
 
@@ -213,10 +261,24 @@ class SyncManager(object):
 
         :param member: octavia member object
         """
+        if CONF.f5_agent.dry_run:
+            return FakeOK
+
         path = '{}/{}/{}/members/-'.format(
             m_part.get_name(member.pool.load_balancer.vip.network_id),
             m_app.get_name(member.pool.load_balancer.id),
             m_pool.get_name(member.pool.id)
         )
-        return self.bigip.patch(operation='add', path=path,
-                                value=m_member.get_member(member).to_dict())
+
+        if CONF.f5_agent.as3_endpoint:
+            patch_body = {
+                'op': 'add',
+                'path': path,
+                'value': m_member.get_member(member).to_dict()
+            }
+            decl = AS3(persist=True, action='patch', _log_level=LOG.logger.level, patchBody=patch_body)
+            decl.set_bigip_target_device(self.bigip().bigip)
+            return self.endpoint().post(json=decl.to_json())
+
+        return self.endpoint().patch(operation='add', path=path,
+                                     value=m_member.get_member(member).to_dict())
