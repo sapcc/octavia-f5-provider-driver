@@ -60,16 +60,11 @@ def get_pool(pool):
             service_args['members'].append(
                 m_member.get_member(member))
 
-    #if pool.health_monitor and not utils.pending_delete(
-    #        pool.health_monitor):
-    # Workaround for Monitor deletion bug in AS3, dereference but remain HM
-    if pool.health_monitor:
+    if pool.health_monitor and not utils.pending_delete(
+            pool.health_monitor):
         hms = m_monitor.get_monitors(pool.health_monitor, pool.members)
         entities.extend(hms)
-
-        # Part of the workaround
-        if not utils.pending_delete(pool.health_monitor):
-            service_args['monitors'] = [Pointer(use=name) for name, _ in hms]
+        service_args['monitors'] = [Pointer(use=name) for name, _ in hms]
 
     entities.append((get_name(pool.id), Pool(**service_args)))
     return entities

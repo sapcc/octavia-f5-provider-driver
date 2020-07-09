@@ -206,20 +206,7 @@ class SyncManager(object):
             # Specify target device via as3 property
             decl.set_bigip_target_device(self.bigip(device).bigip)
 
-        # Workaround for Monitor deletion bug, inject no-op Monitor
-        # tracked https://github.com/F5Networks/f5-appsvcs-extension/issues/110
-        while True:
-            try:
-                return self.endpoint(device).post(json=decl.to_json())
-            except exceptions.MonitorDeletionException as e:
-                self._metric_stuck_monitor.labels(tenant=network_id).inc()
-                tenant = getattr(decl.declaration, e.tenant)
-                application = getattr(tenant, e.application, None)
-                if not application:
-                    # create fake application
-                    application = Application(constants.APPLICATION_GENERIC, label='HM Workaround App')
-                    tenant.add_application(e.application, application)
-                application.add_entities([(e.monitor, Monitor(monitorType='http'))])
+        return self.endpoint(device).post(json=decl.to_json())
 
     @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
