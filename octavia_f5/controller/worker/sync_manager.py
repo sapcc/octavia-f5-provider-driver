@@ -23,6 +23,7 @@ from tenacity import *
 from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
+from octavia_f5.controller.worker import quirks
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.restclient import as3restclient
 from octavia_f5.restclient.as3classes import ADC, AS3, Application, Monitor
@@ -195,6 +196,7 @@ class SyncManager(object):
 
             # Attach pools
             for pool in loadbalancer.pools:
+                quirks.workaround_autotool_1469(network_id, loadbalancer.id, pool, self._bigips)
                 if not driver_utils.pending_delete(pool):
                     app.add_entities(m_pool.get_pool(pool))
 
