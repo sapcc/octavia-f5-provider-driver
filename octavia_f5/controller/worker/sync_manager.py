@@ -235,7 +235,7 @@ class SyncManager(object):
         :return: requests delete result
         """
         if CONF.f5_agent.dry_run:
-            return FakeOK
+            return FakeOK()
 
         tenant = m_part.get_name(network_id)
 
@@ -262,7 +262,7 @@ class SyncManager(object):
         :param member: octavia member object
         """
         if CONF.f5_agent.dry_run:
-            return FakeOK
+            return FakeOK()
 
         path = '{}/{}/{}/members/-'.format(
             m_part.get_name(member.pool.load_balancer.vip.network_id),
