@@ -101,6 +101,11 @@ class AS3(BaseDescription):
     def set_sync_to_group(self, group):
         setattr(self, 'syncToGroup', group)
 
+    def set_bigip_target_device(self, bigip):
+        setattr(self, 'targetHost', bigip.hostname)
+        setattr(self, 'targetUsername', bigip.username)
+        setattr(self, 'targetPassphrase', bigip.password)
+
 
 class ADC(BaseDescription):
     def __init__(self, schemaVersion='3.19.0', updateMode='selective', **kwargs):  # noqa
