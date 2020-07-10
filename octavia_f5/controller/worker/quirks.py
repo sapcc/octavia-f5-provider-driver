@@ -12,12 +12,15 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from octavia_f5.utils import driver_utils, exceptions
+from oslo_log import log as logging
+
+from octavia_f5.restclient.as3objects import application as m_app
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import tenant as m_tenant
-from octavia_f5.restclient.as3objects import application as m_app
+from octavia_f5.utils import driver_utils, exceptions
 
 F5_POOL_PATH = '/mgmt/tm/ltm/pool'
+LOG = logging.getLogger(__name__)
 
 
 def workaround_autotool_1469(network_id, loadbalancer_id, pool, bigips):
@@ -31,6 +34,7 @@ def workaround_autotool_1469(network_id, loadbalancer_id, pool, bigips):
     :param bigips: bigips
     """
     if pool.health_monitor and driver_utils.pending_delete(pool.health_monitor):
+        LOG.info("Disassociating health-monitor '%s'", pool.health_monitor.id)
         for bigip in bigips:
             try:
                 pool_resource_path = '{pool_path}/~{net_id}~{lb_id}~{pool_id}'.format(
@@ -44,5 +48,8 @@ def workaround_autotool_1469(network_id, loadbalancer_id, pool, bigips):
                     if 'monitor' in pool_dict:
                         pool_dict['monitor'] = None
                         bigip.put(pool_resource_path, json=pool_dict)
-            except exceptions.AS3Exception:
-                pass
+                else:
+                    LOG.warning("Disassociating health-monitor '%s' failed: %s", pool.health_monitor.id,
+                                pool_json.text)
+            except exceptions.AS3Exception as e:
+                LOG.warning("Disassociating health-monitor '%s' failed: %s", pool.health_monitor.id, e)
