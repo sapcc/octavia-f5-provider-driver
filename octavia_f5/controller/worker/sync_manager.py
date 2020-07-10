@@ -23,6 +23,7 @@ from tenacity import *
 from octavia.common import exceptions as o_exceptions
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
+from octavia_f5.controller.worker import quirks
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.restclient import as3restclient
 from octavia_f5.restclient.as3classes import ADC, AS3, Application, Monitor
@@ -195,6 +196,7 @@ class SyncManager(object):
 
             # Attach pools
             for pool in loadbalancer.pools:
+                quirks.workaround_autotool_1469(network_id, loadbalancer.id, pool, self._bigips)
                 if not driver_utils.pending_delete(pool):
                     app.add_entities(m_pool.get_pool(pool))
 
@@ -206,20 +208,7 @@ class SyncManager(object):
             # Specify target device via as3 property
             decl.set_bigip_target_device(self.bigip(device).bigip)
 
-        # Workaround for Monitor deletion bug, inject no-op Monitor
-        # tracked https://github.com/F5Networks/f5-appsvcs-extension/issues/110
-        while True:
-            try:
-                return self.endpoint(device).post(json=decl.to_json())
-            except exceptions.MonitorDeletionException as e:
-                self._metric_stuck_monitor.labels(tenant=network_id).inc()
-                tenant = getattr(decl.declaration, e.tenant)
-                application = getattr(tenant, e.application, None)
-                if not application:
-                    # create fake application
-                    application = Application(constants.APPLICATION_GENERIC, label='HM Workaround App')
-                    tenant.add_application(e.application, application)
-                application.add_entities([(e.monitor, Monitor(monitorType='http'))])
+        return self.endpoint(device).post(json=decl.to_json())
 
     @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(

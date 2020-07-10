@@ -106,6 +106,10 @@ class BigipAS3RestClient(object):
         'octavia_as3_patch_duration', 'Time it needs to send a PATCH request to AS3')
     _metric_patch_exceptions = prometheus.metrics.Counter(
         'octavia_as3_patch_exceptions', 'Number of exceptions at PATCH request sent to AS3')
+    _metric_put_duration = prometheus.metrics.Summary(
+        'octavia_as3_put_duration', 'Time it needs to send a PUT request to AS3')
+    _metric_put_exceptions = prometheus.metrics.Counter(
+        'octavia_as3_put_exceptions', 'Number of exceptions at PUT request sent to AS3')
     _metric_delete_duration = prometheus.metrics.Summary(
         'octavia_as3_delete_duration', 'Time it needs to send a DELETE request to AS3')
     _metric_delete_exceptions = prometheus.metrics.Counter(
@@ -235,6 +239,13 @@ class BigipAS3RestClient(object):
         params = kwargs.copy()
         params.update({'op': operation, 'path': path})
         return self._call_method('patch', self._url(AS3_DECLARE_PATH), json=[params])
+
+    @_metric_put_exceptions.count_exceptions()
+    @_metric_put_duration.time()
+    def put(self, path, **kwargs):
+        path = self._url(path)
+        LOG.debug("Calling PUT %s with JSON %s", path, kwargs.get('json'))
+        return self._call_method('put', path, **kwargs)
 
     @_metric_delete_exceptions.count_exceptions()
     @_metric_delete_duration.time()
