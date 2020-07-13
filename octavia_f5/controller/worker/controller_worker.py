@@ -200,17 +200,8 @@ class ControllerWorker(object):
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
     def _get_all_loadbalancer(self, network_id):
         LOG.debug("Get load balancers from DB for network id: %s ", network_id)
-        vips = self._vip_repo.get_all(
-            db_apis.get_session(),
-            network_id=network_id)
-        loadbalancers = []
-        for vip in vips[0]:
-            loadbalancers.append(self._loadbalancer_repo.get(
-                db_apis.get_session(),
-                show_deleted=False,
-                id=vip.load_balancer_id,
-                server_group_id=CONF.host))
-        return [lb for lb in loadbalancers if lb]
+        return self._loadbalancer_repo.get_all_by_network(
+            db_apis.get_session(), network_id=network_id, show_deleted=False)
 
     def _refresh(self, network_id, status=None):
         loadbalancers = self._get_all_loadbalancer(network_id)

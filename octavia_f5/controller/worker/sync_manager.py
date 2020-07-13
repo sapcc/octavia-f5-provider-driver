@@ -177,7 +177,7 @@ class SyncManager(object):
 
         for loadbalancer in loadbalancers:
             # Skip load balancer in (pending) deletion
-            if loadbalancer.provisioning_status in [constants.PENDING_DELETE, constants.DELETED]:
+            if loadbalancer.provisioning_status in [constants.PENDING_DELETE]:
                 continue
 
             # Create generic application

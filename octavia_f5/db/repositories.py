@@ -60,6 +60,26 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
         return super(LoadBalancerRepository, self).get_all(
             session, **filters)[0]
 
+    def get_all_by_network(self, session, network_id, host=CONF.host, **filters):
+        """ Get all loadbalancers from specific host and network vip
+
+        :param session: A Sql Alchemy database session.
+        :param host: specify amphora host to fetch loadbalancer from.
+        :param filters: Filters to decide which entities should be retrieved.
+        :returns: [octavia.common.data_model]
+        """
+        deleted = filters.pop('show_deleted', True)
+        query = session.query(models.LoadBalancer)
+        query = query.filter(models.LoadBalancer.server_group_id == host,
+                             models.LoadBalancer.id == models.Vip.load_balancer_id,
+                             models.Vip.network_id == network_id)
+        if not deleted:
+            query = query.filter(
+                models.LoadBalancer.provisioning_status != consts.DELETED)
+
+        return [model.to_data_model() for model in query.all()]
+
+
 
 class PoolRepository(repositories.PoolRepository):
     def get_pending_from_host(self, session, host=CONF.host):
