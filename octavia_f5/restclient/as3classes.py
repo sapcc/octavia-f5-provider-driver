@@ -101,10 +101,17 @@ class AS3(BaseDescription):
     def set_sync_to_group(self, group):
         setattr(self, 'syncToGroup', group)
 
-    def set_bigip_target_device(self, bigip):
-        setattr(self, 'targetHost', bigip.hostname)
-        setattr(self, 'targetUsername', bigip.username)
-        setattr(self, 'targetPassphrase', bigip.password)
+    def set_bigip_target_host(self, host):
+        setattr(self, 'targetHost', host)
+
+    def set_target_username(self, username):
+        setattr(self, 'targetUsername', username)
+
+    def set_target_passphrase(self, passphrase):
+        setattr(self, 'targetPassphrase', passphrase)
+
+    def set_target_tokens(self, tokens):
+        setattr(self, 'targetTokens', tokens)
 
 
 class ADC(BaseDescription):

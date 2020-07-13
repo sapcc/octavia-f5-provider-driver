@@ -28,7 +28,7 @@ from stevedore import driver as stevedore_driver
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
-from octavia_f5.restclient import as3restclient
+from octavia_f5.restclient.bigip import bigip_restclient, bigip_auth
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -89,12 +89,7 @@ class StatusManager(object):
             max_workers=CONF.health_manager.health_update_threads)
         self.stats_executor = futurist.ThreadPoolExecutor(
             max_workers=CONF.health_manager.stats_update_threads)
-        self.bigips = [as3restclient.BigipAS3RestClient(
-            url=bigip_url,
-            enable_verify=CONF.f5_agent.bigip_verify,
-            enable_token=CONF.f5_agent.bigip_token)
-            for bigip_url in CONF.f5_agent.bigip_urls
-        ]
+        self.bigips = [bigip for bigip in self.initialize_bigips()]
         # Cache reachability of every bigip
         self.bigip_status = {bigip.hostname: False
                              for bigip in self.bigips}
@@ -115,6 +110,22 @@ class StatusManager(object):
         'octavia_status_heartbeat_exceptions', 'Number of exceptions at heartbeat')
     _metric_failover = prometheus.metrics.Counter(
         'octavia_status_failover', 'Number of failovers')
+
+    def initialize_bigips(self):
+        for bigip_url in CONF.f5_agent.bigip_urls:
+            # Create REST client for every bigip
+
+            if CONF.f5_agent.bigip_token:
+                auth = bigip_auth.BigIPTokenAuth(bigip_url)
+            else:
+                auth = bigip_auth.BigIPBasicAuth(bigip_url)
+
+            yield(
+                bigip_restclient.BigIPRestClient(
+                    bigip_url=bigip_url,
+                    auth=auth,
+                    verify=CONF.f5_agent.bigip_verify)
+            )
 
     @staticmethod
     def _listener_from_path(path):

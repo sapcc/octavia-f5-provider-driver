@@ -25,13 +25,14 @@ from octavia.db import repositories as repo
 from octavia_f5.common import constants
 from octavia_f5.controller.worker import quirks
 from octavia_f5.db import repositories as f5_repos
-from octavia_f5.restclient import as3restclient
-from octavia_f5.restclient.as3classes import ADC, AS3, Application, Monitor
+from octavia_f5.restclient.as3classes import ADC, AS3, Application
 from octavia_f5.restclient.as3objects import application as m_app
 from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.restclient.as3objects import tenant as m_part
+from octavia_f5.restclient.as3restclient import AS3ExternalContainerRestClient, AS3RestClient
+from octavia_f5.restclient.bigip import bigip_auth
 from octavia_f5.utils import driver_utils, exceptions, cert_manager, esd_repo
 from octavia_f5.utils.decorators import RunHookOnException
 
@@ -61,29 +62,47 @@ class SyncManager(object):
         self._amphora_repo = repo.AmphoraRepository()
         self._esd_repo = esd_repo.EsdRepository()
         self._loadbalancer_repo = f5_repos.LoadBalancerRepository()
-        self._bigips = [as3restclient.BigipAS3RestClient(
-            url=bigip_url,
-            enable_verify=CONF.f5_agent.bigip_verify,
-            enable_token=CONF.f5_agent.bigip_token)
-            for bigip_url in CONF.f5_agent.bigip_urls
-        ]
         self.network_driver = driver_utils.get_network_driver()
         self.cert_manager = cert_manager.CertManagerWrapper()
         self._bigip = None
-        self._as3 = None
-        if CONF.f5_agent.as3_endpoint:
-            # Use external AS3 Container
-            self._as3 = as3restclient.BigipAS3RestClient(
-                url=CONF.f5_agent.as3_endpoint,
-                enable_verify=CONF.f5_agent.bigip_verify,
-                enable_token=CONF.f5_agent.bigip_token,
-                auth=False)
+        self._bigips = [bigip for bigip in self.initialize_bigips()]
+
+        if CONF.debug:
+            # Install debug request logs
+            for bigip in self._bigips:
+                bigip.debug_enable()
 
         if CONF.f5_agent.migration:
             self.failover(active_device=False)
             LOG.warning("[Migration Mode] using passive device %s", self.bigip().hostname)
         else:
             self.failover()
+
+    def initialize_bigips(self):
+        for bigip_url in CONF.f5_agent.bigip_urls:
+            # Create REST client for every bigip
+
+            if CONF.f5_agent.bigip_token:
+                auth = bigip_auth.BigIPTokenAuth(bigip_url)
+            else:
+                auth = bigip_auth.BigIPBasicAuth(bigip_url)
+
+            if CONF.f5_agent.as3_endpoint:
+                instance = AS3ExternalContainerRestClient(
+                    bigip_url=bigip_url,
+                    auth=auth,
+                    as3_url=CONF.f5_agent.as3_endpoint,
+                    verify=CONF.f5_agent.bigip_verify,
+                    async_mode=CONF.f5_agent.async_mode
+                )
+            else:
+                instance = AS3RestClient(
+                    bigip_url=bigip_url,
+                    auth=auth,
+                    verify=CONF.f5_agent.bigip_verify,
+                    async_mode=CONF.f5_agent.async_mode
+                )
+            yield(instance)
 
     def bigip(self, device=None):
         """ Returns the (active/specific) BigIP device, e.g.:
@@ -98,20 +117,6 @@ class SyncManager(object):
                 return bigip
 
         return self._bigip
-
-    def endpoint(self, device=None):
-        """ Returns the AS3 endpoint which can be:
-        - AS3 Container
-        - active BigIP device (device = None)
-        - specific BigIP device (device != None)
-
-        :param device: specify BigIP device
-        :return: return as3 restclient endpoint to talk with
-        """
-        if CONF.f5_agent.as3_endpoint:
-            # Use external as3 container
-            return self._as3
-        return self.bigip(device)
 
     def failover(self, active_device=True):
         if len(self._bigips) == 1:
@@ -203,12 +208,7 @@ class SyncManager(object):
             # Attach newly created application
             tenant.add_application(m_app.get_name(loadbalancer.id), app)
 
-        # Support for as3 container
-        if CONF.f5_agent.as3_endpoint:
-            # Specify target device via as3 property
-            decl.set_bigip_target_device(self.bigip(device).bigip)
-
-        return self.endpoint(device).post(json=decl.to_json())
+        return self.bigip(device).post(tenants=[m_part.get_name(network_id)], payload=decl)
 
     @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
@@ -227,16 +227,7 @@ class SyncManager(object):
             return FakeOK()
 
         tenant = m_part.get_name(network_id)
-
-        try:
-            if CONF.f5_agent.as3_endpoint:
-                decl = AS3(persist=True, action='remove', _log_level=LOG.logger.level)
-                decl.set_bigip_target_device(self.bigip().bigip)
-                return self.endpoint().post(json=decl.to_json(), tenants=[tenant])
-
-            return self.endpoint().delete(tenants=[tenant])
-        except exceptions.MonitorDeletionException:
-            return FakeOK()
+        return self.bigip().delete(tenants=[tenant])
 
     @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
@@ -253,21 +244,15 @@ class SyncManager(object):
         if CONF.f5_agent.dry_run:
             return FakeOK()
 
-        path = '{}/{}/{}/members/-'.format(
-            m_part.get_name(member.pool.load_balancer.vip.network_id),
-            m_app.get_name(member.pool.load_balancer.id),
-            m_pool.get_name(member.pool.id)
-        )
-
-        if CONF.f5_agent.as3_endpoint:
-            patch_body = {
+        patch_body = [
+            {
                 'op': 'add',
-                'path': path,
+                'path': '{}/{}/{}/members/-'.format(
+                    m_part.get_name(member.pool.load_balancer.vip.network_id),
+                    m_app.get_name(member.pool.load_balancer.id),
+                    m_pool.get_name(member.pool.id)),
                 'value': m_member.get_member(member).to_dict()
             }
-            decl = AS3(persist=True, action='patch', _log_level=LOG.logger.level, patchBody=patch_body)
-            decl.set_bigip_target_device(self.bigip().bigip)
-            return self.endpoint().post(json=decl.to_json())
-
-        return self.endpoint().patch(operation='add', path=path,
-                                     value=m_member.get_member(member).to_dict())
+        ]
+        tenants = [member.pool.load_balancer.vip.network_id]
+        return self.bigip().patch(tenants=tenants, patch_body=patch_body)

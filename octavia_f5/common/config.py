@@ -105,6 +105,8 @@ f5_agent_opts = [
                 help=_("Use the virtual-server address as SNAT address.")),
     cfg.BoolOpt('migration', default=False,
                 help=_("Enable migration mode (disable syncing active devices)")),
+    cfg.BoolOpt('async_mode', default=False,
+                help=_("Use asynchronous mode for posting as3 declarations.")),
 ]
 
 f5_tls_shared = {
