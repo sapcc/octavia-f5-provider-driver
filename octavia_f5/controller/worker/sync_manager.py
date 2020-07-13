@@ -64,7 +64,8 @@ class SyncManager(object):
         self._bigips = [as3restclient.BigipAS3RestClient(
             url=bigip_url,
             enable_verify=CONF.f5_agent.bigip_verify,
-            enable_token=CONF.f5_agent.bigip_token)
+            enable_token=CONF.f5_agent.bigip_token,
+            async_mode=CONF.f5_agent.async_mode)
             for bigip_url in CONF.f5_agent.bigip_urls
         ]
         self.network_driver = driver_utils.get_network_driver()
@@ -77,7 +78,8 @@ class SyncManager(object):
                 url=CONF.f5_agent.as3_endpoint,
                 enable_verify=CONF.f5_agent.bigip_verify,
                 enable_token=CONF.f5_agent.bigip_token,
-                auth=False)
+                auth=False,
+                async_mode=CONF.f5_agent.async_mode)
 
         if CONF.f5_agent.migration:
             self.failover(active_device=False)

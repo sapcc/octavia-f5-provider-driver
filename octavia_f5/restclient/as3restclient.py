@@ -17,7 +17,9 @@ import json
 import os
 import re
 import signal
+import time
 
+import futurist
 import prometheus_client as prometheus
 import requests
 from oslo_log import log as logging
@@ -33,8 +35,10 @@ AS3_LOGIN_PATH = '/mgmt/shared/authn/login'
 AS3_TOKENS_PATH = '/mgmt/shared/authz/tokens'
 AS3_DECLARE_PATH = '/mgmt/shared/appsvcs/declare'
 AS3_INFO_PATH = '/mgmt/shared/appsvcs/info'
+AS3_TASKS_PATH = '/mgmt/shared/appsvcs/task/{}'
 F5_DEVICE_PATH = '/mgmt/tm/cm/device'
 
+ASYNC_TIMEOUT = 90  # 90 seconds
 
 def check_response(func):
     def _check_for_errors(text):
@@ -124,13 +128,16 @@ class BigipAS3RestClient(object):
     _metric_version = prometheus.Info(
         'octavia_as3_version', 'AS3 Version')
 
-    def __init__(self, url, enable_verify=True, enable_token=True, auth=True):
+    def __init__(self, url, enable_verify=True, enable_token=True, auth=True, async_mode=False):
         self.bigip = parse.urlsplit(url, allow_fragments=False)
         # Use the first BigIP device by default
         self.enable_verify = enable_verify
         self.enable_token = enable_token
         self.auth = auth
         self.token = None
+        if async_mode:
+            self.async_mode = True
+            self.task_watcher = futurist.ThreadPoolExecutor(max_workers=1)
         self.session = self._create_session()
         if self.auth:
             try:
@@ -220,6 +227,17 @@ class BigipAS3RestClient(object):
         self._metric_httpstatus.labels(method='patch', statuscode=r.status_code).inc()
         LOG.debug("Reauthorized!")
 
+    def wait_for_task_finished(self, task_id):
+        """ Waits for AS3 task to be finished successfully
+        :param task_id: task id to be fetched
+        :return: request result
+        """
+        while True:
+            task = self.get(AS3_TASKS_PATH.format(task_id))
+            if task.ok and all(res['code'] != 0 for res in task.json()['results']):
+                return task
+            time.sleep(5)
+
     def get(self, path, **kwargs):
         path = self._url(path)
         LOG.debug("Calling GET '%s'", path)
@@ -229,12 +247,18 @@ class BigipAS3RestClient(object):
     @_metric_post_duration.time()
     def post(self, **kwargs):
         tenants = kwargs.pop('tenants', [])
-        if tenants:
-            LOG.debug("Calling POST for tenants %s with JSON %s", tenants, kwargs.get('json'))
-            url = self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants)))
+        url = self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants)))
+        LOG.debug("Calling POST to '%s' with JSON \n%s", url, kwargs.get('json'))
+        if not self.async_mode:
+            # Synchronous call
             return self._call_method('post', url, **kwargs)
-        LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
-        return self._call_method('post', self._url(AS3_DECLARE_PATH), **kwargs)
+
+        url += "?async=true"
+        ret = self._call_method('post', url, **kwargs)
+        if ret.ok:
+            task_id = ret.json()['id']
+            fut = self.task_watcher.submit(self.wait_for_task_finished, task_id)
+            return fut.result(timeout=ASYNC_TIMEOUT)
 
     @_metric_patch_exceptions.count_exceptions()
     @_metric_patch_duration.time()
