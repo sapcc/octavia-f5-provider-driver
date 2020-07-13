@@ -72,6 +72,7 @@ class PoolRepository(repositories.PoolRepository):
 
         query = session.query(models.Pool)
         query = query.filter(models.LoadBalancer.server_group_id == host,
+                             models.LoadBalancer.id == models.Pool.load_balancer_id,
                              models.Pool.provisioning_status.in_([
                                  lib_consts.PENDING_UPDATE,
                                  lib_consts.PENDING_CREATE
@@ -91,6 +92,8 @@ class L7PolicyRepository(repositories.L7PolicyRepository):
 
         query = session.query(models.L7Policy)
         query = query.filter(models.LoadBalancer.server_group_id == host,
+                             models.Listener.id == models.L7Policy.listener_id,
+                             models.Listener.load_balancer_id == models.LoadBalancer.id,
                              models.L7Policy.provisioning_status.in_([
                                  lib_consts.PENDING_UPDATE,
                                  lib_consts.PENDING_CREATE
@@ -110,6 +113,7 @@ class ListenerRepository(repositories.ListenerRepository):
 
         query = session.query(models.Listener)
         query = query.filter(models.LoadBalancer.server_group_id == host,
+                             models.LoadBalancer.id == models.Listener.load_balancer_id,
                              models.Listener.provisioning_status.in_([
                                  lib_consts.PENDING_UPDATE,
                                  lib_consts.PENDING_CREATE
