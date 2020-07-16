@@ -232,7 +232,7 @@ class SyncManager(object):
             if CONF.f5_agent.as3_endpoint:
                 decl = AS3(persist=True, action='remove', _log_level=LOG.logger.level)
                 decl.set_bigip_target_device(self.bigip().bigip)
-                return self.endpoint().post(json=decl.to_json())
+                return self.endpoint().post(json=decl.to_json(), tenants=[tenant])
 
             return self.endpoint().delete(tenants=[tenant])
         except exceptions.MonitorDeletionException:

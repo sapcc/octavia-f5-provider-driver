@@ -228,6 +228,11 @@ class BigipAS3RestClient(object):
     @_metric_post_exceptions.count_exceptions()
     @_metric_post_duration.time()
     def post(self, **kwargs):
+        tenants = kwargs.pop('tenants', [])
+        if tenants:
+            LOG.debug("Calling POST for tenants %s with JSON %s", tenants, kwargs.get('json'))
+            url = self._url('{}/{}'.format(AS3_DECLARE_PATH, ','.join(tenants)))
+            return self._call_method('post', url, **kwargs)
         LOG.debug("Calling POST with JSON %s", kwargs.get('json'))
         return self._call_method('post', self._url(AS3_DECLARE_PATH), **kwargs)
 
