@@ -132,13 +132,14 @@ class BigipAS3RestClient(object):
         self.auth = auth
         self.token = None
         self.session = self._create_session()
-        try:
-            info_dict = self.info()
-            self._metric_version.info(info_dict)
-        except requests.exceptions.HTTPError as e:
-            # Failed connecting to AS3 endpoint, gracefully terminate
-            LOG.error('Could not connect to AS3 endpoint: %s', e)
-            os.kill(os.getpid(), signal.SIGTERM)
+        if self.auth:
+            try:
+                info_dict = self.info()
+                self._metric_version.info(info_dict)
+            except requests.exceptions.HTTPError as e:
+                # Failed connecting to AS3 endpoint, gracefully terminate
+                LOG.error('Could not connect to AS3 endpoint: %s', e)
+                os.kill(os.getpid(), signal.SIGTERM)
 
     def _url(self, path):
         return parse.urlunsplit(
