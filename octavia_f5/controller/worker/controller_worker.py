@@ -398,6 +398,8 @@ class ControllerWorker(object):
                         '60 seconds.', 'member', member_id)
             raise db_exceptions.NoResultFound
 
+        self._check_member_for_valid_ip(member)
+
         self.ensure_amphora_exists(member.pool.load_balancer.id)
 
         if not member.backup:
@@ -419,6 +421,8 @@ class ControllerWorker(object):
                        for mid in old_member_ids]
         new_members = [self._member_repo.get(db_apis.get_session(), id=mid)
                        for mid in new_member_ids]
+        for member in new_members:
+            self._check_member_for_valid_ip(member)
         updated_members = [
             (self._member_repo.get(db_apis.get_session(), id=m.get('id')), m)
             for m in updated_members]
@@ -439,6 +443,7 @@ class ControllerWorker(object):
     def update_member(self, member_id, member_updates):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
+        self._check_member_for_valid_ip(member)
         if self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_active(member)
         else:
@@ -451,6 +456,35 @@ class ControllerWorker(object):
         if self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_deleted(member)
             self._decrement_quota(data_models.Member, member.project_id)
+
+    def _check_member_for_valid_ip(self, member):
+        """Checks that the member IP is not the same as any VIP in the network. If it is, the member is invalidated
+        by setting its provisioning status to PENDING_DELETE and an InvalidMemberIpException is raised."""
+
+        # octavia.common.data_models.{Pool, LoadBalancer, Vip}
+        lb = member.pool.load_balancer
+        vip = lb.vip
+
+        conflict = None
+        if member.ip_address == vip.ip_address:
+            conflict = "VIP {} of assigned loadbalancer {}".format(vip.ip_address, lb.id)
+        else:
+            for vip in self._vip_repo.get_all(db_apis.get_session(), network_id=vip.network_id)[0]:
+                # TODO is vip.port_id and vip.subnet_id to be checked as well?
+                if member.ip_address == vip.ip_address:
+                    conflict = "VIP {}".format(vip.ip_address)
+                    break
+
+        if conflict is not None:
+            LOG.error("Member {} has invalid IP: {} conflicting with {}".format(member.id, member.ip_address, conflict))
+            # Mark member as invalid
+
+            # FIXME: Deleting (that is, setting to PENDING_DELETE) works and prevents sync. But of course the member
+            #  gets deleted sooner or later. Does the retention period suffice for the GUI to notice? Maybe use
+            #  another unused field instead: project_id, pool_id (constrained), subnet_id, operating_status (
+            #  constrained), created_at, updated_at, name
+            self._member_repo.delete(db_apis.get_session(), id=member.id)
+            raise exceptions.InvalidMemberIpException
 
     """
     Health Monitor
