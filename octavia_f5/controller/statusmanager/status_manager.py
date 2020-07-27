@@ -89,7 +89,7 @@ class StatusManager(object):
             max_workers=CONF.health_manager.health_update_threads)
         self.stats_executor = futurist.ThreadPoolExecutor(
             max_workers=CONF.health_manager.stats_update_threads)
-        self.bigips = [bigip for bigip in self.initialize_bigips()]
+        self.bigips = self.initialize_bigips()
         # Cache reachability of every bigip
         self.bigip_status = {bigip.hostname: False
                              for bigip in self.bigips}
@@ -112,20 +112,22 @@ class StatusManager(object):
         'octavia_status_failover', 'Number of failovers')
 
     def initialize_bigips(self):
+        """Create REST client for every bigip"""
+        clients = []
         for bigip_url in CONF.f5_agent.bigip_urls:
-            # Create REST client for every bigip
 
             if CONF.f5_agent.bigip_token:
                 auth = bigip_auth.BigIPTokenAuth(bigip_url)
             else:
                 auth = bigip_auth.BigIPBasicAuth(bigip_url)
 
-            yield(
-                bigip_restclient.BigIPRestClient(
+            clients.append(bigip_restclient.BigIPRestClient(
                     bigip_url=bigip_url,
                     auth=auth,
-                    verify=CONF.f5_agent.bigip_verify)
-            )
+                    verify=CONF.f5_agent.bigip_verify
+            ))
+        return clients
+
 
     @staticmethod
     def _listener_from_path(path):
