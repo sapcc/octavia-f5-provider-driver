@@ -65,7 +65,12 @@ class SyncManager(object):
         self.network_driver = driver_utils.get_network_driver()
         self.cert_manager = cert_manager.CertManagerWrapper()
         self._bigip = None
-        self._bigips = self.initialize_bigips()
+        self._bigips = [bigip for bigip in self.initialize_bigips()]
+
+        if CONF.debug:
+            # Install debug request logs
+            for bigip in self._bigips:
+                bigip.debug_enable()
 
         if CONF.f5_agent.migration:
             self.failover(active_device=False)
@@ -74,31 +79,30 @@ class SyncManager(object):
             self.failover()
 
     def initialize_bigips(self):
-        """Create REST client for every bigip"""
-        clients = []
         for bigip_url in CONF.f5_agent.bigip_urls:
-            kwargs = {
-                'bigip_url': bigip_url,
-                'verify': CONF.f5_agent.bigip_verify,
-                'async_mode': CONF.f5_agent.async_mode
-            }
+            # Create REST client for every bigip
 
             if CONF.f5_agent.bigip_token:
-                kwargs['auth'] = bigip_auth.BigIPTokenAuth(bigip_url)
+                auth = bigip_auth.BigIPTokenAuth(bigip_url)
             else:
-                kwargs['auth'] = bigip_auth.BigIPBasicAuth(bigip_url)
+                auth = bigip_auth.BigIPBasicAuth(bigip_url)
 
             if CONF.f5_agent.as3_endpoint:
-                kwargs['as3_url'] = CONF.f5_agent.as3_endpoint
-                instance = AS3ExternalContainerRestClient(**kwargs)
+                instance = AS3ExternalContainerRestClient(
+                    bigip_url=bigip_url,
+                    auth=auth,
+                    as3_url=CONF.f5_agent.as3_endpoint,
+                    verify=CONF.f5_agent.bigip_verify,
+                    async_mode=CONF.f5_agent.async_mode
+                )
             else:
-                instance = AS3RestClient(**kwargs)
-
-            if CONF.debug:
-                instance.debug_enable()
-
-            clients.append(instance)
-        return clients
+                instance = AS3RestClient(
+                    bigip_url=bigip_url,
+                    auth=auth,
+                    verify=CONF.f5_agent.bigip_verify,
+                    async_mode=CONF.f5_agent.async_mode
+                )
+            yield(instance)
 
     def bigip(self, device=None):
         """ Returns the (active/specific) BigIP device, e.g.:
