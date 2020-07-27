@@ -17,6 +17,7 @@ import time
 
 import futurist
 import prometheus_client as prometheus
+import requests
 from oslo_log import log as logging
 from six.moves.urllib import parse
 
@@ -62,6 +63,12 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
             self.task_watcher = futurist.ThreadPoolExecutor(max_workers=1)
         super(AS3RestClient, self).__init__(bigip_url, verify, auth)
         self.hooks['response'].append(self.metric_response_hook)
+        try:
+            info_dict = self.info()
+            self._metric_version.info(info_dict)
+        except requests.exceptions.HTTPError as e:
+            # Failed connecting to AS3 endpoint, gracefully terminate
+            LOG.error('Could not connect to AS3 endpoint: %s', e)
 
     def metric_response_hook(self, r, **kwargs):
         self._metric_httpstatus.labels(method=r.request.method.lower(), statuscode=r.status_code).inc()
@@ -139,7 +146,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         return super(AS3RestClient, self).delete(url)
 
     def info(self):
-        info = self.get(AS3_INFO_PATH)
+        info = self.get(self.get_url(AS3_INFO_PATH))
         info.raise_for_status()
         return dict(device=self.hostname, **info.json())
 
