@@ -386,14 +386,7 @@ class ControllerWorker(object):
 
         self.ensure_amphora_exists(member.pool.load_balancer.id)
 
-        if not member.backup:
-            try:
-                if self.sync.member_create(member).ok:
-                    self.status.set_active(member)
-                    return
-            except exceptions.AS3Exception:
-                pass
-        elif self._refresh(member.pool.load_balancer.vip.network_id).ok:
+        if self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_active(member)
 
     @lockutils.synchronized('tenant_refresh')
