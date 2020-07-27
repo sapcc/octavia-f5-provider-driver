@@ -190,8 +190,6 @@ class ControllerWorker(object):
                         self._reset_in_use_quota(lb.project_id)
             except exceptions.AS3Exception as e:
                 LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
-                for lb in loadbalancers:
-                    self.status.set_error(lb)
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
@@ -272,16 +270,12 @@ class ControllerWorker(object):
         self.ensure_host_set(lb)
         if self._refresh(lb.vip.network_id).ok:
             self.status.set_active(lb)
-        else:
-            self.status.set_error(lb)
 
     @lockutils.synchronized('tenant_refresh')
     def update_load_balancer(self, load_balancer_id, load_balancer_updates):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
         if self._refresh(lb.vip.network_id).ok:
             self.status.set_active(lb)
-        else:
-            self.status.set_error(lb)
 
     @lockutils.synchronized('tenant_refresh')
     def delete_load_balancer(self, load_balancer_id, cascade=False):
@@ -320,8 +314,6 @@ class ControllerWorker(object):
 
         if self._refresh(listener.load_balancer.vip.network_id, self.status).ok:
             self.status.set_active(listener)
-        else:
-            self.status.set_error(listener)
 
     @lockutils.synchronized('tenant_refresh')
     def update_listener(self, listener_id, listener_updates):
@@ -329,8 +321,6 @@ class ControllerWorker(object):
                                            id=listener_id)
         if self._refresh(listener.load_balancer.vip.network_id, self.status).ok:
             self.status.set_active(listener)
-        else:
-            self.status.set_error(listener)
 
     @lockutils.synchronized('tenant_refresh')
     def delete_listener(self, listener_id):
@@ -361,8 +351,6 @@ class ControllerWorker(object):
 
         if self._refresh(pool.load_balancer.vip.network_id).ok:
             self.status.set_active(pool)
-        else:
-            self.status.set_error(pool)
 
     @lockutils.synchronized('tenant_refresh')
     def update_pool(self, pool_id, pool_updates):
@@ -370,8 +358,6 @@ class ControllerWorker(object):
                                    id=pool_id)
         if self._refresh(pool.load_balancer.vip.network_id).ok:
             self.status.set_active(pool)
-        else:
-            self.status.set_error(pool)
 
     @lockutils.synchronized('tenant_refresh')
     def delete_pool(self, pool_id):
@@ -409,8 +395,6 @@ class ControllerWorker(object):
                 pass
         elif self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_active(member)
-        else:
-            self.status.set_error(member)
 
     @lockutils.synchronized('tenant_refresh')
     def batch_update_members(self, old_member_ids, new_member_ids,
@@ -441,8 +425,6 @@ class ControllerWorker(object):
                                        id=member_id)
         if self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_active(member)
-        else:
-            self.status.set_error(member)
 
     @lockutils.synchronized('tenant_refresh')
     def delete_member(self, member_id):
@@ -469,8 +451,6 @@ class ControllerWorker(object):
         load_balancer = pool.load_balancer
         if self._refresh(load_balancer.vip.network_id).ok:
             self.status.set_active(health_mon)
-        else:
-            self.status.set_error(health_mon)
 
     @lockutils.synchronized('tenant_refresh')
     def update_health_monitor(self, health_monitor_id, health_monitor_updates):
@@ -480,8 +460,6 @@ class ControllerWorker(object):
         load_balancer = pool.load_balancer
         if self._refresh(load_balancer.vip.network_id).ok:
             self.status.set_active(health_mon)
-        else:
-            self.status.set_error(health_mon)
 
     @lockutils.synchronized('tenant_refresh')
     def delete_health_monitor(self, health_monitor_id):
@@ -513,8 +491,6 @@ class ControllerWorker(object):
 
         if self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_active(l7policy)
-        else:
-            self.status.set_error(l7policy)
 
     @lockutils.synchronized('tenant_refresh')
     def update_l7policy(self, l7policy_id, l7policy_updates):
@@ -522,8 +498,6 @@ class ControllerWorker(object):
                                            id=l7policy_id)
         if self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_active(l7policy)
-        else:
-            self.status.set_error(l7policy)
 
     @lockutils.synchronized('tenant_refresh')
     def delete_l7policy(self, l7policy_id):
@@ -552,8 +526,6 @@ class ControllerWorker(object):
 
         if self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_active(l7rule)
-        else:
-            self.status.set_error(l7rule)
 
     @lockutils.synchronized('tenant_refresh')
     def update_l7rule(self, l7rule_id, l7rule_updates):
@@ -561,8 +533,6 @@ class ControllerWorker(object):
                                        id=l7rule_id)
         if self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_active(l7rule)
-        else:
-            self.status.set_error(l7rule)
 
     @lockutils.synchronized('tenant_refresh')
     def delete_l7rule(self, l7rule_id):
