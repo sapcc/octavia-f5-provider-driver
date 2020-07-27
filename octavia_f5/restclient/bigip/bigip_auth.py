@@ -13,6 +13,7 @@
 # under the License.
 
 import requests
+from requests import cookies
 from requests.auth import HTTPBasicAuth, AuthBase
 from six.moves.urllib import parse
 from tenacity import *
@@ -40,18 +41,38 @@ class BigIPTokenAuth(AuthBase):
         parse_result = parse.urlparse(url, allow_fragments=False)
         self.username = parse_result.username
         self.password = parse_result.password
-        self.token = self.get_token()
+        # Use single global token
+        self.token = None
+
+    def handle_401(self, r, **kwargs):
+        """ This response hook will fetch a fresh token if encountered an 401 response code.
+            It's loosly based on requests digest auth
+
+        :return: requests.Response
+        """
+        if not r.status_code == 401:
+            return r
+
+        # Consume content and release the original connection
+        # to allow our new request to reuse the same one.
+        r.content
+        r.raw.release_conn()
+        prep = r.request.copy()
+        prep.headers[BIGIP_TOKEN_HEADER] = self.get_token()
+
+        _r = r.connection.send(prep, **kwargs)
+        _r.history.append(r)
+        _r.request = prep
+
+        return _r
 
     def __call__(self, r):
-        def response_hook(r, *args, **kwargs):
-            # This response hook will fetch a fresh token if encountered an 401
-            if r.status_code == 401 or BIGIP_TOKEN_HEADER not in r.headers:
-                # Requests session will auto-retry on 401
-                self._token = self.get_token()
+        # No token, no fun
+        if self.token:
+            r.headers[BIGIP_TOKEN_HEADER] = self.token
 
-        # modify and return the request
-        r.headers[BIGIP_TOKEN_HEADER] = self.token
-        r.hooks['response'] = [response_hook]
+        # handle 401 case
+        r.register_hook('response', self.handle_401)
         return r
 
     @retry(
@@ -81,6 +102,8 @@ class BigIPTokenAuth(AuthBase):
 
         r.raise_for_status()
         token = r.json()['token']['token']
+
+        self.token = token
 
         # Increase timeout to max of 10 hours
         patch_timeout = {"timeout": BIGIP_TOKEN_MAX_TIMEOUT}
