@@ -39,6 +39,8 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
 
         See: https://clouddocs.f5.com/products/extensions/f5-appsvcs-extension/latest/refguide/as3-api.html
     """
+    _metric_httpstatus = prometheus.metrics.Counter(
+        'octavia_as3_httpstatus', 'Number of HTTP statuses in responses to AS3 requests', ['method', 'statuscode'])
     _metric_post_duration = prometheus.metrics.Summary(
         'octavia_as3_post_duration', 'Time it needs to send a POST request to AS3')
     _metric_post_exceptions = prometheus.metrics.Counter(
@@ -58,8 +60,11 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
     def __init__(self, bigip_url, verify=True, auth=None, async_mode=False):
         if async_mode:
             self.task_watcher = futurist.ThreadPoolExecutor(max_workers=1)
-
         super(AS3RestClient, self).__init__(bigip_url, verify, auth)
+        self.hooks['response'].append(self.metric_response_hook)
+
+    def metric_response_hook(self, r, **kwargs):
+        self._metric_httpstatus.labels(method=r.request.method.lower(), statuscode=r.status_code).inc()
 
     def debug_enable(self):
         """ Installs requests hook to enable debug logs of AS3 requests and responses. """
