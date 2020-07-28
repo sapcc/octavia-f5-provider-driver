@@ -280,6 +280,10 @@ class ControllerWorker(object):
     @lockutils.synchronized('tenant_refresh')
     def delete_load_balancer(self, load_balancer_id, cascade=False):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
+        # could be deleted by sync-loop meanwhile
+        if not lb:
+            return
+
         existing_lbs = [loadbalancer for loadbalancer in self._get_all_loadbalancer(lb.vip.network_id)
                         if loadbalancer.id != lb.id]
 
@@ -326,6 +330,9 @@ class ControllerWorker(object):
     def delete_listener(self, listener_id):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
+        # could be deleted by sync-loop meanwhile
+        if not listener:
+            return
 
         if self._refresh(listener.load_balancer.vip.network_id).ok:
             self.status.set_deleted(listener)
@@ -363,6 +370,10 @@ class ControllerWorker(object):
     def delete_pool(self, pool_id):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
+        # could be deleted by sync-loop meanwhile
+        if not pool:
+            return
+
         if pool and self._refresh(pool.load_balancer.vip.network_id).ok:
             self.status.set_deleted(pool)
 
@@ -423,6 +434,10 @@ class ControllerWorker(object):
     def delete_member(self, member_id):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
+        # could be deleted by sync-loop meanwhile
+        if not member:
+            return
+
         if self._refresh(member.pool.load_balancer.vip.network_id).ok:
             self.status.set_deleted(member)
             self._decrement_quota(data_models.Member, member.project_id)
@@ -458,6 +473,10 @@ class ControllerWorker(object):
     def delete_health_monitor(self, health_monitor_id):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
                                                id=health_monitor_id)
+        # could be deleted by sync-loop meanwhile
+        if not health_mon:
+            return
+
         pool = health_mon.pool
         load_balancer = pool.load_balancer
         if self._refresh(load_balancer.vip.network_id).ok:
@@ -496,6 +515,10 @@ class ControllerWorker(object):
     def delete_l7policy(self, l7policy_id):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
+        # could be deleted by sync-loop meanwhile
+        if not l7policy:
+            return
+
         if self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_deleted(l7policy)
 
@@ -531,6 +554,10 @@ class ControllerWorker(object):
     def delete_l7rule(self, l7rule_id):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
+        # could be deleted by sync-loop meanwhile
+        if not l7rule:
+            return
+
         if self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
             self.status.set_deleted(l7rule)
 
