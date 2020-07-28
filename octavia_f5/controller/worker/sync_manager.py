@@ -15,6 +15,7 @@
 import uuid
 
 import prometheus_client as prometheus
+import requests
 from oslo_config import cfg
 from oslo_log import log as logging
 from requests import ConnectionError
@@ -55,8 +56,8 @@ class SyncManager(object):
 
     _metric_failover = prometheus.metrics.Counter(
         'octavia_as3_failover', 'How often the F5 provider driver switched to another BigIP device')
-    _metric_stuck_monitor = prometheus.metrics.Counter(
-        'octavia_as3_stuck_monitor', 'Stuck monitor workaround applied', ['tenant'])
+    _metric_version = prometheus.metrics.Gauge(
+        'octavia_as3_version', 'AS3 Version', ['device', 'release', 'schemaCurrent', 'schemaMinimum', 'version'])
 
     def __init__(self):
         self._amphora_repo = repo.AmphoraRepository()
@@ -82,26 +83,31 @@ class SyncManager(object):
         for bigip_url in CONF.f5_agent.bigip_urls:
             # Create REST client for every bigip
 
+            kwargs = {
+                'bigip_url': bigip_url,
+                'verify': CONF.f5_agent.bigip_verify,
+                'async_mode': CONF.f5_agent.async_mode,
+            }
+
             if CONF.f5_agent.bigip_token:
-                auth = bigip_auth.BigIPTokenAuth(bigip_url)
+                kwargs['auth'] = bigip_auth.BigIPTokenAuth(bigip_url)
             else:
-                auth = bigip_auth.BigIPBasicAuth(bigip_url)
+                kwargs['auth'] = bigip_auth.BigIPBasicAuth(bigip_url)
 
             if CONF.f5_agent.as3_endpoint:
-                instance = AS3ExternalContainerRestClient(
-                    bigip_url=bigip_url,
-                    auth=auth,
-                    as3_url=CONF.f5_agent.as3_endpoint,
-                    verify=CONF.f5_agent.bigip_verify,
-                    async_mode=CONF.f5_agent.async_mode
-                )
+                kwargs['as3_url'] = CONF.f5_agent.as3_endpoint
+                instance = AS3ExternalContainerRestClient(**kwargs)
             else:
-                instance = AS3RestClient(
-                    bigip_url=bigip_url,
-                    auth=auth,
-                    verify=CONF.f5_agent.bigip_verify,
-                    async_mode=CONF.f5_agent.async_mode
-                )
+                instance = AS3RestClient(**kwargs)
+
+            # Fetch as3 version info
+            try:
+                info_dict = instance.info()
+                self._metric_version.labels(**info_dict).set(1)
+            except requests.exceptions.HTTPError as e:
+                # Failed connecting to AS3 endpoint, gracefully terminate
+                LOG.error('Could not connect to AS3 endpoint: %s', e)
+
             yield(instance)
 
     def bigip(self, device=None):

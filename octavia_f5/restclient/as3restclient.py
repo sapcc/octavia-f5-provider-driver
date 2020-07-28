@@ -54,8 +54,6 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         'octavia_as3_delete_duration', 'Time it needs to send a DELETE request to AS3')
     _metric_delete_exceptions = prometheus.metrics.Counter(
         'octavia_as3_delete_exceptions', 'Number of exceptions at DELETE request sent to AS3')
-    _metric_version = prometheus.Info(
-        'octavia_as3_version', 'AS3 Version')
     task_watcher = None
 
     def __init__(self, bigip_url, verify=True, auth=None, async_mode=False):
@@ -63,12 +61,6 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
             self.task_watcher = futurist.ThreadPoolExecutor(max_workers=1)
         super(AS3RestClient, self).__init__(bigip_url, verify, auth)
         self.hooks['response'].append(self.metric_response_hook)
-        try:
-            info_dict = self.info()
-            self._metric_version.info(info_dict)
-        except requests.exceptions.HTTPError as e:
-            # Failed connecting to AS3 endpoint, gracefully terminate
-            LOG.error('Could not connect to AS3 endpoint: %s', e)
 
     def metric_response_hook(self, r, **kwargs):
         self._metric_httpstatus.labels(method=r.request.method.lower(), statuscode=r.status_code).inc()
