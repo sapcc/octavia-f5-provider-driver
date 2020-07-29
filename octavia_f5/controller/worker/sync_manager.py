@@ -57,7 +57,7 @@ class SyncManager(object):
     _metric_failover = prometheus.metrics.Counter(
         'octavia_as3_failover', 'How often the F5 provider driver switched to another BigIP device')
     _metric_version = prometheus.metrics.Gauge(
-        'octavia_as3_version', 'AS3 Version', ['device', 'release', 'schemaCurrent', 'schemaMinimum', 'version'])
+        'octavia_as3_version_info', 'AS3 Version', ['device', 'release', 'schemaCurrent', 'schemaMinimum', 'version'])
 
     def __init__(self):
         self._amphora_repo = repo.AmphoraRepository()
