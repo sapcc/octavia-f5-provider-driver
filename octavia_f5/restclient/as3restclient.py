@@ -17,7 +17,7 @@ import time
 
 import futurist
 import prometheus_client as prometheus
-import requests
+from oslo_config import cfg
 from oslo_log import log as logging
 from six.moves.urllib import parse
 
@@ -60,10 +60,28 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         if async_mode:
             self.task_watcher = futurist.ThreadPoolExecutor(max_workers=1)
         super(AS3RestClient, self).__init__(bigip_url, verify, auth)
-        self.hooks['response'].append(self.metric_response_hook)
+        if cfg.CONF.f5_agent.prometheus:
+            self.hooks['response'].append(self.metric_response_hook)
+        self.hooks['response'].append(self.error_response_hook)
 
     def metric_response_hook(self, r, **kwargs):
+        """ Metric hook for prometheus as3 http status"""
         self._metric_httpstatus.labels(method=r.request.method.lower(), statuscode=r.status_code).inc()
+
+    def error_response_hook(self, r, **kwargs):
+        """ Installs response hook that parses errors and throws """
+        if 'application/json' in r.headers.get('Content-Type'):
+            try:
+                parsed = r.json()
+                if 'results' in parsed:
+                    parsed = parsed['results']
+
+                if 'code' in parsed and parsed['code'] == 404:
+                    if 'Public URI path not registered.' in parsed['message']:
+                        # AS3 crashed, failover to backup device, leveraging auto-sync
+                        raise exceptions.FailoverException()
+            except ValueError:
+                pass
 
     def debug_enable(self):
         """ Installs requests hook to enable debug logs of AS3 requests and responses. """
