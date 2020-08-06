@@ -246,8 +246,9 @@ class SyncManager(object):
 
         tenant = m_part.get_name(network_id)
         ret = self.bigip().delete(tenants=[tenant])
-        if CONF.f5_agent.sync_to_group and not CONF.f5_agent.migration:
+        if CONF.f5_agent.sync_to_group and not CONF.f5_agent.migration and ret.ok:
             self.bigip().config_sync(CONF.f5_agent.sync_to_group)
+        return ret
 
     @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(

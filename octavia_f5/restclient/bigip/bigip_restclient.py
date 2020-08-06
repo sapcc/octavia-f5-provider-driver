@@ -81,4 +81,4 @@ class BigIPRestClient(requests.Session):
             'command': 'run',
             'utilCmdArgs': 'config-sync to-group {}'.format(device_group)
         }
-        self.post(self.get_url(BIGIP_CM_PATH), json=cmd)
+        return super(BigIPRestClient, self).post(self.get_url(BIGIP_CM_PATH), json=cmd)
