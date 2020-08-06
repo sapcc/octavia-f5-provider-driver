@@ -47,6 +47,9 @@ RETRY_MAX = 5
 class ControllerWorker(object):
     """Worker class to update load balancers."""
 
+    _metric_as3worker_queue = prometheus.metrics.Gauge(
+        'octavia_as3_worker_queue', 'Number of items in AS3 worker queue')
+
     def __init__(self):
         self._repositories = repo.Repositories()
         self._loadbalancer_repo = f5_repos.LoadBalancerRepository()
@@ -89,7 +92,7 @@ class ControllerWorker(object):
         """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
         while True:
             try:
-                LOG.debug("Looping AS3Worker (queue_size=%d)", self.queue.qsize())
+                self._metric_as3worker_queue.set(self.queue.qsize())
                 network_id, device = self.queue.get()
                 loadbalancers = self._get_all_loadbalancer(network_id)
                 LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
