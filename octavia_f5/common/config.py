@@ -107,6 +107,14 @@ f5_agent_opts = [
                 help=_("Enable migration mode (disable syncing active devices)")),
     cfg.BoolOpt('async_mode', default=False,
                 help=_("Use asynchronous mode for posting as3 declarations.")),
+    cfg.IntOpt('persist_every', default=-1,
+                help=_("When persist_every >= 0 make the whole working configuration "
+                       "persistent on targetHost after (and only if) this request "
+                       "deploys any changes and after the value of seconds passed since "
+                       "last persist. If persist_every = 0, persist with every delcaration. "
+                       "Set persist_every < 0, leave the working "
+                       "configuration in memory only (if targetHost restart, you may "
+                       "lose the configuration from memory")),
 ]
 
 f5_tls_shared = {

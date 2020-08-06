@@ -13,23 +13,21 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import collections
 import threading
+import time
 
 import prometheus_client as prometheus
 import tenacity
 from futurist import periodics
-from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
+from six.moves.queue import Empty
 from sqlalchemy.orm import exc as db_exceptions
 
-from octavia.common import exceptions as o_exceptions, data_models
 from octavia.db import repositories as repo
-from octavia.network import base
-from octavia_f5.common import constants
 from octavia_f5.controller.worker import status_manager, sync_manager
+from octavia_f5.controller.worker.set_queue import SetQueue
 from octavia_f5.db import api as db_apis
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.utils import exceptions, driver_utils
@@ -65,13 +63,18 @@ class ControllerWorker(object):
         self.sync = sync_manager.SyncManager()
         self.status = status_manager.StatusManager()
         self.network_driver = driver_utils.get_network_driver()
+        self.queue = SetQueue()
         worker = periodics.PeriodicWorker(
-            [(self.pending_sync, None, None),
-             (self.full_sync_reappearing_devices, None, None)]
+            [(self.pending_sync, None, None)]
         )
         t = threading.Thread(target=worker.start)
         t.daemon = True
         t.start()
+
+        LOG.info("Starting as3worker")
+        as3worker = threading.Thread(target=self.as3worker)
+        as3worker.setDaemon(True)
+        as3worker.start()
 
         if cfg.CONF.f5_agent.prometheus:
             prometheus_port = CONF.f5_agent.prometheus_port
@@ -79,6 +82,31 @@ class ControllerWorker(object):
             prometheus.start_http_server(prometheus_port)
 
         super(ControllerWorker, self).__init__()
+
+    def as3worker(self):
+        """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
+        while True:
+            try:
+                LOG.debug("Looping AS3Worker (queue_size=%d)", self.queue.qsize())
+                network_id = self.queue.get(timeout=10)
+                loadbalancers = self._get_all_loadbalancer(network_id)
+                LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
+                          self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
+                if all([lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers]):
+                    ret = self.sync.tenant_delete(network_id)
+                else:
+                    ret = self.sync.tenant_update(network_id, loadbalancers, status=self.status)
+
+                if ret.ok:
+                    self.status.update_status(loadbalancers)
+                    for lb in loadbalancers:
+                        self._reset_in_use_quota(lb.project_id)
+            except Empty:
+                # Queue empty, pass
+                pass
+            except (exceptions.RetryException, tenacity.RetryError) as e:
+                LOG.warning("Device is busy, retrying with next sync: %s", e)
+                time.sleep(15)
 
     @periodics.periodic(120, run_immediately=True)
     def pending_sync(self):
@@ -89,9 +117,6 @@ class ControllerWorker(object):
         - executes a full sync on F5 devices that were offline but are now back online
         """
 
-        # synchronize load balancers that are in a PENDING state
-        self.sync_loadbalancers()
-
         # delete load balancers that are PENDING_DELETE
         session = db_apis.get_session()
         lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
@@ -99,50 +124,6 @@ class ControllerWorker(object):
         for lb in lbs_to_delete:
             LOG.info("Found pending deletion of lb %s", lb.id)
             self.delete_load_balancer(lb.id)
-
-    @periodics.periodic(240, run_immediately=True)
-    @lockutils.synchronized('tenant_refresh')
-    def full_sync_reappearing_devices(self):
-        session = db_apis.get_session(autocommit=False)
-
-        # Get all pending devices
-        booting_devices = self._amphora_repo.get_all(
-            session, status=constants.AMPHORA_BOOTING,
-            compute_flavor=CONF.host, load_balancer_id=None)
-
-        for device in booting_devices[0]:
-            if CONF.f5_agent.migration and device.role != constants.ROLE_BACKUP:
-                LOG.warning("[Migration Mode] Skipping full sync of active device %s", device.cached_zone)
-                continue
-
-            LOG.info("Device reappeared: %s. Doing a full sync.", device.cached_zone)
-
-            # get all load balancers (of this host)
-            lbs = self._loadbalancer_repo.get_all_from_host(session, show_deleted=False)
-
-            # deduplicate
-            networks = collections.defaultdict(list)
-            for lb in lbs:
-                if lb not in networks[lb.vip.network_id]:
-                    networks[lb.vip.network_id].append(lb)
-
-            # push configuration
-            for network_id, loadbalancers in networks.items():
-                try:
-                    self.sync.tenant_update(network_id, loadbalancers, device.cached_zone)
-                except base.NetworkException as e:
-                    LOG.error("Neutron exception while syncing reappared device %s: %s", device.cached_zone, e)
-                except exceptions.AS3Exception as e:
-                    LOG.error("AS3 exception while syncing reappared device %s: %s", device.cached_zone, e)
-
-            # Set device ready
-            self._amphora_repo.update(session, device.id, status=constants.AMPHORA_READY)
-            session.commit()
-
-    @lockutils.synchronized('tenant_refresh')
-    def sync_loadbalancers(self):
-        """Sync loadbalancers that are in a PENDING state
-        """
 
         # Find pending loadbalancer not yet finally assigned to this host
         lbs = []
@@ -176,20 +157,9 @@ class ControllerWorker(object):
         lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
 
         # Deduplicate
-        pending_networks = collections.defaultdict(list)
-        for lb in lbs:
-            if lb not in pending_networks[lb.vip.network_id]:
-                pending_networks[lb.vip.network_id].append(lb)
-
-        for network_id, loadbalancers in pending_networks.items():
-            LOG.info("Found pending tenant network %s, syncing...", network_id)
-            try:
-                if self._refresh(network_id).ok:
-                    self.status.update_status(loadbalancers)
-                    for lb in loadbalancers:
-                        self._reset_in_use_quota(lb.project_id)
-            except exceptions.AS3Exception as e:
-                LOG.error("AS3 exception while syncing tenant %s: %s", network_id, e)
+        pending_networks = set([lb.vip.network_id for lb in lbs])
+        for network_id in pending_networks:
+            self.queue.put_nowait(network_id)
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
@@ -200,29 +170,6 @@ class ControllerWorker(object):
         LOG.debug("Get load balancers from DB for network id: %s ", network_id)
         return self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
-
-    def _refresh(self, network_id, status=None):
-        loadbalancers = self._get_all_loadbalancer(network_id)
-        try:
-            return self.sync.tenant_update(network_id, loadbalancers, status=self.status)
-        except exceptions.RetryException as e:
-            LOG.warning("Device is busy, retrying with next sync: %s", e)
-            raise e
-        except o_exceptions.CertificateRetrievalException as e:
-            LOG.warning("Could not retrieve certificate for tenant %s: %s", network_id, e)
-            raise e
-
-    def _decrement_quota(self, data_model, project_id):
-        lock_session = db_apis.get_session(autocommit=False)
-        try:
-            self._repositories.decrement_quota(lock_session, data_model, project_id)
-            lock_session.commit()
-        except Exception:
-            with excutils.save_and_reraise_exception():
-                LOG.error('Failed to decrement %s quota for '
-                          'project: %s the project may have excess '
-                          'quota in use.', data_model, project_id)
-                lock_session.rollback()
 
     def _reset_in_use_quota(self, project_id):
         """ reset in_use quota to None, so it will be recalculated the next time
@@ -256,7 +203,6 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    @lockutils.synchronized('tenant_refresh')
     def create_load_balancer(self, load_balancer_id, flavor=None):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
         # We are retrying to fetch load-balancer since API could
@@ -268,35 +214,17 @@ class ControllerWorker(object):
 
         self.ensure_amphora_exists(lb.id)
         self.ensure_host_set(lb)
-        if self._refresh(lb.vip.network_id).ok:
-            self.status.set_active(lb)
+        self.queue.put(lb.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def update_load_balancer(self, load_balancer_id, load_balancer_updates):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
-        if self._refresh(lb.vip.network_id).ok:
-            self.status.set_active(lb)
+        self.queue.put(lb.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def delete_load_balancer(self, load_balancer_id, cascade=False):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
         # could be deleted by sync-loop meanwhile
-        if not lb:
-            return
-
-        existing_lbs = [loadbalancer for loadbalancer in self._get_all_loadbalancer(lb.vip.network_id)
-                        if loadbalancer.id != lb.id]
-
-        if not existing_lbs:
-            # Delete whole tenant
-            ret = self.sync.tenant_delete(lb.vip.network_id)
-        else:
-            # Don't delete whole tenant
-            ret = self.sync.tenant_update(lb.vip.network_id, existing_lbs)
-
-        if ret.ok:
-            self.status.set_deleted(lb)
-            self._decrement_quota(data_models.LoadBalancer, lb.project_id)
+        if lb:
+            self.queue.put(lb.vip.network_id)
 
     """
     Listener
@@ -307,7 +235,6 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    @lockutils.synchronized('tenant_refresh')
     def create_listener(self, listener_id):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
@@ -316,27 +243,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'listener', listener_id)
             raise db_exceptions.NoResultFound
 
-        if self._refresh(listener.load_balancer.vip.network_id, self.status).ok:
-            self.status.set_active(listener)
+        self.queue.put(listener.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def update_listener(self, listener_id, listener_updates):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
-        if self._refresh(listener.load_balancer.vip.network_id, self.status).ok:
-            self.status.set_active(listener)
+        self.queue.put(listener.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def delete_listener(self, listener_id):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
         # could be deleted by sync-loop meanwhile
-        if not listener:
-            return
-
-        if self._refresh(listener.load_balancer.vip.network_id).ok:
-            self.status.set_deleted(listener)
-            self._decrement_quota(data_models.Listener, listener.project_id)
+        if listener:
+            self.queue.put(listener.load_balancer.vip.network_id)
 
     """
     Pool
@@ -347,7 +266,6 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    @lockutils.synchronized('tenant_refresh')
     def create_pool(self, pool_id):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
@@ -356,26 +274,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'pool', pool_id)
             raise db_exceptions.NoResultFound
 
-        if self._refresh(pool.load_balancer.vip.network_id).ok:
-            self.status.set_active(pool)
+        self.queue.put(pool.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def update_pool(self, pool_id, pool_updates):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
-        if self._refresh(pool.load_balancer.vip.network_id).ok:
-            self.status.set_active(pool)
+        self.queue.put(pool.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def delete_pool(self, pool_id):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
         # could be deleted by sync-loop meanwhile
-        if not pool:
-            return
-
-        if pool and self._refresh(pool.load_balancer.vip.network_id).ok:
-            self.status.set_deleted(pool)
+        if pool:
+            self.queue.put(pool.load_balancer.vip.network_id)
 
     """
     Member
@@ -386,7 +297,6 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    @lockutils.synchronized('tenant_refresh')
     def create_member(self, member_id):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
@@ -396,11 +306,8 @@ class ControllerWorker(object):
             raise db_exceptions.NoResultFound
 
         self.ensure_amphora_exists(member.pool.load_balancer.id)
+        self.queue.put(member.pool.load_balancer.vip.network_id)
 
-        if self._refresh(member.pool.load_balancer.vip.network_id).ok:
-            self.status.set_active(member)
-
-    @lockutils.synchronized('tenant_refresh')
     def batch_update_members(self, old_member_ids, new_member_ids,
                              updated_members):
         old_members = [self._member_repo.get(db_apis.get_session(), id=mid)
@@ -418,35 +325,23 @@ class ControllerWorker(object):
             pool = updated_members[0][0].pool
         else:
             return
-        load_balancer = pool.load_balancer
-        network_id = load_balancer.vip.network_id
-        if self._refresh(network_id).ok:
-            self.status.update_status([load_balancer])
+        self.queue.put(pool.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def update_member(self, member_id, member_updates):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
-        if self._refresh(member.pool.load_balancer.vip.network_id).ok:
-            self.status.set_active(member)
+        self.queue.put(member.pool.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def delete_member(self, member_id):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
         # could be deleted by sync-loop meanwhile
-        if not member:
-            return
-
-        if self._refresh(member.pool.load_balancer.vip.network_id).ok:
-            self.status.set_deleted(member)
-            self._decrement_quota(data_models.Member, member.project_id)
+        self.queue.put(member.pool.load_balancer.vip.network_id)
 
     """
     Health Monitor
     """
 
-    @lockutils.synchronized('tenant_refresh')
     def create_health_monitor(self, health_monitor_id):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
                                                id=health_monitor_id)
@@ -455,33 +350,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'health_monitor', health_monitor_id)
             raise db_exceptions.NoResultFound
 
-        pool = health_mon.pool
-        load_balancer = pool.load_balancer
-        if self._refresh(load_balancer.vip.network_id).ok:
-            self.status.set_active(health_mon)
+        self.queue.put(health_mon.pool.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def update_health_monitor(self, health_monitor_id, health_monitor_updates):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
                                                id=health_monitor_id)
-        pool = health_mon.pool
-        load_balancer = pool.load_balancer
-        if self._refresh(load_balancer.vip.network_id).ok:
-            self.status.set_active(health_mon)
+        self.queue.put(health_mon.pool.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def delete_health_monitor(self, health_monitor_id):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
                                                id=health_monitor_id)
         # could be deleted by sync-loop meanwhile
-        if not health_mon:
-            return
-
-        pool = health_mon.pool
-        load_balancer = pool.load_balancer
-        if self._refresh(load_balancer.vip.network_id).ok:
-            self.status.set_deleted(health_mon)
-            self._decrement_quota(data_models.HealthMonitor, load_balancer.project_id)
+        if health_mon:
+            self.queue.put(health_mon.pool.load_balancer.vip.network_id)
 
     """
     l7policy
@@ -492,7 +373,6 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    @lockutils.synchronized('tenant_refresh')
     def create_l7policy(self, l7policy_id):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
@@ -501,26 +381,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'l7policy', l7policy_id)
             raise db_exceptions.NoResultFound
 
-        if self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(l7policy)
+        self.queue.put(l7policy.listener.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def update_l7policy(self, l7policy_id, l7policy_updates):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
-        if self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(l7policy)
+        self.queue.put(l7policy.listener.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def delete_l7policy(self, l7policy_id):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
         # could be deleted by sync-loop meanwhile
-        if not l7policy:
-            return
-
-        if self._refresh(l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_deleted(l7policy)
+        if l7policy:
+            self.queue.put(l7policy.listener.load_balancer.vip.network_id)
 
     """
     l7rule
@@ -531,7 +404,6 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    @lockutils.synchronized('tenant_refresh')
     def create_l7rule(self, l7rule_id):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
@@ -540,26 +412,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'l7rule', l7rule_id)
             raise db_exceptions.NoResultFound
 
-        if self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(l7rule)
+        self.queue.put(l7rule.l7policy.listener.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def update_l7rule(self, l7rule_id, l7rule_updates):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
-        if self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_active(l7rule)
+        self.queue.put(l7rule.l7policy.listener.load_balancer.vip.network_id)
 
-    @lockutils.synchronized('tenant_refresh')
     def delete_l7rule(self, l7rule_id):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
         # could be deleted by sync-loop meanwhile
-        if not l7rule:
-            return
-
-        if self._refresh(l7rule.l7policy.listener.load_balancer.vip.network_id).ok:
-            self.status.set_deleted(l7rule)
+        if l7rule:
+            self.queue.put(l7rule.l7policy.listener.load_balancer.vip.network_id)
 
     """
     Amphora

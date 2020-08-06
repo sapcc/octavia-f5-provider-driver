@@ -113,7 +113,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
                 LOG.debug("%s", r.text)
 
         LOG.debug("Installing AS3 debug hook for '%s'", self.hostname)
-        self.hooks['response'].append(log_response)
+        self.hooks['response'].insert(0, log_response)
 
     def wait_for_task_finished(self, task_id):
         """ Waits for AS3 task to be finished successfully
