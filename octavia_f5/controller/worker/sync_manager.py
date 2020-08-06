@@ -11,11 +11,10 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-
+import time
 import uuid
 
 import prometheus_client as prometheus
-import requests
 from oslo_config import cfg
 from oslo_log import log as logging
 from requests import ConnectionError
@@ -67,11 +66,7 @@ class SyncManager(object):
         self.cert_manager = cert_manager.CertManagerWrapper()
         self._bigip = None
         self._bigips = [bigip for bigip in self.initialize_bigips()]
-
-        if CONF.debug:
-            # Install debug request logs
-            for bigip in self._bigips:
-                bigip.debug_enable()
+        self._last_persist = 0
 
         if CONF.f5_agent.migration:
             self.failover(active_device=False)
@@ -100,13 +95,17 @@ class SyncManager(object):
             else:
                 instance = AS3RestClient(**kwargs)
 
+            if CONF.debug:
+                # Install debug request logs
+                instance.debug_enable()
+
             # Fetch as3 version info
             try:
                 info_dict = instance.info()
                 self._metric_version.labels(**info_dict).set(1)
-            except requests.exceptions.HTTPError as e:
+            except Exception:
                 # Failed connecting to AS3 endpoint, gracefully terminate
-                LOG.error('Could not connect to AS3 endpoint: %s', e)
+                LOG.error('Could not connect to AS3 endpoint: %s', instance.hostname)
 
             yield(instance)
 
@@ -160,11 +159,21 @@ class SyncManager(object):
         """
 
         action = 'deploy'
+        persist = False
+
         if CONF.f5_agent.dry_run:
             action = 'dry-run'
+        if CONF.f5_agent.persist_every == 0:
+            persist = True
+        elif CONF.f5_agent.persist_every > 0:
+            persist = time.time() - CONF.f5_agent.persist_every > self._last_persist
+            if persist:
+                self._last_persist = time.time()
+
         decl = AS3(
-            persist=True,
+            persist=persist,
             action=action,
+            historyLimit=2,
             _log_level=LOG.logger.level)
         adc = ADC(
             id="urn:uuid:{}".format(uuid.uuid4()),
