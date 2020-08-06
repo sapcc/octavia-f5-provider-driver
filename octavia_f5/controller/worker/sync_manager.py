@@ -11,10 +11,12 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
+
 import time
 import uuid
 
 import prometheus_client as prometheus
+from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from requests import ConnectionError
@@ -180,9 +182,10 @@ class SyncManager(object):
             label="F5 BigIP Octavia Provider")
         decl.set_adc(adc)
 
-        if not CONF.f5_agent.migration and CONF.f5_agent.sync_to_group:
-            # No group syncing if we are in migration mode
-            decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
+        if not CONF.f5_agent.migration and not device:
+            # No config syncing if we are in migration mode or specificly syncing one device
+            if CONF.f5_agent.sync_to_group:
+                decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
         project_id = None
         if loadbalancers:

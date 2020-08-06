@@ -26,6 +26,7 @@ from six.moves.queue import Empty
 from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.db import repositories as repo
+from octavia_f5.common import constants
 from octavia_f5.controller.worker import status_manager, sync_manager
 from octavia_f5.controller.worker.set_queue import SetQueue
 from octavia_f5.db import api as db_apis
@@ -65,7 +66,8 @@ class ControllerWorker(object):
         self.network_driver = driver_utils.get_network_driver()
         self.queue = SetQueue()
         worker = periodics.PeriodicWorker(
-            [(self.pending_sync, None, None)]
+            [(self.pending_sync, None, None),
+             (self.full_sync_reappearing_devices, None, None)]
         )
         t = threading.Thread(target=worker.start)
         t.daemon = True
@@ -88,14 +90,14 @@ class ControllerWorker(object):
         while True:
             try:
                 LOG.debug("Looping AS3Worker (queue_size=%d)", self.queue.qsize())
-                network_id = self.queue.get(timeout=10)
+                network_id, device = self.queue.get()
                 loadbalancers = self._get_all_loadbalancer(network_id)
                 LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
                           self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
                 if all([lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers]):
                     ret = self.sync.tenant_delete(network_id)
                 else:
-                    ret = self.sync.tenant_update(network_id, loadbalancers, status=self.status)
+                    ret = self.sync.tenant_update(network_id, loadbalancers, device, self.status)
 
                 if ret.ok:
                     self.status.update_status(loadbalancers)
@@ -104,9 +106,38 @@ class ControllerWorker(object):
             except Empty:
                 # Queue empty, pass
                 pass
+            except exceptions.AS3Exception as e:
+                LOG.exception(e)
             except (exceptions.RetryException, tenacity.RetryError) as e:
                 LOG.warning("Device is busy, retrying with next sync: %s", e)
                 time.sleep(15)
+
+    @periodics.periodic(240, run_immediately=True)
+    def full_sync_reappearing_devices(self):
+        session = db_apis.get_session(autocommit=False)
+
+        # Get all pending devices
+        booting_devices = self._amphora_repo.get_all(
+            session, status=constants.AMPHORA_BOOTING,
+            compute_flavor=CONF.host, load_balancer_id=None)
+
+        for device in booting_devices[0]:
+            if CONF.f5_agent.migration and device.role != constants.ROLE_BACKUP:
+                LOG.warning("[Migration Mode] Skipping full sync of active device %s", device.cached_zone)
+                continue
+
+            LOG.info("Device reappeared: %s. Doing a full sync.", device.cached_zone)
+
+            # get all load balancers (of this host)
+            lbs = self._loadbalancer_repo.get_all_from_host(session, show_deleted=False)
+
+            # deduplicate
+            for network_id in set([lb.vip.network_id for lb in lbs]):
+                self.queue.put((network_id, device.cached_zone))
+
+            # Set device ready
+            self._amphora_repo.update(session, device.id, status=constants.AMPHORA_READY)
+            session.commit()
 
     @periodics.periodic(120, run_immediately=True)
     def pending_sync(self):
@@ -159,7 +190,7 @@ class ControllerWorker(object):
         # Deduplicate
         pending_networks = set([lb.vip.network_id for lb in lbs])
         for network_id in pending_networks:
-            self.queue.put_nowait(network_id)
+            self.queue.put_nowait((network_id, None))
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
@@ -214,17 +245,17 @@ class ControllerWorker(object):
 
         self.ensure_amphora_exists(lb.id)
         self.ensure_host_set(lb)
-        self.queue.put(lb.vip.network_id)
+        self.queue.put((lb.vip.network_id, None))
 
     def update_load_balancer(self, load_balancer_id, load_balancer_updates):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
-        self.queue.put(lb.vip.network_id)
+        self.queue.put((lb.vip.network_id, None))
 
     def delete_load_balancer(self, load_balancer_id, cascade=False):
         lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
         # could be deleted by sync-loop meanwhile
         if lb:
-            self.queue.put(lb.vip.network_id)
+            self.queue.put((lb.vip.network_id, None))
 
     """
     Listener
@@ -243,19 +274,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'listener', listener_id)
             raise db_exceptions.NoResultFound
 
-        self.queue.put(listener.load_balancer.vip.network_id)
+        self.queue.put((listener.load_balancer.vip.network_id, None))
 
     def update_listener(self, listener_id, listener_updates):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
-        self.queue.put(listener.load_balancer.vip.network_id)
+        self.queue.put((listener.load_balancer.vip.network_id, None))
 
     def delete_listener(self, listener_id):
         listener = self._listener_repo.get(db_apis.get_session(),
                                            id=listener_id)
         # could be deleted by sync-loop meanwhile
         if listener:
-            self.queue.put(listener.load_balancer.vip.network_id)
+            self.queue.put((listener.load_balancer.vip.network_id, None))
 
     """
     Pool
@@ -274,19 +305,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'pool', pool_id)
             raise db_exceptions.NoResultFound
 
-        self.queue.put(pool.load_balancer.vip.network_id)
+        self.queue.put((pool.load_balancer.vip.network_id, None))
 
     def update_pool(self, pool_id, pool_updates):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
-        self.queue.put(pool.load_balancer.vip.network_id)
+        self.queue.put((pool.load_balancer.vip.network_id, None))
 
     def delete_pool(self, pool_id):
         pool = self._pool_repo.get(db_apis.get_session(),
                                    id=pool_id)
         # could be deleted by sync-loop meanwhile
         if pool:
-            self.queue.put(pool.load_balancer.vip.network_id)
+            self.queue.put((pool.load_balancer.vip.network_id, None))
 
     """
     Member
@@ -306,7 +337,7 @@ class ControllerWorker(object):
             raise db_exceptions.NoResultFound
 
         self.ensure_amphora_exists(member.pool.load_balancer.id)
-        self.queue.put(member.pool.load_balancer.vip.network_id)
+        self.queue.put((member.pool.load_balancer.vip.network_id, None))
 
     def batch_update_members(self, old_member_ids, new_member_ids,
                              updated_members):
@@ -325,18 +356,18 @@ class ControllerWorker(object):
             pool = updated_members[0][0].pool
         else:
             return
-        self.queue.put(pool.load_balancer.vip.network_id)
+        self.queue.put((pool.load_balancer.vip.network_id, None))
 
     def update_member(self, member_id, member_updates):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
-        self.queue.put(member.pool.load_balancer.vip.network_id)
+        self.queue.put((member.pool.load_balancer.vip.network_id, None))
 
     def delete_member(self, member_id):
         member = self._member_repo.get(db_apis.get_session(),
                                        id=member_id)
         # could be deleted by sync-loop meanwhile
-        self.queue.put(member.pool.load_balancer.vip.network_id)
+        self.queue.put((member.pool.load_balancer.vip.network_id, None))
 
     """
     Health Monitor
@@ -350,19 +381,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'health_monitor', health_monitor_id)
             raise db_exceptions.NoResultFound
 
-        self.queue.put(health_mon.pool.load_balancer.vip.network_id)
+        self.queue.put((health_mon.pool.load_balancer.vip.network_id, None))
 
     def update_health_monitor(self, health_monitor_id, health_monitor_updates):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
                                                id=health_monitor_id)
-        self.queue.put(health_mon.pool.load_balancer.vip.network_id)
+        self.queue.put((health_mon.pool.load_balancer.vip.network_id, None))
 
     def delete_health_monitor(self, health_monitor_id):
         health_mon = self._health_mon_repo.get(db_apis.get_session(),
                                                id=health_monitor_id)
         # could be deleted by sync-loop meanwhile
         if health_mon:
-            self.queue.put(health_mon.pool.load_balancer.vip.network_id)
+            self.queue.put((health_mon.pool.load_balancer.vip.network_id, None))
 
     """
     l7policy
@@ -381,19 +412,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'l7policy', l7policy_id)
             raise db_exceptions.NoResultFound
 
-        self.queue.put(l7policy.listener.load_balancer.vip.network_id)
+        self.queue.put((l7policy.listener.load_balancer.vip.network_id, None))
 
     def update_l7policy(self, l7policy_id, l7policy_updates):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
-        self.queue.put(l7policy.listener.load_balancer.vip.network_id)
+        self.queue.put((l7policy.listener.load_balancer.vip.network_id, None))
 
     def delete_l7policy(self, l7policy_id):
         l7policy = self._l7policy_repo.get(db_apis.get_session(),
                                            id=l7policy_id)
         # could be deleted by sync-loop meanwhile
         if l7policy:
-            self.queue.put(l7policy.listener.load_balancer.vip.network_id)
+            self.queue.put((l7policy.listener.load_balancer.vip.network_id, None))
 
     """
     l7rule
@@ -412,19 +443,19 @@ class ControllerWorker(object):
                         '60 seconds.', 'l7rule', l7rule_id)
             raise db_exceptions.NoResultFound
 
-        self.queue.put(l7rule.l7policy.listener.load_balancer.vip.network_id)
+        self.queue.put((l7rule.l7policy.listener.load_balancer.vip.network_id, None))
 
     def update_l7rule(self, l7rule_id, l7rule_updates):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
-        self.queue.put(l7rule.l7policy.listener.load_balancer.vip.network_id)
+        self.queue.put((l7rule.l7policy.listener.load_balancer.vip.network_id, None))
 
     def delete_l7rule(self, l7rule_id):
         l7rule = self._l7rule_repo.get(db_apis.get_session(),
                                        id=l7rule_id)
         # could be deleted by sync-loop meanwhile
         if l7rule:
-            self.queue.put(l7rule.l7policy.listener.load_balancer.vip.network_id)
+            self.queue.put((l7rule.l7policy.listener.load_balancer.vip.network_id, None))
 
     """
     Amphora
