@@ -22,6 +22,7 @@ from octavia_f5.restclient.bigip.timeout_http_adapter import TimeoutHTTPAdapter
 LOG = logging.getLogger(__name__)
 
 BIGIP_DEVICE_PATH = '/mgmt/tm/cm/device'
+BIGIP_CM_PATH = '/mgmt/tm/cm'
 
 
 class BigIPRestClient(requests.Session):
@@ -69,3 +70,15 @@ class BigIPRestClient(requests.Session):
             url = self.get_url(kwargs.pop('path'))
 
         return super(BigIPRestClient, self).get(url, **kwargs)
+
+    def config_sync(self, device_group):
+        """ Performing a ConfigSync
+
+            Impact of procedure: The following command synchronizes the local BIG-IP device to the device group.
+        """
+
+        cmd = {
+            'command': 'run',
+            'utilCmdArgs': 'config-sync to-group {}'.format(device_group)
+        }
+        self.post(self.get_url(BIGIP_CM_PATH), json=cmd)
