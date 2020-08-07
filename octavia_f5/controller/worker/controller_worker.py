@@ -114,6 +114,9 @@ class ControllerWorker(object):
             except (exceptions.RetryException, tenacity.RetryError) as e:
                 LOG.warning("Device is busy, retrying with next sync: %s", e)
                 time.sleep(15)
+            except:
+                # restart
+                pass
 
     @periodics.periodic(240, run_immediately=True)
     def full_sync_reappearing_devices(self):
