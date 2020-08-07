@@ -165,6 +165,11 @@ f5_networking_opts = [
     cfg.StrOpt('f5_network_segment_physical_network', default=None,
                help=_('Restrict discovery of network segmentation ID '
                       'to a specific physical network name, autodiscovery by default.')),
+    cfg.StrOpt('agent_scheduler', default='loadbalancer',
+               choices=['listener', 'loadbalancer'],
+               help=_('Select scheduler for new VIPs (and therefore loadbalancers). '
+                      'Possible options: "listener": Use agent with lowest amount of listener, '
+                      '"loadbalancer": use agent with lowest amount of loadbalancer.')),
 ]
 
 f5_status_manager_opts = [

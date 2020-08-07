@@ -41,6 +41,7 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
     def __init__(self):
         super(HierachicalPortBindingDriver, self).__init__()
         self.amp_repo = repositories.AmphoraRepository()
+        self.lb_repo = repositories.LoadBalancerRepository()
         self.physical_network = self.get_physical_network()
 
     def allocate_vip(self, load_balancer):
@@ -65,7 +66,10 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
         # select a candidate to schedule to
         try:
             session = db_apis.get_session()
-            candidate = self.amp_repo.get_candidates(session)[0]
+            if CONF.networking.agent_scheduler == 'listener':
+                candidate = self.amp_repo.get_candidates(session)[0]
+            else:
+                candidate = self.lb_repo.get_candidates(session)[0]
         except (ValueError, IndexError) as e:
             message = _('Scheduling failed, no ready candidates found')
             LOG.exception(message)

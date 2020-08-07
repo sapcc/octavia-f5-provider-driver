@@ -18,6 +18,7 @@ Extends octavia base repository with enhanced f5-specific queries
 
 from oslo_config import cfg
 from oslo_log import log as logging
+from sqlalchemy import func, asc
 
 from octavia.common import constants as consts
 from octavia.db import models
@@ -78,6 +79,20 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
                 models.LoadBalancer.provisioning_status != consts.DELETED)
 
         return [model.to_data_model() for model in query.all()]
+
+    def get_candidates(self, session):
+        """ Get F5 (active) BigIP host candidate depending on loadbalancers scheduled
+
+        :param session: A Sql Alchemy database session.
+        """
+
+        candidates = session.query(models.LoadBalancer, func.count(models.LoadBalancer.id).label('lb_count'))
+        # Skip deleted
+        candidates = candidates.filter(models.LoadBalancer.provisioning_status != consts.DELETED)
+        candidates = candidates.group_by(models.LoadBalancer.server_group_id)
+        candidates = candidates.order_by(asc('lb_count'))
+        return [candidate[0].server_group_id for candidate in candidates.all()
+                if candidate[0].server_group_id]
 
 
 class PoolRepository(repositories.PoolRepository):
