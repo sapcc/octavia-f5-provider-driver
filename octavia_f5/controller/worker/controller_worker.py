@@ -48,7 +48,7 @@ class ControllerWorker(object):
     """Worker class to update load balancers."""
 
     _metric_as3worker_queue = prometheus.metrics.Gauge(
-        'octavia_as3_worker_queue', 'Number of items in AS3 worker queue')
+        'octavia_as3_worker_queue', 'Number of items in AS3 worker queue', ['octavia_host'])
 
     def __init__(self):
         self._repositories = repo.Repositories()
@@ -92,7 +92,7 @@ class ControllerWorker(object):
         """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
         while True:
             try:
-                self._metric_as3worker_queue.set(self.queue.qsize())
+                self._metric_as3worker_queue.labels(octavia_host=CONF.host).set(self.queue.qsize())
                 network_id, device = self.queue.get()
                 loadbalancers = self._get_all_loadbalancer(network_id)
                 LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
