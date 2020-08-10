@@ -108,15 +108,16 @@ class ControllerWorker(object):
                     self.status.update_status(loadbalancers)
                     for lb in loadbalancers:
                         self._reset_in_use_quota(lb.project_id)
+                else:
+                    LOG.warning("AS3Worker call failed with code %s: %s", ret.status_code, ret.text)
             except Empty:
                 # Queue empty, pass
                 pass
-            except exceptions.AS3Exception as e:
-                LOG.exception(e)
             except (exceptions.RetryException, tenacity.RetryError) as e:
                 LOG.warning("Device is busy, retrying with next sync: %s", e)
                 time.sleep(15)
-            except:
+            except Exception as e:
+                LOG.exception(e)
                 # restart
                 pass
 
