@@ -160,6 +160,11 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         info.raise_for_status()
         return dict(device=self.hostname, **info.json())
 
+    def get_tenants(self):
+        tenants = self.get(self.get_url(AS3_DECLARE_PATH), params={'filterClass': 'Application'})
+        tenants.raise_for_status()
+        return tenants.json()
+
 
 class AS3ExternalContainerRestClient(AS3RestClient):
     """ AS3 rest client that supports external containerized AS3 docker appliances. PATCH/DELETE requests

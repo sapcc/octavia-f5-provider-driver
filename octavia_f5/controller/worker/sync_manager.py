@@ -16,7 +16,6 @@ import time
 import uuid
 
 import prometheus_client as prometheus
-from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from requests import ConnectionError
@@ -277,3 +276,13 @@ class SyncManager(object):
         ]
         tenants = [member.pool.load_balancer.vip.network_id]
         return self.bigip().patch(tenants=tenants, patch_body=patch_body)
+
+    @retry(
+        retry=retry_if_exception_type(ConnectionError),
+        wait=wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=stop_after_attempt(RETRY_ATTEMPTS)
+    )
+    def get_tenants(self):
+        return self.bigip().get_tenants()
+

@@ -33,6 +33,7 @@ from octavia_f5.db import api as db_apis
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.utils import exceptions, driver_utils
 from octavia_lib.common import constants as lib_consts
+from requests import HTTPError
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -70,7 +71,8 @@ class ControllerWorker(object):
         self.queue = SetQueue()
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None),
-             (self.full_sync_reappearing_devices, None, None)]
+             (self.full_sync_reappearing_devices, None, None),
+             (self.cleanup_orphaned_tenants, None, None)]
         )
         t = threading.Thread(target=worker.start)
         t.daemon = True
@@ -117,6 +119,29 @@ class ControllerWorker(object):
             except:
                 # restart
                 pass
+
+    @periodics.periodic(86400, run_immediately=True)
+    def cleanup_orphaned_tenants(self):
+        # Fetch all Tenants
+        try:
+            LOG.info("Running (24h) tenant cleanup")
+            tenants = self.sync.get_tenants()
+
+            # Get all loadbalancers of this host
+            session = db_apis.get_session(autocommit=False)
+            for tenant_name, applications in tenants.items():
+                # Convert tenant_name to network_id
+                network_id = tenant_name.replace(constants.PREFIX_NETWORK, '').replace('_', '-')
+
+                # Fetch active loadbalancers for this network
+                octavia_lb_ids = [lb.id for lb in self._loadbalancer_repo.get_all_by_network(
+                    session, network_id, show_deleted=False)]
+                if not octavia_lb_ids:
+                    LOG.info("Found orphaned tenant '%s'", tenant_name)
+                    self.queue.put((network_id, None))
+        except HTTPError:
+            # Ignore as3 errors
+            pass
 
     @periodics.periodic(240, run_immediately=True)
     def full_sync_reappearing_devices(self):
