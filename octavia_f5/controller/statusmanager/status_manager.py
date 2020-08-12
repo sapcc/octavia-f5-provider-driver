@@ -180,9 +180,21 @@ class StatusManager(object):
         return self._active_bigip
 
     def failover_check(self):
-        # Force recheck of active device
-        self._active_bigip = None
+        """ We assume that the current active and reachable device (self._active_bigip) is active,
+            If it's not the case, a failover happend.
+        """
+        if self.bigip_status[self.bigip.hostname] and not self.bigip.is_active:
+            self._metric_failover.inc()
+            self._active_bigip = None
+            # Update Amphora master/backup entry
+            self.update_availability()
 
+            LOG.info("Sending failover event for %s to the rpc queue", CONF.host)
+            payload = {'amphora_id': CONF.host}
+            client = self.client.prepare(server=CONF.host)
+            client.cast({}, 'failover_amphora', **payload)
+
+    def availability_check(self):
         # Check availability of all devices
         for bigip in self.bigips:
             LOG.debug('Checking availability of device with URL {}'.format(bigip.hostname))
@@ -198,18 +210,7 @@ class StatusManager(object):
                          timeout, bigip.hostname))
                 available = False
 
-            # Update availability / failover only in case status changes
             if self.bigip_status[bigip.hostname] != available:
-                # Check for failover
-                if available and not self.bigip.is_active:
-                    self._metric_failover.inc()
-                    self._active_bigip = bigip
-
-                    LOG.info("Sending failover event for %s to the rpc queue", CONF.host)
-                    payload = {'amphora_id': CONF.host}
-                    client = self.client.prepare(server=CONF.host)
-                    client.cast({}, 'failover_amphora', **payload)
-
                 # Update database entry
                 self.bigip_status[bigip.hostname] = available
                 self.update_availability()
@@ -228,6 +229,7 @@ class StatusManager(object):
         self._metric_heartbeat.inc()
         if time.time() - self._last_failover_check >= CONF.status_manager.failover_check_interval:
             self._last_failover_check = time.time()
+            self.availability_check()
             self.failover_check()
 
         if time.time() - self._last_cleanup_check >= CONF.status_manager.cleanup_check_interval:
