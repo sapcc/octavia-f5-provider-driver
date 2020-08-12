@@ -531,7 +531,12 @@ class ControllerWorker(object):
             id=amphora_id)
 
     def failover_amphora(self, amphora_id):
-        pass
+        """ For now, we are rusing rpc endpoint failover_amphora for receiving failover events
+        :param amphora_id: host that detected a failover
+
+        """
+        if amphora_id == CONF.host and not CONF.f5_agent.migration:
+            self.sync.failover()
 
     def failover_loadbalancer(self, load_balancer_id):
         pass

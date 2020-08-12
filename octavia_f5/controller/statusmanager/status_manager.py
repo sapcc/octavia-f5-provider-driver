@@ -16,6 +16,7 @@
 import time
 
 import futurist
+import oslo_messaging as messaging
 import prometheus_client as prometheus
 import requests
 import sqlalchemy
@@ -25,6 +26,7 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 from stevedore import driver as stevedore_driver
 
+from octavia.common import rpc
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
@@ -96,6 +98,13 @@ class StatusManager(object):
         self._active_bigip = None
         self._last_failover_check = 0
         self._last_cleanup_check = 0
+
+        # Create RPC Client
+        topic = cfg.CONF.oslo_messaging.topic
+        self.target = messaging.Target(
+            namespace=constants.RPC_NAMESPACE_CONTROLLER_AGENT,
+            topic=topic, version="1.0", fanout=False)
+        self.client = rpc.get_client(self.target)
 
         if cfg.CONF.f5_agent.prometheus:
             prometheus_port = CONF.f5_agent.prometheus_port
@@ -195,6 +204,11 @@ class StatusManager(object):
                 if available and not self.bigip.is_active:
                     self._metric_failover.inc()
                     self._active_bigip = bigip
+
+                    LOG.info("Sending failover event for %s to the rpc queue", CONF.host)
+                    payload = {'amphora_id': CONF.host}
+                    client = self.client.prepare(server=CONF.host)
+                    client.cast({}, 'failover_amphora', **payload)
 
                 # Update database entry
                 self.bigip_status[bigip.hostname] = available

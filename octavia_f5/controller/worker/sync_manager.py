@@ -76,6 +76,7 @@ class SyncManager(object):
             self.failover()
 
     def initialize_bigips(self):
+        instances = []
         for bigip_url in CONF.f5_agent.bigip_urls:
             # Create REST client for every bigip
 
@@ -108,7 +109,8 @@ class SyncManager(object):
                 # Failed connecting to AS3 endpoint, gracefully terminate
                 LOG.error('Could not connect to AS3 endpoint: %s', instance.hostname)
 
-            yield(instance)
+            instances.append(instance)
+        return instances
 
     def bigip(self, device=None):
         """ Returns the (active/specific) BigIP device, e.g.:
@@ -131,6 +133,7 @@ class SyncManager(object):
         else:
             # Failover to bigip which is active (if active_device == True) or passive (if active_device == False)
             self._bigip = next(iter([bigip for bigip in self._bigips if bigip.is_active == active_device]))
+        LOG.info("failover() triggered, target device is %s", self._bigip.hostname)
 
     def force_failover(self, *args, **kwargs):
         # If not in migration mode: force fail-over
