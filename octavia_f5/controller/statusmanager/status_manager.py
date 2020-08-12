@@ -370,7 +370,7 @@ class StatusManager(object):
 
                 # update attributes
                 amp_dict['status'] = status
-                if self._active_bigip == bigip:
+                if bigip.is_active:
                     amp_dict['role'] = constants.ROLE_MASTER
                 else:
                     amp_dict['role'] = constants.ROLE_BACKUP
