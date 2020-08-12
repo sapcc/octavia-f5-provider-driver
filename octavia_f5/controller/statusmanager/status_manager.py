@@ -27,6 +27,7 @@ from oslo_utils import excutils
 from stevedore import driver as stevedore_driver
 
 from octavia.common import rpc
+from octavia.common import constants as o_const
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
@@ -102,7 +103,7 @@ class StatusManager(object):
         # Create RPC Client
         topic = cfg.CONF.oslo_messaging.topic
         self.target = messaging.Target(
-            namespace=constants.RPC_NAMESPACE_CONTROLLER_AGENT,
+            namespace=o_const.RPC_NAMESPACE_CONTROLLER_AGENT,
             topic=topic, version="1.0", fanout=False)
         self.client = rpc.get_client(self.target)
 

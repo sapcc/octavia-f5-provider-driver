@@ -71,7 +71,6 @@ ROLE_BACKUP = 'BACKUP'
 SEGMENT = 'segment'
 VIF_TYPE = 'f5'
 ESD = 'esd'
-RPC_NAMESPACE_CONTROLLER_AGENT = 'f5controller'
 DEVICE_OWNER_LISTENER = 'network:' + 'f5listener'
 PROFILE_L4 = 'basic'
 
