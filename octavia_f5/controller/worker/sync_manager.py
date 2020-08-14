@@ -237,20 +237,26 @@ class SyncManager(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=stop_after_attempt(RETRY_ATTEMPTS)
     )
-    def tenant_delete(self, network_id):
+    def tenant_delete(self, network_id, device=None):
         """ Delete a Tenant
 
         :param network_id: network id
         :return: requests delete result
         """
+        tenant = m_part.get_name(network_id)
+
         if CONF.f5_agent.dry_run:
+            LOG.debug("Faking tenant_delete, tenant='%s', device='%s'", tenant, device)
             return FakeOK()
 
-        tenant = m_part.get_name(network_id)
-        ret = self.bigip().delete(tenants=[tenant])
-        if CONF.f5_agent.sync_to_group and not CONF.f5_agent.migration and ret.ok:
-            self.bigip().config_sync(CONF.f5_agent.sync_to_group)
+        ret = self.bigip(device).delete(tenants=[tenant])
+        if not device and CONF.f5_agent.sync_to_group and not CONF.f5_agent.migration and ret.ok:
+            self.bigip(device).config_sync(CONF.f5_agent.sync_to_group)
         return ret
+
+    def devices(self):
+        """ :returns list of device hostnames managed by sync_manager """
+        return [bigip.hostname for bigip in self._bigips]
 
     @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
@@ -286,6 +292,6 @@ class SyncManager(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=stop_after_attempt(RETRY_ATTEMPTS)
     )
-    def get_tenants(self):
-        return self.bigip().get_tenants()
+    def get_tenants(self, device=None):
+        return self.bigip(device).get_tenants()
 

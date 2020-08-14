@@ -100,7 +100,7 @@ class ControllerWorker(object):
                 LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
                           self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
                 if all([lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers]):
-                    ret = self.sync.tenant_delete(network_id)
+                    ret = self.sync.tenant_delete(network_id, device)
                 else:
                     ret = self.sync.tenant_update(network_id, loadbalancers, device, self.status)
 
@@ -123,26 +123,28 @@ class ControllerWorker(object):
 
     @periodics.periodic(86400, run_immediately=True)
     def cleanup_orphaned_tenants(self):
-        # Fetch all Tenants
-        try:
-            LOG.info("Running (24h) tenant cleanup")
-            tenants = self.sync.get_tenants()
+        LOG.info("Running (24h) tenant cleanup")
+        session = db_apis.get_session(autocommit=False)
 
-            # Get all loadbalancers of this host
-            session = db_apis.get_session(autocommit=False)
-            for tenant_name, applications in tenants.items():
-                # Convert tenant_name to network_id
-                network_id = tenant_name.replace(constants.PREFIX_NETWORK, '').replace('_', '-')
+        for device in self.sync.devices():
+            try:
+                # Fetch all Tenants
+                tenants = self.sync.get_tenants(device)
 
-                # Fetch active loadbalancers for this network
-                octavia_lb_ids = [lb.id for lb in self._loadbalancer_repo.get_all_by_network(
-                    session, network_id, show_deleted=False)]
-                if not octavia_lb_ids:
-                    LOG.info("Found orphaned tenant '%s'", tenant_name)
-                    self.queue.put((network_id, None))
-        except HTTPError:
-            # Ignore as3 errors
-            pass
+                # Get all loadbalancers of this host
+                for tenant_name, applications in tenants.items():
+                    # Convert tenant_name to network_id
+                    network_id = tenant_name.replace(constants.PREFIX_NETWORK, '').replace('_', '-')
+
+                    # Fetch active loadbalancers for this network
+                    octavia_lb_ids = [lb.id for lb in self._loadbalancer_repo.get_all_by_network(
+                        session, network_id, show_deleted=False)]
+                    if not octavia_lb_ids:
+                        LOG.info("Found orphaned tenant '%s' for device '%s'", tenant_name, device)
+                        self.queue.put((network_id, device))
+            except HTTPError:
+                # Ignore as3 errors
+                pass
 
     @periodics.periodic(240, run_immediately=True)
     def full_sync_reappearing_devices(self):
