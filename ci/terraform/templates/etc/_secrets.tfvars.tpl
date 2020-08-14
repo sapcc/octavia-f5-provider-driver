@@ -1,0 +1,8 @@
+os_username = "{{.Values.os_username}}"
+os_user_domain = "{{.Values.os_user_domain}}"
+os_domain = "{{.Values.os_user_domain}}"
+os_password = "{{.Values.os_password}}"
+os_auth_url = "{{.Values.os_auth_url}}"
+os_region = "{{.Values.os_region}}"
+os_project = "{{.Values.os_project}}"
+priv_network = "{{.Values.priv_network}}"

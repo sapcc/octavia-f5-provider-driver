@@ -1,0 +1,68 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "terraform.fullname" . }}
+  labels:
+{{ include "terraform.labels" . | indent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "terraform.name" . }}
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "terraform.name" . }}
+        app.kubernetes.io/instance: {{ .Release.Name }}
+      annotations:
+        configmap-hash: {{ include (print $.Template.BasePath "/configmap.yaml") . | sha256sum }}
+    spec:
+    {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          command: ['sh', '-c', 'cp -R /var/terraform /tmp/terraform && cd /tmp/terraform && ./scripted.sh']
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          volumeMounts:
+            - mountPath: /var/terraform
+              name: var-terraform
+              readOnly: true
+    {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+      volumes:
+        - name: var-terraform
+          projected:
+            defaultMode: 440
+            sources:
+            - configMap:
+                name: {{ include "terraform.fullname" . }}
+                items:
+                - key: scripted.sh
+                  path: scripted.sh
+                  mode: 0550
+                - key: main.tf
+                  path: main.tf
+                - key: vars.tf
+                  path: vars.tf
+                - key: secrets.tfvars
+                  path: secrets.tfvars

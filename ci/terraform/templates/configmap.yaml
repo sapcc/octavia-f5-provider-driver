@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "terraform.fullname" . }}
+  labels:
+{{ include "terraform.labels" . | indent 4 }}
+data:
+  scripted.sh: |
+{{ include (print .Template.BasePath "/bin/_scripted.sh") . | indent 4 }}
+  main.tf: |
+{{ include (print .Template.BasePath "/etc/_main.tf") . | indent 4 }}
+  vars.tf: |
+{{ include (print .Template.BasePath "/etc/_vars.tf") . | indent 4 }}
+  secrets.tfvars: |
+{{ include (print .Template.BasePath "/etc/_secrets.tfvars.tpl") . | indent 4 }}
