@@ -45,11 +45,13 @@ RETRY_BACKOFF = 1
 RETRY_MAX = 5
 
 
-# Workaround for Monitor deletion, fake successfull deletion
 class FakeOK(object):
     def ok(self):
         return True
 
+class FakeError(object):
+    def ok(self):
+        return False
 
 class SyncManager(object):
     """Manager class maintaining connection to BigIPs and transparently controls failover case"""
@@ -113,7 +115,7 @@ class SyncManager(object):
         return instances
 
     def bigip(self, device=None):
-        """ Returns the (active/specific) BigIP device, e.g.:
+        """ :returns the (active/specific) BigIP device, e.g.:
         - active BigIP device (device = None)
         - specific BigIP device (device != None)
 
@@ -125,6 +127,18 @@ class SyncManager(object):
                 return bigip
 
         return self._bigip
+
+    def devices(self):
+        """ :returns list of device hostnames managed by sync_manager
+
+        """
+        return [bigip.hostname for bigip in self._bigips]
+
+    def passive(self):
+        """ :returns not active/targeted device """
+        for bigip in self._bigips:
+            if bigip != self._bigip:
+                return bigip
 
     def failover(self, active_device=True):
         if len(self._bigips) == 1:
@@ -250,13 +264,13 @@ class SyncManager(object):
             return FakeOK()
 
         ret = self.bigip(device).delete(tenants=[tenant])
-        if not device and CONF.f5_agent.sync_to_group and not CONF.f5_agent.migration and ret.ok:
-            self.bigip(device).config_sync(CONF.f5_agent.sync_to_group)
-        return ret
 
-    def devices(self):
-        """ :returns list of device hostnames managed by sync_manager """
-        return [bigip.hostname for bigip in self._bigips]
+        """ Instead of running unreliably config sync, we delete the tenant on all devices to ensure
+            L2 cleanup is not blocking next config sync. """
+        if not device and CONF.f5_agent.sync_to_group:
+            self.passive().delete(tenants=[tenant])
+
+        return ret
 
     @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
     @retry(
