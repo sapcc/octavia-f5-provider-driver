@@ -85,14 +85,20 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
 
         :param session: A Sql Alchemy database session.
         """
+        # Get possible candidates subquery first
+        possible_candidates = session.query(models.Amphora.compute_flavor)
+        possible_candidates = possible_candidates.filter_by(
+            role=consts.ROLE_MASTER, load_balancer_id=None, vrrp_interface=None)
+        possible_candidates = possible_candidates.subquery()
 
-        candidates = session.query(models.LoadBalancer, func.count(models.LoadBalancer.id).label('lb_count'))
+        # but schedule according to loadbalancer usage
+        candidates = session.query(models.LoadBalancer.server_group_id, func.count(models.LoadBalancer.id).label('lb_count'))
         # Skip deleted
         candidates = candidates.filter(models.LoadBalancer.provisioning_status != consts.DELETED)
+        candidates = candidates.filter(models.LoadBalancer.server_group_id.in_(possible_candidates))
         candidates = candidates.group_by(models.LoadBalancer.server_group_id)
         candidates = candidates.order_by(asc('lb_count'))
-        return [candidate[0].server_group_id for candidate in candidates.all()
-                if candidate[0].server_group_id]
+        return [candidate[0] for candidate in candidates.all() if candidate[0]]
 
 
 class PoolRepository(repositories.PoolRepository):
