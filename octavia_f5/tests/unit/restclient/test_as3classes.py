@@ -50,7 +50,8 @@ class TestAS3Classes(base.TestCase):
         # retrieving a tenant
         tenant_name = 'test_tenant2'
         adc[tenant_name] = {'class': 'Tenant'}
-        tenannt_obj = adc_obj.get_or_create_tenant(tenant_name)
+        adc_obj.set_tenant(tenant_name, as3classes.Tenant())
+        tenannt_obj = getattr(adc_obj, tenant_name)
         self.assertIsInstance(tenannt_obj, as3classes.Tenant)
         self.assertEqual(adc, adc_obj.to_dict())
 
