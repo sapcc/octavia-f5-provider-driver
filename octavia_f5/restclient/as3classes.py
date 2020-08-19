@@ -95,6 +95,11 @@ class AS3(BaseDescription):
         setattr(self, 'logLevel', self.LOG_MAP.get(_log_level, 'warning'))
         setattr(self, 'trace', _log_level == logging.TRACE)
 
+    def set_action(self, action):
+        if action not in self.ACTIONS:
+            raise as3exceptions.TypeNotSupportedException
+        setattr(self, 'action', action)
+
     def set_adc(self, adc):
         setattr(self, 'declaration', adc)
 
@@ -124,12 +129,6 @@ class ADC(BaseDescription):
 
     def set_tenant(self, name, tenant):
         setattr(self, name, tenant)
-
-    def get_or_create_tenant(self, name, **kwargs):
-        if not hasattr(self, name):
-            self.set_tenant(name, Tenant(**kwargs))
-
-        return getattr(self, name)
 
 
 class Tenant(BaseDescription):

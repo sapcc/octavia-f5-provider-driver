@@ -25,6 +25,7 @@ from octavia_f5.restclient.as3classes import AS3
 from octavia_f5.restclient.bigip import bigip_auth, bigip_restclient
 from octavia_f5.utils import exceptions
 
+CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 AS3_PATH = '/mgmt/shared/appsvcs'
 AS3_DECLARE_PATH = AS3_PATH + '/declare'
@@ -54,13 +55,12 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         'octavia_as3_delete_duration', 'Time it needs to send a DELETE request to AS3')
     _metric_delete_exceptions = prometheus.metrics.Counter(
         'octavia_as3_delete_exceptions', 'Number of exceptions at DELETE request sent to AS3')
-    task_watcher = None
 
-    def __init__(self, bigip_url, verify=True, auth=None, async_mode=False):
-        if async_mode:
-            self.task_watcher = futurist.ThreadPoolExecutor(max_workers=1)
+    def __init__(self, bigip_url, auth=None):
+        self.task_watcher = futurist.ThreadPoolExecutor(max_workers=1)
+        verify = CONF.f5_agent.bigip_verify
         super(AS3RestClient, self).__init__(bigip_url, verify, auth)
-        if cfg.CONF.f5_agent.prometheus:
+        if CONF.f5_agent.prometheus:
             self.hooks['response'].append(self.metric_response_hook)
         self.hooks['response'].append(self.error_response_hook)
 
@@ -120,25 +120,41 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         :param task_id: task id to be fetched
         :return: request result
         """
+        LOG.info("ASync task '%s' being monitored...", task_id)
         while True:
-            task = super(AS3RestClient, self).get(AS3_TASKS_PATH.format(task_id))
-            if task.ok and all(res['code'] != 0 for res in task.json()['results']):
-                return task
+            task = super(AS3RestClient, self).get(path=AS3_TASKS_PATH.format(task_id))
+            if task.ok:
+                results = task.json()['results']
+
+                # Check for pending tasks
+                if any(res['code'] == 0 for res in results):
+                    time.sleep(AS3_TASK_POLL_INTERVAL)
+                    continue
+
+                # Check if all tasks successfully applied
+                return all(200 <= res['code'] < 300 for res in results)
+
             time.sleep(AS3_TASK_POLL_INTERVAL)
 
     @_metric_post_exceptions.count_exceptions()
     @_metric_post_duration.time()
     def post(self, tenants, payload):
         url = '{}/{}'.format(self.get_url(AS3_DECLARE_PATH), ','.join(tenants))
-        if not self.task_watcher:
-            return super(AS3RestClient, self).post(url, json=payload.to_dict())
+        params = {}
+        if CONF.f5_agent.async_mode:
+            params['async'] = 'true'
+        r = super(AS3RestClient, self).post(url, json=payload.to_dict(), params=params)
 
-        # ASYNC Mode enabled
-        r = super(AS3RestClient, self).post(url, json=payload.to_dict(), params={'async': 'true'})
-        if r.ok:
+        if not r.ok:
+            return False
+
+        if r.status_code == 202:
+            # ASYNC Task
             task_id = r.json()['id']
             fut = self.task_watcher.submit(self.wait_for_task_finished, task_id)
             return fut.result(timeout=ASYNC_TIMEOUT)
+
+        return r.ok
 
     @_metric_patch_exceptions.count_exceptions()
     @_metric_patch_duration.time()
@@ -172,9 +188,9 @@ class AS3ExternalContainerRestClient(AS3RestClient):
 
         See: https://clouddocs.f5.com/products/extensions/f5-appsvcs-extension/latest/userguide/as3-container.html
     """
-    def __init__(self, bigip_url, as3_url, verify=True, auth=None, async_mode=False):
+    def __init__(self, bigip_url, as3_url, auth=None):
         self.as3_url = parse.urlsplit(as3_url, allow_fragments=False)
-        super(AS3ExternalContainerRestClient, self).__init__(bigip_url, verify, auth, async_mode)
+        super(AS3ExternalContainerRestClient, self).__init__(bigip_url, auth)
 
     def get_url(self, url):
         """ Override host for AS3 declarations. """

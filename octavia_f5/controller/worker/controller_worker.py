@@ -56,7 +56,6 @@ class ControllerWorker(object):
         self._loadbalancer_repo = f5_repos.LoadBalancerRepository()
         self._amphora_repo = repo.AmphoraRepository()
         self._health_mon_repo = repo.HealthMonitorRepository()
-        self._lb_repo = repo.LoadBalancerRepository()
         self._listener_repo = f5_repos.ListenerRepository()
         self._member_repo = repo.MemberRepository()
         self._pool_repo = f5_repos.PoolRepository()
@@ -65,8 +64,8 @@ class ControllerWorker(object):
         self._vip_repo = repo.VipRepository()
         self._quota_repo = repo.QuotasRepository()
 
-        self.sync = sync_manager.SyncManager()
         self.status = status_manager.StatusManager()
+        self.sync = sync_manager.SyncManager(self.status, self._loadbalancer_repo)
         self.network_driver = driver_utils.get_network_driver()
         self.queue = SetQueue()
         worker = periodics.PeriodicWorker(
@@ -102,14 +101,12 @@ class ControllerWorker(object):
                 if all([lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers]):
                     ret = self.sync.tenant_delete(network_id, device)
                 else:
-                    ret = self.sync.tenant_update(network_id, loadbalancers, device, self.status)
+                    ret = self.sync.tenant_update(network_id, device)
 
-                if ret.ok:
+                if ret:
                     self.status.update_status(loadbalancers)
                     for lb in loadbalancers:
                         self._reset_in_use_quota(lb.project_id)
-                else:
-                    LOG.warning("AS3Worker call failed with code %s: %s", ret.status_code, ret.text)
             except Empty:
                 # Queue empty, pass
                 pass
@@ -269,7 +266,7 @@ class ControllerWorker(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
     def create_load_balancer(self, load_balancer_id, flavor=None):
-        lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
+        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
         # We are retrying to fetch load-balancer since API could
         # be still busy inserting the LB into the database.
         if not lb:
@@ -282,11 +279,11 @@ class ControllerWorker(object):
         self.queue.put((lb.vip.network_id, None))
 
     def update_load_balancer(self, load_balancer_id, load_balancer_updates):
-        lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
+        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
         self.queue.put((lb.vip.network_id, None))
 
     def delete_load_balancer(self, load_balancer_id, cascade=False):
-        lb = self._lb_repo.get(db_apis.get_session(), id=load_balancer_id)
+        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
         # could be deleted by sync-loop meanwhile
         if lb:
             self.queue.put((lb.vip.network_id, None))

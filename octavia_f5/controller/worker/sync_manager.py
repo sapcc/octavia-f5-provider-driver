@@ -12,29 +12,18 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import time
-import uuid
-
 import prometheus_client as prometheus
 from oslo_config import cfg
 from oslo_log import log as logging
 from requests import ConnectionError
 from tenacity import *
 
-from octavia.common import exceptions as o_exceptions
-from octavia.db import repositories as repo
-from octavia_f5.common import constants
-# from octavia_f5.controller.worker import quirks
-from octavia_f5.db import repositories as f5_repos
-from octavia_f5.restclient.as3classes import ADC, AS3, Application
-from octavia_f5.restclient.as3objects import application as m_app
-from octavia_f5.restclient.as3objects import pool as m_pool
-from octavia_f5.restclient.as3objects import pool_member as m_member
-from octavia_f5.restclient.as3objects import service as m_service
+from octavia_f5.db import api as db_apis
+from octavia_f5.restclient import as3declaration
 from octavia_f5.restclient.as3objects import tenant as m_part
 from octavia_f5.restclient.as3restclient import AS3ExternalContainerRestClient, AS3RestClient
 from octavia_f5.restclient.bigip import bigip_auth
-from octavia_f5.utils import driver_utils, exceptions, cert_manager, esd_repo
+from octavia_f5.utils import exceptions
 from octavia_f5.utils.decorators import RunHookOnException
 
 CONF = cfg.CONF
@@ -61,15 +50,11 @@ class SyncManager(object):
     _metric_version = prometheus.metrics.Gauge(
         'octavia_as3_version_info', 'AS3 Version', ['device', 'release', 'schemaCurrent', 'schemaMinimum', 'version'])
 
-    def __init__(self):
-        self._amphora_repo = repo.AmphoraRepository()
-        self._esd_repo = esd_repo.EsdRepository()
-        self._loadbalancer_repo = f5_repos.LoadBalancerRepository()
-        self.network_driver = driver_utils.get_network_driver()
-        self.cert_manager = cert_manager.CertManagerWrapper()
+    def __init__(self, status_manager, loadbalancer_repo):
         self._bigip = None
         self._bigips = [bigip for bigip in self.initialize_bigips()]
-        self._last_persist = 0
+        self._declaration_manager = as3declaration.AS3DeclarationManager(status_manager)
+        self._loadbalancer_repo = loadbalancer_repo
 
         if CONF.f5_agent.migration:
             self.failover(active_device=False)
@@ -82,11 +67,7 @@ class SyncManager(object):
         for bigip_url in CONF.f5_agent.bigip_urls:
             # Create REST client for every bigip
 
-            kwargs = {
-                'bigip_url': bigip_url,
-                'verify': CONF.f5_agent.bigip_verify,
-                'async_mode': CONF.f5_agent.async_mode,
-            }
+            kwargs = { 'bigip_url': bigip_url }
 
             if CONF.f5_agent.bigip_token:
                 kwargs['auth'] = bigip_auth.BigIPTokenAuth(bigip_url)
@@ -164,83 +145,26 @@ class SyncManager(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=stop_after_attempt(RETRY_ATTEMPTS)
     )
-    def tenant_update(self, network_id, loadbalancers, device=None, status=None):
-        """Task to update F5s with all specified loadbalancers' configurations
-           of a tenant (network_id).
+    def tenant_update(self, network_id, device=None):
+        """ Synchronous call to update F5s with all loadbalancers of a tenant (network_id).
 
            :param network_id: the as3 tenant
-           :param loadbalancers: loadbalancer to update
            :param device: hostname of the bigip device, if none use active device
-           :param status: (optionally) status manager
-           :return: requests post result
+           :return: True if success, else False
 
         """
 
-        action = 'deploy'
-        persist = False
+        loadbalancers = self._loadbalancer_repo.get_all_by_network(
+            db_apis.get_session(), network_id=network_id, show_deleted=False)
+        decl = self._declaration_manager.get_declaration({network_id: loadbalancers})
 
         if CONF.f5_agent.dry_run:
-            action = 'dry-run'
-        if CONF.f5_agent.persist_every == 0:
-            persist = True
-        elif CONF.f5_agent.persist_every > 0:
-            persist = time.time() - CONF.f5_agent.persist_every > self._last_persist
-            if persist:
-                self._last_persist = time.time()
-
-        decl = AS3(
-            persist=persist,
-            action=action,
-            historyLimit=2,
-            _log_level=LOG.logger.level)
-        adc = ADC(
-            id="urn:uuid:{}".format(uuid.uuid4()),
-            label="F5 BigIP Octavia Provider")
-        decl.set_adc(adc)
+            decl.set_action('dry-run')
 
         if not CONF.f5_agent.migration and not device:
             # No config syncing if we are in migration mode or specificly syncing one device
             if CONF.f5_agent.sync_to_group:
                 decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
-
-        project_id = None
-        if loadbalancers:
-            project_id = loadbalancers[-1].project_id
-
-        segmentation_id = self.network_driver.get_segmentation_id(network_id)
-        tenant = adc.get_or_create_tenant(
-            m_part.get_name(network_id),
-            defaultRouteDomain=segmentation_id,
-            label='{}{}'.format(constants.PREFIX_PROJECT, project_id or 'none')
-        )
-
-        for loadbalancer in loadbalancers:
-            # Skip load balancer in (pending) deletion
-            if loadbalancer.provisioning_status in [constants.PENDING_DELETE]:
-                continue
-
-            # Create generic application
-            app = Application(constants.APPLICATION_GENERIC, label=loadbalancer.id)
-
-            # Attach Octavia listeners as AS3 service objects
-            for listener in loadbalancer.listeners:
-                if not driver_utils.pending_delete(listener):
-                    try:
-                        service_entities = m_service.get_service(listener, self.cert_manager, self._esd_repo)
-                        app.add_entities(service_entities)
-                    except o_exceptions.CertificateRetrievalException as e:
-                        LOG.error("Could not retrieve certificate, skipping listener '%s': %s", listener.id, e)
-                        if status:
-                            status.set_error(listener)
-
-            # Attach pools
-            for pool in loadbalancer.pools:
-                # quirks.workaround_autotool_1469(network_id, loadbalancer.id, pool, self._bigips)
-                if not driver_utils.pending_delete(pool):
-                    app.add_entities(m_pool.get_pool(pool))
-
-            # Attach newly created application
-            tenant.add_application(m_app.get_name(loadbalancer.id), app)
 
         return self.bigip(device).post(tenants=[m_part.get_name(network_id)], payload=decl)
 
@@ -255,13 +179,13 @@ class SyncManager(object):
         """ Delete a Tenant
 
         :param network_id: network id
-        :return: requests delete result
+        :return: True if success, else False
         """
         tenant = m_part.get_name(network_id)
 
         if CONF.f5_agent.dry_run:
             LOG.debug("Faking tenant_delete, tenant='%s', device='%s'", tenant, device)
-            return FakeOK()
+            return True
 
         ret = self.bigip(device).delete(tenants=[tenant])
 
@@ -272,34 +196,6 @@ class SyncManager(object):
 
         return ret
 
-    @RunHookOnException(hook=force_failover, exceptions=(ConnectionError, exceptions.FailoverException))
-    @retry(
-        retry=retry_if_exception_type(ConnectionError),
-        wait=wait_incrementing(
-            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS)
-    )
-    def member_create(self, member):
-        """Patches new member into existing pool
-
-        :param member: octavia member object
-        """
-        if CONF.f5_agent.dry_run:
-            return FakeOK()
-
-        patch_body = [
-            {
-                'op': 'add',
-                'path': '{}/{}/{}/members/-'.format(
-                    m_part.get_name(member.pool.load_balancer.vip.network_id),
-                    m_app.get_name(member.pool.load_balancer.id),
-                    m_pool.get_name(member.pool.id)),
-                'value': m_member.get_member(member).to_dict()
-            }
-        ]
-        tenants = [member.pool.load_balancer.vip.network_id]
-        return self.bigip().patch(tenants=tenants, patch_body=patch_body)
-
     @retry(
         retry=retry_if_exception_type(ConnectionError),
         wait=wait_incrementing(
@@ -308,4 +204,3 @@ class SyncManager(object):
     )
     def get_tenants(self, device=None):
         return self.bigip(device).get_tenants()
-
