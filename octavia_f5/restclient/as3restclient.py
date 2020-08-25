@@ -179,6 +179,8 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
     def get_tenants(self):
         tenants = self.get(self.get_url(AS3_DECLARE_PATH), params={'filterClass': 'Application'})
         tenants.raise_for_status()
+        if tenants.status_code == 204:
+            return {}
         return tenants.json()
 
 
