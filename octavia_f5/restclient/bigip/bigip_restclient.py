@@ -56,7 +56,7 @@ class BigIPRestClient(requests.Session):
     def is_active(self):
         try:
             r = self.get(self.get_url(BIGIP_DEVICE_PATH), timeout=3)
-        except requests.exceptions.Timeout:
+        except requests.exceptions.RequestException:
             return False
 
         return any([device['name'] == self.hostname and
