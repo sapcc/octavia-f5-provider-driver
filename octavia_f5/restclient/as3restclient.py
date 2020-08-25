@@ -172,7 +172,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         return super(AS3RestClient, self).delete(url)
 
     def info(self):
-        info = self.get(self.get_url(AS3_INFO_PATH))
+        info = self.get(self.get_url(AS3_INFO_PATH), timeout=3)
         info.raise_for_status()
         return dict(device=self.hostname, **info.json())
 
