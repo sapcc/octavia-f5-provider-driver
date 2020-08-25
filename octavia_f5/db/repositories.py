@@ -88,7 +88,7 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
         # Get possible candidates subquery first
         possible_candidates = session.query(models.Amphora.compute_flavor)
         possible_candidates = possible_candidates.filter_by(
-            role=consts.ROLE_MASTER, load_balancer_id=None, vrrp_interface=None)
+            status=consts.AMPHORA_READY, load_balancer_id=None, vrrp_interface=None)
         possible_candidates = possible_candidates.subquery()
 
         # but schedule according to loadbalancer usage
