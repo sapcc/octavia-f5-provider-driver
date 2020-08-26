@@ -12,19 +12,17 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import time
-import uuid
-from oslo_log import log as logging
-from octavia.common import exceptions as o_exceptions
-
-from octavia_f5.common import constants
 from oslo_config import cfg
-from octavia_f5.restclient.as3classes import ADC, AS3, Application
+from oslo_log import log as logging
+
+from octavia.common import exceptions as o_exceptions
+from octavia_f5.common import constants
+from octavia_f5.restclient import as3classes as as3
+from octavia_f5.restclient.as3classes import Application
+from octavia_f5.restclient.as3objects import application as m_app
+from octavia_f5.restclient.as3objects import pool as m_pool
 from octavia_f5.restclient.as3objects import service as m_service
 from octavia_f5.utils import driver_utils
-from octavia_f5.restclient.as3objects import pool as m_pool
-from octavia_f5.restclient.as3objects import application as m_app
-from octavia_f5.restclient import as3classes as as3
 
 CONF = cfg.CONF
 LAST_PERSIST = 0
@@ -61,13 +59,17 @@ def get_tenant(segmentation_id, loadbalancers, status, cert_manager, esd_repo):
                     service_entities = m_service.get_service(listener, cert_manager, esd_repo)
                     app.add_entities(service_entities)
                 except o_exceptions.CertificateRetrievalException as e:
+                    if getattr(e, 'status_code', 0) != 400:
+                        # Error connecting to keystore, skip tenant update
+                        raise e
+
                     LOG.error("Could not retrieve certificate, skipping listener '%s': %s", listener.id, e)
                     if status:
+                        # Key / Container not found in keystore
                         status.set_error(listener)
 
         # Attach pools
         for pool in loadbalancer.pools:
-            # quirks.workaround_autotool_1469(network_id, loadbalancer.id, pool, self._bigips)
             if not driver_utils.pending_delete(pool):
                 app.add_entities(m_pool.get_pool(pool))
 
