@@ -115,6 +115,8 @@ f5_agent_opts = [
                        "Set persist_every < 0, leave the working "
                        "configuration in memory only (if targetHost restart, you may "
                        "lose the configuration from memory")),
+    cfg.BoolOpt('unsafe_mode', default=False,
+                help=_("Use unsafe mode for posting AS3 declarations.")),
 ]
 
 f5_tls_shared = {

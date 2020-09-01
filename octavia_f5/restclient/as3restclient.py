@@ -143,6 +143,8 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         params = {}
         if CONF.f5_agent.async_mode:
             params['async'] = 'true'
+        if CONF.f5_agent.unsafe_mode:
+            params['unsafe'] = 'true'
         r = super(AS3RestClient, self).post(url, json=payload.to_dict(), params=params)
 
         if not r.ok:
