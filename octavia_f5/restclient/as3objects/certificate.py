@@ -37,9 +37,9 @@ def get_certificate(remark, tlscontainer):
     """
     def _decode(pem):
         try:
-            return pem.decode('utf-8').replace('\r', '')
+            return pem.decode('utf-8').replace('\r', '').replace(' \n', '\n')
         except AttributeError:
-            return pem.replace('\r', '')
+            return pem.replace('\r', '').replace(' \n', '\n')
 
 
     # TLS certificate is always the first one
