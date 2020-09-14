@@ -284,7 +284,8 @@ class StatusManager(object):
             loadbalancer_id = self._loadbalancer_from_path(stats['tmName'].get('description'))
             status = constants.UP
             availability = stats['status.availabilityState'].get('description')
-            if availability == 'offline':
+            member_count = stats['availableMemberCnt'].get('value')
+            if availability == 'offline' and member_count != 0:
                 status = constants.DOWN
             msg = _get_lb_msg(loadbalancer_id)
             msg['pools'][pool_id] = {
