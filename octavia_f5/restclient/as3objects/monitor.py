@@ -148,7 +148,8 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
 
     args["interval"] = health_monitor.delay
     timeout = int(health_monitor.fall_threshold) * int(health_monitor.delay) + 1
-    args["timeout"] = timeout
+    # respect BigIP LTM maximum health monitor timeout of 900 seconds
+    args["timeout"] = min(timeout, 900)
     if target_address:
         args["targetAddress"] = target_address
     if target_port:
