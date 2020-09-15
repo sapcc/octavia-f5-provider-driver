@@ -33,5 +33,5 @@ def f5label(label):
         return ""
 
     # Remove control characters and limit to 64 characters.
-    nstr = "".join(ch for ch in label if ch in string.printable and ch != "&")
+    nstr = "".join(ch for ch in label if ch in string.printable and ch not in ["&", "`"])
     return nstr[:64]
