@@ -34,7 +34,8 @@ def get_app_cookie(cookie_name):
     m = hashlib.md5()
     persist = Persist(
         persistenceMethod='cookie',
-        cookieName=cookie_name
+        cookieName=cookie_name,
+        cookieMethod='hash'
     )
     m.update(cookie_name.encode('utf-8'))
     name = 'persist_{}'.format(m.hexdigest())
