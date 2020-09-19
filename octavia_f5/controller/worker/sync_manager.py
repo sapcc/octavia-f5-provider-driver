@@ -22,7 +22,7 @@ from octavia_f5.db import api as db_apis
 from octavia_f5.restclient import as3declaration
 from octavia_f5.restclient.as3objects import tenant as m_part
 from octavia_f5.restclient.as3restclient import AS3ExternalContainerRestClient, AS3RestClient
-from octavia_f5.restclient.bigip import bigip_auth
+from octavia_f5.restclient.bigip import bigip_auth, bigip_restclient
 from octavia_f5.utils import exceptions
 from octavia_f5.utils.decorators import RunHookOnException
 
@@ -214,3 +214,21 @@ class SyncManager(object):
     )
     def get_tenants(self, device=None):
         return self.bigip(device).get_tenants()
+
+    @retry(
+        retry=retry_if_exception_type(ConnectionError),
+        wait=wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=stop_after_attempt(RETRY_ATTEMPTS)
+    )
+    def get_route_domain(self, network_id, device=None):
+        return self.bigip(device).get_route_domain(network_id)
+
+    @retry(
+        retry=retry_if_exception_type(ConnectionError),
+        wait=wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=stop_after_attempt(RETRY_ATTEMPTS)
+    )
+    def create_route_domain(self, network_id, route_domain, device=None):
+        return self.bigip(device).create_route_domain(network_id, route_domain)

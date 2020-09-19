@@ -22,6 +22,7 @@ from octavia_f5.restclient.bigip.timeout_http_adapter import TimeoutHTTPAdapter
 LOG = logging.getLogger(__name__)
 
 BIGIP_DEVICE_PATH = '/mgmt/tm/cm/device'
+BIGIP_NET_RD_PATH = '/mgmt/tm/net/route-domain'
 BIGIP_CM_PATH = '/mgmt/tm/cm'
 
 
@@ -82,3 +83,16 @@ class BigIPRestClient(requests.Session):
             'utilCmdArgs': 'config-sync to-group {}'.format(device_group)
         }
         return super(BigIPRestClient, self).post(self.get_url(BIGIP_CM_PATH), json=cmd)
+
+    def get_route_domain(self, network_id):
+        """ Fetches a route domain from bigip """
+        return self.get(self.get_url("{}/net-{}".format(BIGIP_NET_RD_PATH, network_id)))
+
+    def create_route_domain(self, network_id, route_domain):
+        """ Creates a route domain on bigip """
+
+        rd = {
+            'name': 'net-{}'.format(network_id),
+            'id': route_domain
+        }
+        return super(BigIPRestClient, self).post(self.get_url(BIGIP_NET_RD_PATH), json=rd)

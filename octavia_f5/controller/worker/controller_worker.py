@@ -276,6 +276,7 @@ class ControllerWorker(object):
 
         self.ensure_amphora_exists(lb.id)
         self.ensure_host_set(lb)
+        self.ensure_route_domain(lb)
         self.queue.put((lb.vip.network_id, None))
 
     def update_load_balancer(self, load_balancer_id, load_balancer_updates):
@@ -553,3 +554,16 @@ class ControllerWorker(object):
             self._loadbalancer_repo.update(db_apis.get_session(),
                                            id=loadbalancer.id,
                                            server_group_id=CONF.host[:36])
+
+    def ensure_route_domain(self, loadbalancer):
+        """ Creates a dummy route-domain if not existing on
+        target device(s) """
+        network_id = loadbalancer.vip.network_id
+        for device in self.sync.devices():
+            try:
+                if not self.sync.get_route_domain(network_id, device).ok:
+                    route_domain = self.network_driver.get_segmentation_id(network_id)
+                    self.sync.create_route_domain(network_id, route_domain, device)
+            except Exception:
+                # ML2 sync loop takes care
+                pass
