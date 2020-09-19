@@ -176,4 +176,5 @@ class StatusManager(object):
         """Set provisioning_state of octavia object to ERROR
         :param obj: octavia object like loadbalancer, pools, etc.
         """
+        obj.provisioning_status = lib_consts.ERROR
         self._update_status_to_octavia({self.get_obj_type(obj): [self._status_obj(obj, lib_consts.ERROR)]})

@@ -44,6 +44,10 @@ def get_tenant(segmentation_id, loadbalancers, status, cert_manager, esd_repo):
         label='{}{}'.format(constants.PREFIX_PROJECT, project_id or 'none')
     )
 
+    # Skip members that re-use load balancer vips
+    loadbalancer_ips = [load_balancer.vip.ip_address for load_balancer in loadbalancers
+                        if not driver_utils.pending_delete(load_balancer)]
+
     for loadbalancer in loadbalancers:
         # Skip load balancer in (pending) deletion
         if loadbalancer.provisioning_status in [constants.PENDING_DELETE]:
@@ -71,7 +75,7 @@ def get_tenant(segmentation_id, loadbalancers, status, cert_manager, esd_repo):
         # Attach pools
         for pool in loadbalancer.pools:
             if not driver_utils.pending_delete(pool):
-                app.add_entities(m_pool.get_pool(pool))
+                app.add_entities(m_pool.get_pool(pool, loadbalancer_ips, status))
 
         # Attach newly created application
         tenant.add_application(m_app.get_name(loadbalancer.id), app)

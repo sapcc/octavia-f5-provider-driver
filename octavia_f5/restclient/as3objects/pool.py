@@ -34,10 +34,12 @@ def get_name(pool_id):
     return "{}{}".format(constants.PREFIX_POOL, pool_id)
 
 
-def get_pool(pool):
+def get_pool(pool, loadbalancer_ips, status):
     """Map Octavia Pool -> AS3 Pool object
 
     :param pool: octavia pool object
+    :param loadbalancer_ips: already used loadbalancer_ips
+    :param status: status manager instance
     :return: AS3 pool
     """
 
@@ -57,6 +59,12 @@ def get_pool(pool):
     for member in pool.members:
         # Ignore backup members, will be handled by service
         if not utils.pending_delete(member) and not member.backup:
+            if member.ip_address in loadbalancer_ips:
+                # The member address is already in use by a load balancer
+                if status:
+                    status.set_error(member)
+                continue
+
             service_args['members'].append(
                 m_member.get_member(member))
 
