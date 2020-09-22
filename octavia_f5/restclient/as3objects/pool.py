@@ -60,7 +60,8 @@ def get_pool(pool, loadbalancer_ips, status):
         # Ignore backup members, will be handled by service
         if not utils.pending_delete(member) and not member.backup:
             if member.ip_address in loadbalancer_ips:
-                # The member address is already in use by a load balancer
+                LOG.warning("The member address %s of member %s is already in use by a load balancer.",
+                            member.ip_address, member.id)
                 if status:
                     status.set_error(member)
                 continue
