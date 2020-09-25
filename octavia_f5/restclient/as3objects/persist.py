@@ -11,9 +11,11 @@
 # WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 # License for the specific language governing permissions and limitations
 # under the License.
-from octavia_f5.restclient.as3classes import Persist
+
 import hashlib
-from octavia_f5.common import constants as const
+
+from octavia_f5.common import constants
+from octavia_f5.restclient.as3classes import Persist
 
 
 def get_source_ip(timeout, granularity):
@@ -31,12 +33,10 @@ def get_source_ip(timeout, granularity):
 
 
 def get_app_cookie(cookie_name):
-    m = hashlib.md5()
     persist = Persist(
-        persistenceMethod='cookie',
-        cookieName=cookie_name,
-        cookieMethod='hash'
+        persistenceMethod='universal',
+        iRule='{}_app_cookie_{}'.format(constants.PREFIX_IRULE, cookie_name),
+        duration=0
     )
-    m.update(cookie_name.encode('utf-8'))
-    name = 'persist_{}'.format(m.hexdigest())
+    name = 'persist_app_cookie_{}'.format(cookie_name)
     return name, persist

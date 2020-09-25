@@ -225,8 +225,15 @@ def get_service(listener, cert_manager, esd_repository):
         persistence = listener.default_pool.session_persistence
         lb_algorithm = listener.default_pool.lb_algorithm
 
-        if persistence.type == 'APP_COOKIE':
-            name, obj_persist = m_persist.get_app_cookie(persistence.cookie_name)
+        if persistence.type == 'APP_COOKIE' and persistence.cookie_name:
+            # generate iRule for cookie_name
+            escaped_cookie = persistence.cookie_name
+            escaped_cookie.replace("\"", "")
+            irule_name, irule = m_irule.get_app_cookie_irule(escaped_cookie)
+            entities.append((irule_name, irule))
+
+            # add iRule to universal persistance profile
+            name, obj_persist = m_persist.get_app_cookie(escaped_cookie)
             service_args['persistenceMethods'] = [as3.Pointer(name)]
             entities.append((name, obj_persist))
             if lb_algorithm == 'SOURCE_IP':
