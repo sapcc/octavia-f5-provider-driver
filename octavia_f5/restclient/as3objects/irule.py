@@ -132,6 +132,16 @@ when HTTP_REQUEST {
         HTTP::header insert "X-SSL-Client-Not-After" $validity
     }
 }"""
+APP_COOKIE_SESSION_PERSIST = """when HTTP_REQUEST {{
+    if {{ [HTTP::cookie exists "{_cookie}"] }} {{
+        persist uie [HTTP::cookie "{_cookie}"] 3600
+    }}
+}}
+when HTTP_RESPONSE {{
+    if {{ [HTTP::cookie exists "{_cookie}"] }} {{
+        persist add uie [HTTP::cookie "{_cookie}"] 3600
+    }}
+}}"""
 
 
 def get_proxy_irule():
@@ -142,6 +152,18 @@ def get_proxy_irule():
     irule = IRule(PROXY_PROTOCOL_INITIATIOR,
                   remark="Insert Proxy Protocol Header V1")
     name = '{}proxy_protocol_initiator'.format(constants.PREFIX_IRULE)
+    return name, irule
+
+
+def get_app_cookie_irule(cookie_name):
+    """
+    Returns iRule for app cookie persistance with cookie_name.
+    :return: iRule entity (tuple with iRule name and definition)
+    """
+    app_cookie_irule = APP_COOKIE_SESSION_PERSIST.format(_cookie=cookie_name)
+    irule = IRule(app_cookie_irule,
+                  remark="Persistance app cookie")
+    name = '{}app_cookie_{}'.format(constants.PREFIX_IRULE, cookie_name)
     return name, irule
 
 
