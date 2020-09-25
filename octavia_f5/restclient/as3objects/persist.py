@@ -35,7 +35,7 @@ def get_source_ip(timeout, granularity):
 def get_app_cookie(cookie_name):
     persist = Persist(
         persistenceMethod='universal',
-        iRule='{}_app_cookie_{}'.format(constants.PREFIX_IRULE, cookie_name),
+        iRule='{}app_cookie_{}'.format(constants.PREFIX_IRULE, cookie_name),
         duration=0
     )
     name = 'persist_app_cookie_{}'.format(cookie_name)
