@@ -33,7 +33,7 @@ from octavia_f5.db import api as db_apis
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.utils import exceptions, driver_utils
 from octavia_lib.common import constants as lib_consts
-from requests import HTTPError
+from requests import HTTPError, RequestException
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -43,7 +43,6 @@ RETRY_ATTEMPTS = 15
 RETRY_INITIAL_DELAY = 1
 RETRY_BACKOFF = 1
 RETRY_MAX = 5
-
 
 class ControllerWorker(object):
     """Worker class to update load balancers."""
@@ -63,6 +62,7 @@ class ControllerWorker(object):
         self._l7rule_repo = repo.L7RuleRepository()
         self._vip_repo = repo.VipRepository()
         self._quota_repo = repo.QuotasRepository()
+        self._rd_cache = set()
 
         self.status = status_manager.StatusManager()
         self.sync = sync_manager.SyncManager(self.status, self._loadbalancer_repo)
@@ -100,6 +100,7 @@ class ControllerWorker(object):
                           self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
                 if all([lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers]):
                     ret = self.sync.tenant_delete(network_id, device)
+                    self._rd_cache.discard(network_id)
                 else:
                     ret = self.sync.tenant_update(network_id, device)
 
@@ -559,11 +560,16 @@ class ControllerWorker(object):
         """ Creates a dummy route-domain if not existing on
         target device(s) """
         network_id = loadbalancer.vip.network_id
-        for device in self.sync.devices():
-            try:
-                if not self.sync.get_route_domain(network_id, device).ok:
-                    route_domain = self.network_driver.get_segmentation_id(network_id)
-                    self.sync.create_route_domain(network_id, route_domain, device)
-            except Exception:
-                # ML2 sync loop takes care
-                pass
+
+        # Very easy caching to reduce synchronous API Calls
+        if network_id not in self._rd_cache:
+            route_domain = self.network_driver.get_segmentation_id(network_id)
+            for device in self.sync.devices():
+                try:
+                    if not self.sync.get_route_domain(network_id, device).ok:
+                        self.sync.create_route_domain(network_id, route_domain, device)
+                except RequestException:
+                    # no need to act, networking-f5 sync loop takes care
+                    pass
+                finally:
+                    self._rd_cache.add(network_id)
