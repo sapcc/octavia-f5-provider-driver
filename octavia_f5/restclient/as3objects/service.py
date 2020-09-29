@@ -225,21 +225,28 @@ def get_service(listener, cert_manager, esd_repository):
         persistence = listener.default_pool.session_persistence
         lb_algorithm = listener.default_pool.lb_algorithm
 
-        if persistence.type == 'APP_COOKIE' and persistence.cookie_name:
-            # generate iRule for cookie_name
-            escaped_cookie = persistence.cookie_name
-            escaped_cookie.replace("\"", "")
-            irule_name, irule = m_irule.get_app_cookie_irule(escaped_cookie)
-            entities.append((irule_name, irule))
+        if service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+            # Add APP_COOKIE / HTTP_COOKIE persistance only in HTTP profiles
+            if persistence.type == 'APP_COOKIE' and persistence.cookie_name:
+                # generate iRule for cookie_name
+                escaped_cookie = persistence.cookie_name
+                escaped_cookie.replace("\"", "")
+                irule_name, irule = m_irule.get_app_cookie_irule(escaped_cookie)
+                entities.append((irule_name, irule))
 
-            # add iRule to universal persistance profile
-            name, obj_persist = m_persist.get_app_cookie(escaped_cookie)
-            service_args['persistenceMethods'] = [as3.Pointer(name)]
-            entities.append((name, obj_persist))
-            if lb_algorithm == 'SOURCE_IP':
-                service_args['fallbackPersistenceMethod'] = 'source-address'
+                # add iRule to universal persistance profile
+                name, obj_persist = m_persist.get_app_cookie(escaped_cookie)
+                service_args['persistenceMethods'] = [as3.Pointer(name)]
+                entities.append((name, obj_persist))
+                if lb_algorithm == 'SOURCE_IP':
+                    service_args['fallbackPersistenceMethod'] = 'source-address'
 
-        elif persistence.type == 'SOURCE_IP':
+            elif persistence.type == 'HTTP_COOKIE':
+                service_args['persistenceMethods'] = ['cookie']
+                if lb_algorithm == 'SOURCE_IP':
+                    service_args['fallbackPersistenceMethod'] = 'source-address'
+
+        if persistence.type == 'SOURCE_IP':
             if not persistence.persistence_timeout and not persistence.persistence_granularity:
                 service_args['persistenceMethods'] = ['source-address']
             else:
@@ -250,10 +257,6 @@ def get_service(listener, cert_manager, esd_repository):
                 service_args['persistenceMethods'] = [as3.Pointer(name)]
                 entities.append((name, obj_persist))
 
-        elif persistence.type == 'HTTP_COOKIE':
-            service_args['persistenceMethods'] = ['cookie']
-            if lb_algorithm == 'SOURCE_IP':
-                service_args['fallbackPersistenceMethod'] = 'source-address'
 
     # Map listener tags to ESDs
     for tag in listener.tags:
