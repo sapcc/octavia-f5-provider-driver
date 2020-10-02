@@ -216,9 +216,11 @@ def get_service(listener, cert_manager, esd_repository):
             ))
 
     # Insert header irules
-    for name, irule in m_irule.get_header_irules(listener.insert_headers):
-        service_args['iRules'].append(name)
-        entities.append((name, irule))
+    if service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+        # HTTP profiles only
+        for name, irule in m_irule.get_header_irules(listener.insert_headers):
+            service_args['iRules'].append(name)
+            entities.append((name, irule))
 
     # session persistence
     if listener.default_pool_id and listener.default_pool.session_persistence:
