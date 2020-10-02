@@ -21,6 +21,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from six.moves.urllib import parse
 
+from octavia_f5.restclient import as3logging
 from octavia_f5.restclient.as3classes import AS3
 from octavia_f5.restclient.bigip import bigip_auth, bigip_restclient
 from octavia_f5.utils import exceptions
@@ -34,6 +35,7 @@ AS3_TASKS_PATH = AS3_PATH + '/task/{}'
 
 ASYNC_TIMEOUT = 90  # 90 seconds
 AS3_TASK_POLL_INTERVAL = 5
+
 
 class AS3RestClient(bigip_restclient.BigIPRestClient):
     """ AS3 rest client, implements POST, PATCH and DELETE operation for talking to F5 localhost AS3.
@@ -63,57 +65,71 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         if CONF.f5_agent.prometheus:
             self.hooks['response'].append(self.metric_response_hook)
         self.hooks['response'].append(self.error_response_hook)
+        self.hooks['response'].append(self.task_watcher_hook)
 
     def metric_response_hook(self, r, **kwargs):
         """ Metric hook for prometheus as3 http status"""
         self._metric_httpstatus.labels(method=r.request.method.lower(), statuscode=r.status_code).inc()
 
     def error_response_hook(self, r, **kwargs):
-        """ Installs response hook that parses errors and throws """
+        """ Installs response hook that detects failover conditions and logs errors """
+        error = False
         if 'application/json' in r.headers.get('Content-Type'):
             try:
-                parsed = r.json()
-                if 'results' in parsed:
-                    parsed = parsed['results']
-
-                if 'code' in parsed and parsed['code'] == 404:
-                    if 'Public URI path not registered.' in parsed['message']:
+                results = r.json()
+                for result in results.get('results', [results]):
+                    # iterate all results
+                    if result['code'] == 404 and 'Public URI path not registered.' in result['message']:
                         # AS3 crashed, failover to backup device, leveraging auto-sync
                         raise exceptions.FailoverException()
-            except ValueError:
+
+                    if result['code'] == 503:
+                        # Device busy, retry later
+                        raise exceptions.RetryException()
+
+                    # AS3 error
+                    error = result['code'] >= 300
+            except (ValueError, KeyError):
                 pass
+
+        if error or not r.ok:
+            # Log error
+            LOG.error(as3logging.get_response_log(r))
 
     def debug_enable(self):
         """ Installs requests hook to enable debug logs of AS3 requests and responses. """
 
         def log_response(r, *args, **kwargs):
-            # redact credentials from url
-            url = parse.urlparse(r.url)
-            redacted_url = url._replace(netloc=url.hostname)
-
-            LOG.debug("%s %s finished with code %s", r.request.method, redacted_url.geturl(), r.status_code)
-            if r.request.body:
-                LOG.debug("Request Body")
-                try:
-                    parsed = json.loads(r.request.body)
-                    LOG.debug("%s", json.dumps(parsed, sort_keys=True, indent=4))
-                except ValueError:
-                    LOG.debug("%s", r.request.body)
-
-            LOG.debug("Response")
-            if 'application/json' in r.headers.get('Content-Type'):
-                try:
-                    parsed = r.json()
-                    if 'results' in parsed:
-                        parsed = parsed['results']
-                    LOG.debug("%s", json.dumps(parsed, sort_keys=True, indent=4))
-                except ValueError:
-                    LOG.error("Valid JSON expected: %s", r.text)
-            else:
-                LOG.debug("%s", r.text)
+            # Log every successful request and response with debugging level
+            if r.ok:
+                LOG.debug(as3logging.get_response_log(r))
 
         LOG.debug("Installing AS3 debug hook for '%s'", self.hostname)
         self.hooks['response'].insert(0, log_response)
+
+    def task_watcher_hook(self, r, **kwargs):
+        """ If AS3 requests submited as a task, monitor it
+            and return result.
+            :param response: Requests response of AS3 request
+            :return: True if task/request successfully finished, else False
+        """
+        if r.request.method in ['POST', 'PATCH', 'DELETE']:
+            # Process AS3 response
+            if r.status_code == 202:
+                # ASYNC Task
+                task_id = r.json()['id']
+                fut = self.task_watcher.submit(self.wait_for_task_finished, task_id)
+                r = fut.result(timeout=ASYNC_TIMEOUT)
+
+                if 'application/json' in r.headers.get('Content-Type'):
+                    try:
+                        # Re-use AS3 task code as as response code
+                        for result in r.json()['results']:
+                            r.status_code = result['code']
+                    except (KeyError, ValueError):
+                        pass
+            return r
+
 
     def wait_for_task_finished(self, task_id):
         """ Waits for AS3 task to be finished successfully
@@ -131,8 +147,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
                     time.sleep(AS3_TASK_POLL_INTERVAL)
                     continue
 
-                # Check if all tasks successfully applied
-                return all(200 <= res['code'] < 300 for res in results)
+                return task
 
             time.sleep(AS3_TASK_POLL_INTERVAL)
 
@@ -145,24 +160,13 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
             params['async'] = 'true'
         if CONF.f5_agent.unsafe_mode:
             params['unsafe'] = 'true'
-        r = super(AS3RestClient, self).post(url, json=payload.to_dict(), params=params)
-
-        if not r.ok:
-            return False
-
-        if r.status_code == 202:
-            # ASYNC Task
-            task_id = r.json()['id']
-            fut = self.task_watcher.submit(self.wait_for_task_finished, task_id)
-            return fut.result(timeout=ASYNC_TIMEOUT)
-
-        return r.ok
+        return super(AS3RestClient, self).post(url, json=payload.to_dict(), params=params).ok
 
     @_metric_patch_exceptions.count_exceptions()
     @_metric_patch_duration.time()
     def patch(self, tenants, patch_body):
         url = self.get_url(AS3_DECLARE_PATH)
-        return super(AS3RestClient, self).patch(url, json=patch_body)
+        return super(AS3RestClient, self).patch(url, json=patch_body).ok
 
     @_metric_delete_exceptions.count_exceptions()
     @_metric_delete_duration.time()
@@ -171,7 +175,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
             raise exceptions.DeleteAllTenenatsException()
 
         url = '{}/{}'.format(self.get_url(AS3_DECLARE_PATH), ','.join(tenants))
-        return super(AS3RestClient, self).delete(url)
+        return super(AS3RestClient, self).delete(url).ok
 
     def info(self):
         info = self.get(self.get_url(AS3_INFO_PATH), timeout=3)
