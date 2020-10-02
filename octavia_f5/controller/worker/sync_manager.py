@@ -49,6 +49,8 @@ class SyncManager(object):
         'octavia_as3_failover', 'How often the F5 provider driver switched to another BigIP device')
     _metric_version = prometheus.metrics.Gauge(
         'octavia_as3_version_info', 'AS3 Version', ['device', 'release', 'schemaCurrent', 'schemaMinimum', 'version'])
+    _metric_target = prometheus.metrics.Gauge(
+        'octavia_as3_targeted_device', 'AS3 targeted device', ['device'])
 
     def __init__(self, status_manager, loadbalancer_repo):
         self._bigip = None
@@ -107,6 +109,7 @@ class SyncManager(object):
             if bigip.hostname == device:
                 return bigip
 
+        self._metric_target.labels(device=self._bigip.hostname).set(1)
         return self._bigip
 
     def devices(self):
