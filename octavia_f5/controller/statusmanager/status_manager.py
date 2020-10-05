@@ -277,7 +277,7 @@ class StatusManager(object):
             }
 
         poolstats = self.bigip.get(path=F5_POOL_STATS).json()
-        for selfurl, statobj in poolstats['entries'].items():
+        for selfurl, statobj in poolstats.get('entries', {}).items():
             stats = statobj['nestedStats']['entries']
 
             pool_id = self._pool_from_path(stats['tmName'].get('description'))
@@ -295,23 +295,24 @@ class StatusManager(object):
             sub_path = stats['tmName'].get('description').replace('/', '~')
             members = self.bigip.get(path=F5_POOL_MEMBERS.format(sub_path)).json()
             memberstats = self.bigip.get(path=F5_POOL_MEMBER_STATS.format(sub_path)).json()
-            for member in members['items']:
+            for member in members.get('items', []):
                 if 'description' in member:
                     member_id = member['description']
                     base_path = memberstats['selfLink'][:memberstats['selfLink'].find('/stats')]
-                    statobj = memberstats['entries'][
-                        '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))]
-                    stats = statobj['nestedStats']['entries']
-                    status = constants.NO_CHECK
-                    if stats['status.enabledState'].get('description') == 'disabled':
-                        status = constants.DRAIN
-                    elif stats['monitorStatus'].get('description') == 'checking':
-                        status = constants.MAINT
-                    elif stats['monitorStatus'].get('description') == 'down':
-                        status = constants.DOWN
-                    elif stats['monitorStatus'].get('description') == 'up':
-                        status = constants.UP
-                    msg['pools'][pool_id]['members'][member_id] = status
+                    member_path = '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))
+                    if member_path in memberstats['entries']:
+                        statobj = memberstats['entries'][member_path]
+                        stats = statobj['nestedStats']['entries']
+                        status = constants.NO_CHECK
+                        if stats['status.enabledState'].get('description') == 'disabled':
+                            status = constants.DRAIN
+                        elif stats['monitorStatus'].get('description') == 'checking':
+                            status = constants.MAINT
+                        elif stats['monitorStatus'].get('description') == 'down':
+                            status = constants.DOWN
+                        elif stats['monitorStatus'].get('description') == 'up':
+                            status = constants.UP
+                        msg['pools'][pool_id]['members'][member_id] = status
 
         for msg in amphora_messages.values():
             msg['recv_time'] = time.time()
