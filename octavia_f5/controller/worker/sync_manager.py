@@ -162,6 +162,8 @@ class SyncManager(object):
 
         loadbalancers = self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
+        if not loadbalancers:
+            return False
         decl = self._declaration_manager.get_declaration({network_id: loadbalancers})
 
         if CONF.f5_agent.dry_run:

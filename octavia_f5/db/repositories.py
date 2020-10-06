@@ -49,7 +49,7 @@ class AmphoraRepository(repositories.AmphoraRepository):
 
 
 class LoadBalancerRepository(repositories.LoadBalancerRepository):
-    def get_all_from_host(self, session, host=CONF.host, **filters):
+    def get_all_from_host(self, session, host=None, **filters):
         """ Get all loadbalancers from specific host
 
         :param session: A Sql Alchemy database session.
@@ -57,11 +57,14 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
         :param filters: Filters to decide which entities should be retrieved.
         :returns: [octavia.common.data_model]
         """
+        if not host:
+            host = CONF.host
+
         filters.update(server_group_id=host)
         return super(LoadBalancerRepository, self).get_all(
             session, **filters)[0]
 
-    def get_all_by_network(self, session, network_id, host=CONF.host, **filters):
+    def get_all_by_network(self, session, network_id, host=None, **filters):
         """ Get all loadbalancers from specific host and network vip
 
         :param session: A Sql Alchemy database session.
@@ -69,6 +72,9 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
         :param filters: Filters to decide which entities should be retrieved.
         :returns: [octavia.common.data_model]
         """
+        if not host:
+            host = CONF.host
+
         deleted = filters.pop('show_deleted', True)
         query = session.query(models.LoadBalancer)
         query = query.filter(models.LoadBalancer.server_group_id == host,
@@ -102,13 +108,15 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
 
 
 class PoolRepository(repositories.PoolRepository):
-    def get_pending_from_host(self, session, host=CONF.host):
+    def get_pending_from_host(self, session, host=None):
         """Get a list of pending pools from specific host
 
         :param session: A Sql Alchemy database session.
         :param host: specify amphora host to fetch loadbalancer from.
         :returns: [octavia.common.data_model]
         """
+        if not host:
+            host = CONF.host
 
         query = session.query(models.Pool)
         query = query.filter(models.LoadBalancer.server_group_id == host,
@@ -123,13 +131,15 @@ class PoolRepository(repositories.PoolRepository):
 
 
 class L7PolicyRepository(repositories.L7PolicyRepository):
-    def get_pending_from_host(self, session, host=CONF.host):
+    def get_pending_from_host(self, session, host=None):
         """Get a list of pending l7policies from specific host
 
         :param session: A Sql Alchemy database session.
         :param host: specify amphora host to fetch loadbalancer from.
         :returns: [octavia.common.data_model]
         """
+        if not host:
+            host = CONF.host
 
         query = session.query(models.L7Policy)
         query = query.filter(models.LoadBalancer.server_group_id == host,
@@ -145,13 +155,15 @@ class L7PolicyRepository(repositories.L7PolicyRepository):
 
 
 class ListenerRepository(repositories.ListenerRepository):
-    def get_pending_from_host(self, session, host=CONF.host):
+    def get_pending_from_host(self, session, host=None):
         """Get a list of pending listener from specific host
 
         :param session: A Sql Alchemy database session.
         :param host: specify amphora host to fetch loadbalancer from.
         :returns: [octavia.common.data_model]
         """
+        if not host:
+            host = CONF.host
 
         query = session.query(models.Listener)
         query = query.filter(models.LoadBalancer.server_group_id == host,
