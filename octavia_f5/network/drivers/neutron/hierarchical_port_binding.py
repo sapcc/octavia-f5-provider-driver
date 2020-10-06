@@ -69,7 +69,10 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
             if CONF.networking.agent_scheduler == 'listener':
                 candidate = self.amp_repo.get_candidates(session)[0]
             else:
-                candidate = self.lb_repo.get_candidates(session)[0]
+                try:
+                    candidate = self.lb_repo.get_candidates(session)[0]
+                except IndexError:
+                    candidate = self.amp_repo.get_candidates(session)[0]
         except (ValueError, IndexError) as e:
             message = _('Scheduling failed, no ready candidates found')
             LOG.exception(message)
