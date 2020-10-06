@@ -36,7 +36,7 @@ def get_app_cookie(cookie_name):
     persist = Persist(
         persistenceMethod='universal',
         iRule='{}app_cookie_{}'.format(constants.PREFIX_IRULE, cookie_name),
-        duration=0
+        duration=3600
     )
     name = 'persist_app_cookie_{}'.format(cookie_name)
     return name, persist
