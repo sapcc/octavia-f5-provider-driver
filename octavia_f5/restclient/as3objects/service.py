@@ -175,14 +175,6 @@ def get_service(listener, cert_manager, esd_repository):
                 service_args['iRules'].append(name)
                 entities.append((name, irule))
 
-            # Support of backup members (realized as fallback host via http_profile), pick the first one
-            backup_members = [member for member in pool.members if member.backup]
-            if backup_members:
-                http_profile_name = m_member.get_name(backup_members[0].id)
-                http_profile = as3.HTTP_Profile(fallbackRedirect=backup_members[0].ip_address)
-                service_args['profileHTTP'] = as3.Pointer(http_profile_name)
-                entities.append((http_profile_name, http_profile))
-
         # Pool member certificate handling (TLS backends)
         if pool.tls_enabled:
             client_cert = None

@@ -33,7 +33,7 @@ def normalize_weight(weight):
     ratio = int(math.ceil((weight / 256.) * 100.))
     return ratio
 
-def get_member(member):
+def get_member(member, enable_priority_group):
     args = dict()
     args['servicePort'] = member.protocol_port
     args['serverAddresses'] = [member.ip_address]
@@ -48,6 +48,10 @@ def get_member(member):
         args['adminState'] = 'disable'
     else:
         args['ratio'] = normalize_weight(member.weight)
+
+    if enable_priority_group:
+        # set Priority group for normal pool to 2, backup to 1
+        args['priorityGroup'] = 1 if member.backup else 2
 
     args['remark'] = as3types.f5remark(member.id)
     return Member(**args)

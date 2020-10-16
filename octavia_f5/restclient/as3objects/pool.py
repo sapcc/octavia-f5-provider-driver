@@ -56,9 +56,9 @@ def get_pool(pool, loadbalancer_ips, status):
         'members': [],
     }
 
+    enable_priority_group = any([member.backup for member in pool.members])
     for member in pool.members:
-        # Ignore backup members, will be handled by service
-        if not utils.pending_delete(member) and not member.backup:
+        if not utils.pending_delete(member):
             if member.ip_address in loadbalancer_ips:
                 LOG.warning("The member address %s of member %s is already in use by a load balancer.",
                             member.ip_address, member.id)
@@ -67,7 +67,7 @@ def get_pool(pool, loadbalancer_ips, status):
                 continue
 
             service_args['members'].append(
-                m_member.get_member(member))
+                m_member.get_member(member, enable_priority_group))
 
     if pool.health_monitor and not utils.pending_delete(
             pool.health_monitor):
