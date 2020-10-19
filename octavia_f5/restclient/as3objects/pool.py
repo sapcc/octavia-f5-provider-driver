@@ -66,6 +66,12 @@ def get_pool(pool, loadbalancer_ips, status):
                     status.set_error(member)
                 continue
 
+            if member.ip_address == '0.0.0.0':
+                LOG.warning("The member address 0.0.0.0 of member %s is prohibited.", member.id)
+                if status:
+                    status.set_error(member)
+                continue
+
             service_args['members'].append(
                 m_member.get_member(member, enable_priority_group))
 
