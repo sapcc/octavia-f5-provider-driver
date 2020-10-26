@@ -52,6 +52,6 @@ class MonitorDeletionException(AS3Exception):
         self.monitor = monitor
 
 
-class DeleteAllTenenatsException(Exception):
+class DeleteAllTenantsException(Exception):
     def __init__(self):
         self.message = 'Delete called without tenant, would wipe all AS3 Declaration, ignoring.'

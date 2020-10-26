@@ -172,7 +172,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
     @_metric_delete_duration.time()
     def delete(self, tenants):
         if not tenants:
-            raise exceptions.DeleteAllTenenatsException()
+            raise exceptions.DeleteAllTenantsException()
 
         url = '{}/{}'.format(self.get_url(AS3_DECLARE_PATH), ','.join(tenants))
         return super(AS3RestClient, self).delete(url).ok
@@ -230,7 +230,7 @@ class AS3ExternalContainerRestClient(AS3RestClient):
     def delete(self, tenants):
         # Delete is realized through post with action=delete
         if not tenants:
-            raise exceptions.DeleteAllTenenatsException()
+            raise exceptions.DeleteAllTenantsException()
 
         payload = AS3(action='remove')
         return self.post(tenants, payload)
