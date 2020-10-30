@@ -38,9 +38,11 @@ class FakeOK(object):
     def ok(self):
         return True
 
+
 class FakeError(object):
     def ok(self):
         return False
+
 
 class SyncManager(object):
     """Manager class maintaining connection to BigIPs and transparently controls failover case"""
@@ -69,7 +71,7 @@ class SyncManager(object):
         for bigip_url in CONF.f5_agent.bigip_urls:
             # Create REST client for every bigip
 
-            kwargs = { 'bigip_url': bigip_url }
+            kwargs = {'bigip_url': bigip_url}
 
             if CONF.f5_agent.bigip_token:
                 kwargs['auth'] = bigip_auth.BigIPTokenAuth(bigip_url)
@@ -162,8 +164,6 @@ class SyncManager(object):
 
         loadbalancers = self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
-        if not loadbalancers:
-            return False
         decl = self._declaration_manager.get_declaration({network_id: loadbalancers})
 
         if CONF.f5_agent.dry_run:
@@ -193,23 +193,29 @@ class SyncManager(object):
         :return: True if success, else False
         """
         tenant = m_part.get_name(network_id)
-
         if CONF.f5_agent.dry_run:
             LOG.debug("Faking tenant_delete, tenant='%s', device='%s'", tenant, device)
             return True
 
-        ret = self.bigip(device).delete(tenants=[tenant])
+        # Instead of HTTP DELETE we POST an empty tenant declaration.
+        # It works just as well, but additionally leaves us control over declaration persistency.
+        response = self.tenant_update(network_id=network_id, device=device)
+
+        # if we configure just one device, we're done
+        if device:
+            return response
 
         """ Instead of running unreliably config sync, we delete the tenant on all devices to ensure
             L2 cleanup is not blocking next config sync. """
-        if not device and CONF.f5_agent.sync_to_group:
+        passive_device = self.passive()
+        if CONF.f5_agent.sync_to_group and passive_device:
             try:
-                # Don't fail in case passive device is down, cleanup will handle this case
-                self.passive().delete(tenants=[tenant])
+                response = self.tenant_update(network_id=network_id, device=passive_device)
             except RequestException:
+                # Don't fail in case passive device is down, cleanup will handle this case
                 pass
 
-        return ret
+        return response
 
     @retry(
         retry=retry_if_exception_type(ConnectionError),
