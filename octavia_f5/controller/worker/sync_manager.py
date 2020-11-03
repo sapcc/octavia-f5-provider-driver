@@ -164,14 +164,15 @@ class SyncManager(object):
 
         loadbalancers = self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
+        if not loadbalancers:
+            return False
         decl = self._declaration_manager.get_declaration({network_id: loadbalancers})
 
         if CONF.f5_agent.dry_run:
             decl.set_action('dry-run')
 
-        if not CONF.f5_agent.migration and not device:
-            # No config syncing if we are in migration mode or specificly syncing one device
-            if CONF.f5_agent.sync_to_group:
+        # No config syncing if we are in migration mode or specificly syncing one device
+        if not CONF.f5_agent.migration and not device and CONF.f5_agent.sync_to_group:
                 decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
         return self.bigip(device).post(tenants=[m_part.get_name(network_id)], payload=decl)
@@ -187,35 +188,23 @@ class SyncManager(object):
         stop=stop_after_attempt(RETRY_ATTEMPTS)
     )
     def tenant_delete(self, network_id, device=None):
-        """ Delete a Tenant
+        """ Delete a Tenant.
+        Instead of HTTP DELETE we POST an empty tenant declaration.
+        It works just as well, but additionally leaves us control over declaration persistency.
 
         :param network_id: network id
         :return: True if success, else False
         """
-        tenant = m_part.get_name(network_id)
+        decl = self._declaration_manager.get_declaration({network_id: []})
+
         if CONF.f5_agent.dry_run:
-            LOG.debug("Faking tenant_delete, tenant='%s', device='%s'", tenant, device)
-            return True
+            decl.set_action('dry-run')
 
-        # Instead of HTTP DELETE we POST an empty tenant declaration.
-        # It works just as well, but additionally leaves us control over declaration persistency.
-        response = self.tenant_update(network_id=network_id, device=device)
+        # No config syncing if we are in migration mode or specificly syncing one device
+        if not CONF.f5_agent.migration and not device and not CONF.f5_agent.sync_to_group:
+                decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
-        # if we configure just one device, we're done
-        if device:
-            return response
-
-        """ Instead of running unreliably config sync, we delete the tenant on all devices to ensure
-            L2 cleanup is not blocking next config sync. """
-        passive_device = self.passive()
-        if CONF.f5_agent.sync_to_group and passive_device:
-            try:
-                response = self.tenant_update(network_id=network_id, device=passive_device)
-            except RequestException:
-                # Don't fail in case passive device is down, cleanup will handle this case
-                pass
-
-        return response
+        return self.bigip(device).post(tenants=[m_part.get_name(network_id)], payload=decl)
 
     @retry(
         retry=retry_if_exception_type(ConnectionError),
