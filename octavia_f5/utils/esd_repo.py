@@ -172,5 +172,7 @@ class EsdRepository(EsdJSONValidation):
         'lbaas_persist': {
             'value_type': six.string_types},
         'lbaas_fallback_persist': {
-            'value_type': six.string_types}
+            'value_type': six.string_types},
+        'redirect80': {
+            'value_type': bool}
     }

@@ -83,6 +83,12 @@ def get_esd_entities(servicetype, esd):
         if compression:
             service_args['profileHTTPCompression'] = as3.BigIP(compression)
 
+    if servicetype == const.SERVICE_HTTPS:
+        # HTTP redirect
+        redirect = esd.get('redirect80')
+        if redirect:
+            service_args['redirect80'] = True
+
     return service_args
 
 
