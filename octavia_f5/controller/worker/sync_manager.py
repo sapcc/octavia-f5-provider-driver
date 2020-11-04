@@ -201,7 +201,7 @@ class SyncManager(object):
             decl.set_action('dry-run')
 
         # No config syncing if we are in migration mode or specificly syncing one device
-        if not CONF.f5_agent.migration and not device and not CONF.f5_agent.sync_to_group:
+        if not CONF.f5_agent.migration and not device and CONF.f5_agent.sync_to_group:
                 decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
         return self.bigip(device).post(tenants=[m_part.get_name(network_id)], payload=decl)
