@@ -60,6 +60,8 @@ def main():
     prometheus.start_http_server(PROMETHEUS_PORT)
     db_cleanup = house_keeping.DatabaseCleanup()
     LOG.info("Starting house keeping at %s", str(datetime.datetime.utcnow()))
+    LOG.info("House keeping interval: %s seconds", interval)
+    LOG.info("House keeping load balancer expiration: %s seconds", lb_expiry)
 
     # start cleanup cycle
     while True:
