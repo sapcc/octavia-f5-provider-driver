@@ -72,6 +72,7 @@ SEGMENT = 'segment'
 VIF_TYPE = 'f5'
 ESD = 'esd'
 DEVICE_OWNER_LISTENER = 'network:' + 'f5listener'
+DEVICE_OWNER_LEGACY = 'network:' + 'f5lbaasv2'
 PROFILE_L4 = 'basic'
 
 OPEN = 'OPEN'

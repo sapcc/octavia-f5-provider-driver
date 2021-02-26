@@ -118,7 +118,7 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
                         "Continuing cleanup.".format(vip.port_id))
             port = None
 
-        if port and port.device_owner == constants.DEVICE_OWNER_LISTENER:
+        if port and port.device_owner in [constants.DEVICE_OWNER_LISTENER, constants.DEVICE_OWNER_LEGACY]:
             try:
                 self.neutron_client.delete_port(vip.port_id)
             except (neutron_client_exceptions.NotFound,
