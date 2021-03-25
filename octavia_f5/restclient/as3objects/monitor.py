@@ -48,7 +48,6 @@ else
     exit
 fi"""
 
-UDP_CHECK = TEMPLATE.format("nc -uzv -w1 $1 $2 >/dev/null 2>&1")
 # Source: https://devcentral.f5.com/s/articles/https-monitor-ssl-handshake
 TLS_HELLO_CHECK = TEMPLATE.format("echo 'QUIT'|openssl s_client -verify 1 -connect $node_ip:$pm_port >/dev/null 2>&1")
 
@@ -108,9 +107,9 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
         args['script'] = TLS_HELLO_CHECK
         args['receive'] = 'UP'
     elif health_monitor.type == 'UDP-CONNECT':
-        args['monitorType'] = 'external'
-        args['script'] = UDP_CHECK
-        args['receive'] = 'UP'
+        args['monitorType'] = 'udp'
+        args['receive'] = ''
+        args['send'] = ''
 
     # F5 specific monitory types
     elif health_monitor.type == 'SIP':
