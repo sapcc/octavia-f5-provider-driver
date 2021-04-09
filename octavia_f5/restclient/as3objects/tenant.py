@@ -67,7 +67,7 @@ def get_tenant(segmentation_id, loadbalancers, status, cert_manager, esd_repo):
                         # Error connecting to keystore, skip tenant update
                         raise e
 
-                    LOG.error("Could not retrieve certificate, skipping listener '%s': %s", listener.id, e)
+                    LOG.error("Could not retrieve certificate, assuming it is deleted, skipping listener '%s': %s", listener.id, e)
                     if status:
                         # Key / Container not found in keystore
                         status.set_error(listener)

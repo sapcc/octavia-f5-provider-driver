@@ -103,10 +103,14 @@ class ControllerWorker(object):
                 else:
                     ret = self.sync.tenant_update(network_id, device)
 
-                if ret:
-                    self.status.update_status(loadbalancers)
-                    for lb in loadbalancers:
-                        self._reset_in_use_quota(lb.project_id)
+                if not ret:
+                    continue
+
+                # update status of just-synced LBs
+                self.status.update_status(loadbalancers)
+                for lb in loadbalancers:
+                    self._reset_in_use_quota(lb.project_id)
+
             except Empty:
                 # Queue empty, pass
                 pass
@@ -203,6 +207,8 @@ class ControllerWorker(object):
         lbs.extend(self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_UPDATE))
+
+        # Make the Octavia health manager happy by creating DB amphora entries
         for lb in lbs:
             self.ensure_amphora_exists(lb.id)
 
@@ -218,7 +224,8 @@ class ControllerWorker(object):
         l7policies = self._l7policy_repo.get_pending_from_host(db_apis.get_session())
         lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
 
-        # Deduplicate
+        # Deduplicate into networks
+        # because each network is synced separately
         pending_networks = set([lb.vip.network_id for lb in lbs])
         for network_id in pending_networks:
             self.queue.put_nowait((network_id, None))

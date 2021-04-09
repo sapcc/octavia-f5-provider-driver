@@ -30,6 +30,7 @@ CONF = cfg.CONF
 
 
 def main():
+    """Manual syncing utility"""
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     if len(sys.argv) == 1:
         print('Error: Config file must be specified.')
