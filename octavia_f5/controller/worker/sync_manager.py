@@ -134,7 +134,7 @@ class SyncManager(object):
             # Failover to bigip which is active (if active_device == True) or passive (if active_device == False)
             active_devices = [bigip for bigip in self._bigips if bigip.is_active == active_device]
             if len(active_devices) <= 0:
-                LOG.error("Cannot failover: No device found that's in desired state.");
+                raise exceptions.FailoverException("Cannot failover: No device found that's in desired state.")
             self._bigip = next(iter(active_devices))
         LOG.info("failover() triggered, target device is %s", self._bigip.hostname)
 
