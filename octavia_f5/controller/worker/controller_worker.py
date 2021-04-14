@@ -19,21 +19,23 @@ import time
 import prometheus_client as prometheus
 import tenacity
 from futurist import periodics
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
+from requests import HTTPError
 from six.moves.queue import Empty
 from sqlalchemy.orm import exc as db_exceptions
 
+from octavia.common import clients
 from octavia.db import repositories as repo
+from octavia_f5.api.drivers.f5_driver.driver import F5ProviderDriver
 from octavia_f5.common import constants
 from octavia_f5.controller.worker import status_manager, sync_manager
 from octavia_f5.controller.worker.set_queue import SetQueue
 from octavia_f5.db import api as db_apis
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.utils import exceptions, driver_utils
-from octavia_lib.common import constants as lib_consts
-from requests import HTTPError
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -548,10 +550,116 @@ class ControllerWorker(object):
         pass
 
     def migrate_loadbalancer(self, load_balancer_id, target_host):
-        pass
+        self._migrate(load_balancer_id, None, target_host)
 
     def migrate_loadbalancers(self, source_host, target_host):
-        pass
+        self._migrate(None, source_host, target_host)
+
+    def _migrate(self, load_balancer_id, from_host, target_host):
+        """Failover a load balancer or all load balancers from a specified host.
+
+        If from_host is None, failover only load balancer specified by load_balancer_id to target_host.
+        Else failover every load balancer from from_host to target_host.
+        """
+
+        neutron_client = clients.NeutronAuth.get_neutron_client(
+            endpoint=CONF.neutron.endpoint,
+            region=CONF.neutron.region_name,
+            endpoint_type=CONF.neutron.endpoint_type,
+            service_name=CONF.neutron.service_name,
+            insecure=CONF.neutron.insecure,
+            ca_cert=CONF.neutron.ca_certificates_file
+        )
+
+        # check arguments and get load balancer(s) to failover
+        if from_host is None:
+            # if from_host is unspecified, move only this one LB
+            # TODO: Is calling get_session each time okay? Or should I store it in a variable?
+            lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id);
+            if lb.server_group_id != CONF.host:
+                return
+            if target_host is None:
+                LOG.error("Cannot move LB {}: No target host specified".format(load_balancer_id))
+                return
+            lbs = [lb]
+        elif from_host != CONF.host:
+            return # ignore requests not meant for this worker
+        elif target_host is None:
+            LOG.error("Cannot move LBs from this host: No target host specified".format(load_balancer_id))
+            return
+        else:
+            # move all load balancers from this host
+            lbs = self._loadbalancer_repo.get_all_from_host(db_apis.get_session())
+
+        # load balancers to move in lbs
+        # TODO TEMP
+        lbs = [lb for lb in lbs if lb.name is not None and '521587' in lb.name]
+
+        # create missing self IP ports
+        LOG.info("Checking self IPs...")
+
+        # find subnets that need self IPs on the target device
+        # we will need two self IP ports per subnet - One per device in the device pair
+        neutron_ports = neutron_client.list_ports()
+        selfip_ports = [port for port in neutron_ports.get('ports') if port['device_owner'] == "network:f5selfip"]
+        subnets_needing_selfips = set([lb.vip.subnet_id for lb in lbs])
+
+        # find subnets that already have self IPs on the target device
+        subnets_with_selfips = []
+        for port in selfip_ports:
+            for ip in port['fixed_ips']:
+                subnet_id = ip['subnet_id']
+                if subnet_id in subnets_needing_selfips and subnet_id not in subnets_with_selfips:
+                    subnets_with_selfips.append(subnet_id)
+
+        # find subnets that don't have self IP ports on the target device yet and create needed ports
+        for subnet in subnets_needing_selfips:
+            if subnet not in subnets_with_selfips:
+                # Create self IP port on A and B side
+                for side in ['a','b']:
+                    port_name = "local-{}{}-{}-{}.cc.{}.cloud.sap-{}".format(
+                        CONF.neutron.region_name, side, target_host, CONF.f5_agent.network_segment_physical_network,
+                        CONF.neutron.region_name, subnet.replace('_', '-'))
+                    LOG.info("Creating self IP port with name {}, binding:host_id {}".format(port_name, target_host))
+                    port = {'port': {'name': port_name,
+                                     'admin_state_up': True,
+                                     'device_owner': constants.DEVICE_OWNER_SELF_IP,
+                                     'binding:host_id': target_host,
+                                     }}
+                    neutron_client.create_port(port)
+
+        # start moving load balancers
+
+        # set new host in database
+        for lb in lbs:
+            LOG.info("LB/Amphora {}: Changing host '{}' to '{}'.".format(lb.id, lb.server_group_id, target_host))
+            self._amphora_repo.update(db_apis.get_session(), lb.id, compute_flavor=target_host)
+            self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host, provisioning_status=constants.PENDING_CREATE)
+
+        # Retrying without limit is okay, since this process is always invoked manually and thus observed by a human.
+        # When said human sees a load balancer being stuck, they can then fix it without having to restart this program.
+        @tenacity.retry()
+        def wait_for_active_lb(lb_id):
+            lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
+            assert (lb.provisioning_status == constants.ACTIVE)
+
+        # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be created
+        # before others and thus will stay dormant until this loop tends to them. That should not pose a problem however,
+        # since the old load balancers are still in place, still routing traffic.
+        for lb in lbs:
+            LOG.info("Telling worker of target host to create load balancer...")
+            F5ProviderDriver.loadbalancer_create(lb.id)
+
+            # wait
+            LOG.info("Waiting for load balancer '{}' to be created on new host '{}'...".format(lb.id, CONF.target_host))
+            wait_for_active_lb(lb.id)
+
+            # invalidate port bindings cached by hierarchical port binding driver
+            self.network_driver.invalidate_cache()
+
+            # rebind port
+            port_update = {'port': {'binding:host_id': target_host}}
+            neutron_client.update_port(lb.vip.port_id, port_update)
 
     def amphora_cert_rotation(self, amphora_id):
         pass
