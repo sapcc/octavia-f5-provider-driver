@@ -547,6 +547,12 @@ class ControllerWorker(object):
     def failover_loadbalancer(self, load_balancer_id):
         pass
 
+    def migrate_loadbalancer(self, load_balancer_id, target_host):
+        pass
+
+    def migrate_loadbalancers(self, source_host, target_host):
+        pass
+
     def amphora_cert_rotation(self, amphora_id):
         pass
 
