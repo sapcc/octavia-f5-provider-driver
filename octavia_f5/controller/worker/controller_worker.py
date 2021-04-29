@@ -27,7 +27,10 @@ from requests import HTTPError
 from six.moves.queue import Empty
 from sqlalchemy.orm import exc as db_exceptions
 
+from octavia.api.drivers import data_models as driver_dm
+from octavia.api.drivers import utils as api_driver_utils
 from octavia.common import clients
+from octavia.common import constants as api_consts
 from octavia.db import repositories as repo
 from octavia_f5.api.drivers.f5_driver.driver import F5ProviderDriver
 from octavia_f5.common import constants
@@ -591,16 +594,16 @@ class ControllerWorker(object):
             # move all load balancers from this host
             lbs = self._loadbalancer_repo.get_all_from_host(db_apis.get_session())
 
-        # load balancers to move in lbs
-        # TODO TEMP
-        lbs = [lb for lb in lbs if lb.name is not None and '521587' in lb.name]
-
         # create missing self IP ports
         LOG.info("Checking self IPs...")
 
         # find subnets that need self IPs on the target device
         # we will need two self IP ports per subnet - One per device in the device pair
-        neutron_ports = neutron_client.list_ports()
+        try:
+            neutron_ports = neutron_client.list_ports()
+        except Exception as e:
+            LOG.error("LB migration: Cannot get ports from Neutron: {}".format(e))
+            raise e
         selfip_ports = [port for port in neutron_ports.get('ports') if port['device_owner'] == "network:f5selfip"]
         subnets_needing_selfips = set([lb.vip.subnet_id for lb in lbs])
 
@@ -646,12 +649,17 @@ class ControllerWorker(object):
         # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be created
         # before others and thus will stay dormant until this loop tends to them. That should not pose a problem however,
         # since the old load balancers are still in place, still routing traffic.
+        f5pd = F5ProviderDriver()
         for lb in lbs:
-            LOG.info("Telling worker of target host to create load balancer...")
-            F5ProviderDriver.loadbalancer_create(lb.id)
+            # we must reimplement api.drivers.f5_driver.driver.F5ProviderDriver.loadbalancer_create because it selects
+            # the wrong host to schedule to and needs another LB instance object than we have
+            LOG.info("Telling worker of target host to create load balancer %s on host %s", lb.id, target_host)
+            payload = {api_consts.LOAD_BALANCER_ID: lb.id, api_consts.FLAVOR: lb.flavor_id}
+            client = f5pd.client.prepare(server=target_host)
+            client.cast({}, 'create_load_balancer', **payload) # FIXME requested route domain not found => VLAN not synced
 
             # wait
-            LOG.info("Waiting for load balancer '{}' to be created on new host '{}'...".format(lb.id, CONF.target_host))
+            LOG.info("Waiting for load balancer '{}' to be created on new host '{}'...".format(lb.id, target_host))
             wait_for_active_lb(lb.id)
 
             # invalidate port bindings cached by hierarchical port binding driver
