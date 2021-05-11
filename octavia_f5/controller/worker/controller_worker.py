@@ -588,50 +588,68 @@ class ControllerWorker(object):
         elif from_host != CONF.host:
             return # ignore requests not meant for this worker
         elif target_host is None:
-            LOG.error("Cannot move LBs from this host: No target host specified".format(load_balancer_id))
+            LOG.error("Cannot move LBs: No target host specified")
             return
         else:
             # move all load balancers from this host
             lbs = self._loadbalancer_repo.get_all_from_host(db_apis.get_session())
 
         # create missing self IP ports
-        LOG.info("Checking self IPs...")
+        LOG.info("LB migration: Creating missing self IPs, if needed")
 
-        # find subnets that need self IPs on the target device
-        # we will need two self IP ports per subnet - One per device in the device pair
+        # we need to create selfIP ports for every subnet that does not have any already on the target device
+
+        # get all ports
+        # TODO: Add filter for (e. g. for binding:host_id) to the query to make it as small as possible
         try:
             neutron_ports = neutron_client.list_ports()
         except Exception as e:
             LOG.error("LB migration: Cannot get ports from Neutron: {}".format(e))
             raise e
-        selfip_ports = [port for port in neutron_ports.get('ports') if port['device_owner'] == "network:f5selfip"]
-        subnets_needing_selfips = set([lb.vip.subnet_id for lb in lbs])
 
-        # find subnets that already have self IPs on the target device
-        subnets_with_selfips = []
-        for port in selfip_ports:
+        # filter for selfIP ports that are on target host
+        target_host_selfip_ports = [port for port in neutron_ports.get('ports')
+                        if port['device_owner'] == "network:f5selfip" and port['binding:host_id'] == target_host]
+
+        # map to subnets that have selfIP ports on target host
+        subnets_with_selfips_on_target_host = []
+        for port in target_host_selfip_ports:
             for ip in port['fixed_ips']:
                 subnet_id = ip['subnet_id']
-                if subnet_id in subnets_needing_selfips and subnet_id not in subnets_with_selfips:
-                    subnets_with_selfips.append(subnet_id)
+                if subnet_id not in subnets_with_selfips_on_target_host:
+                    subnets_with_selfips_on_target_host.append(subnet_id)
+
+        # get all subnets of load balancers to migrate
+        lb_subnets = []
+        for lb in lbs:
+            network_and_subnet = {
+                'network': lb.vip.network_id,
+                'subnet': lb.vip.subnet_id,
+            }
+            if network_and_subnet not in lb_subnets:
+                lb_subnets.append(network_and_subnet)
 
         # find subnets that don't have self IP ports on the target device yet and create needed ports
-        for subnet in subnets_needing_selfips:
-            if subnet not in subnets_with_selfips:
-                # Create self IP port on A and B side
-                for side in ['a','b']:
-                    port_name = "local-{}{}-{}-{}.cc.{}.cloud.sap-{}".format(
-                        CONF.neutron.region_name, side, target_host, CONF.f5_agent.network_segment_physical_network,
-                        CONF.neutron.region_name, subnet.replace('_', '-'))
-                    LOG.info("Creating self IP port with name {}, binding:host_id {}".format(port_name, target_host))
-                    port = {'port': {'name': port_name,
-                                     'admin_state_up': True,
-                                     'device_owner': constants.DEVICE_OWNER_SELF_IP,
-                                     'binding:host_id': target_host,
-                                     }}
-                    neutron_client.create_port(port)
+        for network_and_subnet in lb_subnets:
+            network = network_and_subnet['network']
+            subnet = network_and_subnet['subnet']
+            if subnet not in subnets_with_selfips_on_target_host:
+                # we only need to create the port for one side, f5 agent creates it for the other side
+                # TODO: Does this have to be the active side or is that irrelevant?
+                side = 'a'
+                port_name = "local-{}{}-{}-{}.cc.{}.cloud.sap-{}".format(
+                    CONF.neutron.region_name, side, target_host, CONF.networking.f5_network_segment_physical_network,
+                    CONF.neutron.region_name, subnet.replace('_', '-'))
+                LOG.info("LB migration: Creating self IP port with name {}, binding:host_id {}".format(port_name, target_host))
+                port = {'port': {'name': port_name,
+                                 'admin_state_up': True,
+                                 'device_owner': constants.DEVICE_OWNER_SELF_IP,
+                                 'binding:host_id': target_host,
+                                 'network_id': network,
+                                 }}
+                neutron_client.create_port(port)
 
-        # start moving load balancers
+        # now that all selfIP ports exist we can start moving load balancers
 
         # set new host in database
         for lb in lbs:
@@ -640,7 +658,8 @@ class ControllerWorker(object):
             self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host, provisioning_status=constants.PENDING_CREATE)
 
         # Retrying without limit is okay, since this process is always invoked manually and thus observed by a human.
-        # When said human sees a load balancer being stuck, they can then fix it without having to restart this program.
+        # When said human sees a load balancer being stuck, they can then fix it without having to invoke this
+        # migration call again
         @tenacity.retry()
         def wait_for_active_lb(lb_id):
             lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
@@ -656,17 +675,16 @@ class ControllerWorker(object):
             LOG.info("Telling worker of target host to create load balancer %s on host %s", lb.id, target_host)
             payload = {api_consts.LOAD_BALANCER_ID: lb.id, api_consts.FLAVOR: lb.flavor_id}
             client = f5pd.client.prepare(server=target_host)
-            client.cast({}, 'create_load_balancer', **payload) # FIXME requested route domain not found => VLAN not synced
+            client.cast({}, 'create_load_balancer', **payload)
 
             # wait
-            LOG.info("Waiting for load balancer '{}' to be created on new host '{}'...".format(lb.id, target_host))
+            LOG.info("LB migration: Waiting for load balancer '{}' to be created on new host '{}'...".format(lb.id, target_host))
             wait_for_active_lb(lb.id)
+            LOG.info("LB migration: Load balancer '{}' is ACTIVE on new host '{}'.".format(lb.id, target_host))
 
-            # invalidate port bindings cached by hierarchical port binding driver
-            self.network_driver.invalidate_cache()
-
-            # rebind port
+            # invalidate cache and rebind port
             port_update = {'port': {'binding:host_id': target_host}}
+            self.network_driver.invalidate_cache()
             neutron_client.update_port(lb.vip.port_id, port_update)
 
     def amphora_cert_rotation(self, amphora_id):
