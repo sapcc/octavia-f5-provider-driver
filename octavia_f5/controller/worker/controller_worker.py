@@ -573,6 +573,7 @@ class ControllerWorker(object):
             insecure=CONF.neutron.insecure,
             ca_cert=CONF.neutron.ca_certificates_file
         )
+        driver = F5ProviderDriver()
 
         # check arguments and get load balancer(s) to failover
         if from_host is None:
@@ -582,13 +583,13 @@ class ControllerWorker(object):
             if lb.server_group_id != CONF.host:
                 return
             if target_host is None:
-                LOG.error("Cannot move LB {}: No target host specified".format(load_balancer_id))
+                LOG.error("LB migration: Cannot move LB {}: No target host specified".format(load_balancer_id))
                 return
             lbs = [lb]
         elif from_host != CONF.host:
             return # ignore requests not meant for this worker
         elif target_host is None:
-            LOG.error("Cannot move LBs: No target host specified")
+            LOG.error("LB migration: Cannot move LBs: No target host specified")
             return
         else:
             # move all load balancers from this host
@@ -599,17 +600,16 @@ class ControllerWorker(object):
 
         # we need to create selfIP ports for every subnet that does not have any already on the target device
 
-        # get all ports
-        # TODO: Add filter for (e. g. for binding:host_id) to the query to make it as small as possible
+        # get all self IP ports
         try:
-            neutron_ports = neutron_client.list_ports()
+            filter = {
+                'device_owner': 'network:f5selfip',
+                'binding:host_id': target_host,
+            }
+            target_host_selfip_ports = neutron_client.list_ports(**filter).get('ports')
         except Exception as e:
             LOG.error("LB migration: Cannot get ports from Neutron: {}".format(e))
             raise e
-
-        # filter for selfIP ports that are on target host
-        target_host_selfip_ports = [port for port in neutron_ports.get('ports')
-                        if port['device_owner'] == "network:f5selfip" and port['binding:host_id'] == target_host]
 
         # map to subnets that have selfIP ports on target host
         subnets_with_selfips_on_target_host = []
@@ -652,8 +652,11 @@ class ControllerWorker(object):
         # now that all selfIP ports exist we can start moving load balancers
 
         # set new host in database
+        # We are doing this for all LBs at once _before_ their VIP ports are switched over. This is so that the
+        # worker of the target host can start working on all of them at once, else we might have to wait a long time
+        # for each LB to be synced.
         for lb in lbs:
-            LOG.info("LB/Amphora {}: Changing host '{}' to '{}'.".format(lb.id, lb.server_group_id, target_host))
+            LOG.info("LB migration: LB/Amphora {}: Changing host '{}' to '{}'.".format(lb.id, lb.server_group_id, target_host))
             self._amphora_repo.update(db_apis.get_session(), lb.id, compute_flavor=target_host)
             self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host, provisioning_status=constants.PENDING_CREATE)
 
@@ -668,24 +671,27 @@ class ControllerWorker(object):
         # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be created
         # before others and thus will stay dormant until this loop tends to them. That should not pose a problem however,
         # since the old load balancers are still in place, still routing traffic.
-        f5pd = F5ProviderDriver()
         for lb in lbs:
             # we must reimplement api.drivers.f5_driver.driver.F5ProviderDriver.loadbalancer_create because it selects
             # the wrong host to schedule to and needs another LB instance object than we have
-            LOG.info("Telling worker of target host to create load balancer %s on host %s", lb.id, target_host)
+            LOG.info("LB migration: Telling worker of target host to create load balancer {} on host {}".format(lb.id, target_host))
             payload = {api_consts.LOAD_BALANCER_ID: lb.id, api_consts.FLAVOR: lb.flavor_id}
-            client = f5pd.client.prepare(server=target_host)
+            client = driver.client.prepare(server=target_host)
             client.cast({}, 'create_load_balancer', **payload)
 
             # wait
-            LOG.info("LB migration: Waiting for load balancer '{}' to be created on new host '{}'...".format(lb.id, target_host))
+            LOG.info("LB migration: Waiting for load balancer {} to be created on new host {}...".format(lb.id, target_host))
             wait_for_active_lb(lb.id)
-            LOG.info("LB migration: Load balancer '{}' is ACTIVE on new host '{}'.".format(lb.id, target_host))
+            LOG.info("LB migration: Load balancer {} is ACTIVE on new host {}.".format(lb.id, target_host))
 
             # invalidate cache and rebind port
+            LOG.info("LB migration: Rebinding VIP port of load balancer {} to host {}".format(lb.id, target_host))
             port_update = {'port': {'binding:host_id': target_host}}
             self.network_driver.invalidate_cache()
             neutron_client.update_port(lb.vip.port_id, port_update)
+
+            # since this method can take a very long time, log when it's done
+            LOG.info("LB migration: Done migrating load balancer {}".format(lb.id))
 
     def amphora_cert_rotation(self, amphora_id):
         pass
