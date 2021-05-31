@@ -50,6 +50,7 @@ X_SSL_CLIENT_VERIFY = """when CLIENTSSL_CLIENTCERT {
     }
 }
 when HTTP_REQUEST {
+    if { [HTTP::has_responded] }{ return }
     if { [info exists verify_result] } {
         HTTP::header insert "X-SSL-Client-Verify" $verify_result
     }
@@ -58,6 +59,7 @@ X_SSL_CLIENT_HAS_CERT = """when CLIENTSSL_CLIENTCERT {
   set cert_count [SSL::cert count]
 }
 when HTTP_REQUEST {
+    if { [HTTP::has_responded] }{ return }
     if { [info exists cert_count] && $cert_count > 0 }{
         HTTP::header insert "X-SSL-CLIENT-HAS-CERT" 1
     } else {
@@ -70,6 +72,7 @@ X_SSL_CLIENT_ISSUER = """when CLIENTSSL_CLIENTCERT {
     }
 }
 when HTTP_REQUEST {
+    if { [HTTP::has_responded] }{ return }
     if { [info exists issuer] } {
         HTTP::header insert "X-SSL-Client-Issuer" $issuer
     }
@@ -80,6 +83,7 @@ X_SSL_CLIENT_DN = """when CLIENTSSL_CLIENTCERT {
     }
 }
 when HTTP_REQUEST {
+    if { [HTTP::has_responded] }{ return }
     if { [info exists subject_dn] } {
         HTTP::header insert "X-SSL-Client-DN" $subject_dn
     }
@@ -101,6 +105,7 @@ when CLIENTSSL_CLIENTCERT {
     }
 }
 when HTTP_REQUEST {
+    if { [HTTP::has_responded] }{ return }
     if { [info exists subject_cn] } {
         HTTP::header insert "X-SSL-Client-CN" [call x509CNExtract $subject_cn]
     }
@@ -111,6 +116,7 @@ X_SSL_CLIENT_SHA1 = """when CLIENTSSL_CLIENTCERT {
     }
 }
 when HTTP_REQUEST {
+    if { [HTTP::has_responded] }{ return }
     if { [info exists hash] } {
         HTTP::header insert "X-SSL-Client-SHA1" $hash
     }
@@ -121,6 +127,7 @@ X_SSL_CLIENT_NOT_BEFORE = """when CLIENTSSL_CLIENTCERT {
     }
 }
 when HTTP_REQUEST {
+    if { [HTTP::has_responded] }{ return }
     if { [info exists validity] } {
         HTTP::header insert "X-SSL-Client-Not-Before" $validity
     }
@@ -131,6 +138,7 @@ X_SSL_CLIENT_NOT_AFTER = """when CLIENTSSL_CLIENTCERT {
     }
 }
 when HTTP_REQUEST {
+    if { [HTTP::has_responded] }{ return }
     if { [info exists validity] } {
         HTTP::header insert "X-SSL-Client-Not-After" $validity
     }
