@@ -261,10 +261,6 @@ class StatusManager(object):
             listener_id = self._listener_from_path(stats['tmName'].get('description'))
             loadbalancer_id = self._loadbalancer_from_path(stats['tmName'].get('description'))
             status = constants.OPEN
-            cur_conns = stats['clientside.curConns'].get('value')
-            max_conns = stats['clientside.maxConns'].get('value')
-            if max_conns != 0 and cur_conns >= max_conns:
-                status = constants.FULL
             _get_lb_msg(loadbalancer_id)['listeners'][listener_id] = {
                 'status': status,
                 'stats': {
