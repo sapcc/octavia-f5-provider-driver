@@ -86,6 +86,7 @@ class StatusManager(object):
         LOG.info('Health Manager starting.')
         self.seq = 0
         self.amp_repo = repo.AmphoraRepository()
+        self.listener_repo = repo.ListenerRepository()
         self.amp_health_repo = repo.AmphoraHealthRepository()
         self.lb_repo = repo.LoadBalancerRepository()
         self.health_executor = futurist.ThreadPoolExecutor(
@@ -260,7 +261,18 @@ class StatusManager(object):
 
             listener_id = self._listener_from_path(stats['tmName'].get('description'))
             loadbalancer_id = self._loadbalancer_from_path(stats['tmName'].get('description'))
+
+            # check if listener is full
             status = constants.OPEN
+            with DatabaseLockSession() as session:
+                listener_entry = self.listener_repo.get(session, id=listener_id)
+                if listener_entry:
+                    max_conns = listener_entry.connection_limit
+                    cur_conns = stats['clientside.curConns'].get('value')
+                    # negative max_conns means no connection limit
+                    if max_conns >= 0 and cur_conns >= max_conns:
+                        status = constants.FULL
+
             _get_lb_msg(loadbalancer_id)['listeners'][listener_id] = {
                 'status': status,
                 'stats': {
