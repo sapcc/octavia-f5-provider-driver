@@ -574,12 +574,12 @@ class ControllerWorker(object):
             ca_cert=CONF.neutron.ca_certificates_file
         )
         driver = F5ProviderDriver()
+        db_session = db_apis.get_session()
 
         # check arguments and get load balancer(s) to failover
         if from_host is None:
             # if from_host is unspecified, move only this one LB
-            # TODO: Is calling get_session each time okay? Or should I store it in a variable?
-            lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id);
+            lb = self._loadbalancer_repo.get(db_session, id=load_balancer_id);
             if lb.server_group_id != CONF.host:
                 return
             if target_host is None:
@@ -593,7 +593,7 @@ class ControllerWorker(object):
             return
         else:
             # move all load balancers from this host
-            lbs = self._loadbalancer_repo.get_all_from_host(db_apis.get_session())
+            lbs = self._loadbalancer_repo.get_all_from_host(db_session)
 
         # create missing self IP ports
         LOG.info("LB migration: Creating missing self IPs, if needed")
@@ -617,7 +617,7 @@ class ControllerWorker(object):
             for ip in port['fixed_ips']:
                 subnet_id = ip['subnet_id']
                 if subnet_id not in subnets_with_selfips_on_target_host:
-                    subnets_with_selfips_on_target_host.append(subnet_id)
+                    subnets_with_selfips_on_target_host.append(subnet_id.replace('_', '-'))
 
         # get all subnets of load balancers to migrate
         lb_subnets = []
@@ -632,15 +632,15 @@ class ControllerWorker(object):
         # find subnets that don't have self IP ports on the target device yet and create needed ports
         for network_and_subnet in lb_subnets:
             network = network_and_subnet['network']
-            subnet = network_and_subnet['subnet']
+            subnet = network_and_subnet['subnet'].replace('_', '-')
             if subnet not in subnets_with_selfips_on_target_host:
                 # we only need to create the port for one side, f5 agent creates it for the other side
-                # TODO: Does this have to be the active side or is that irrelevant?
-                side = 'a'
-                port_name = "local-{}{}-{}-{}.cc.{}.cloud.sap-{}".format(
-                    CONF.neutron.region_name, side, target_host, CONF.networking.f5_network_segment_physical_network,
-                    CONF.neutron.region_name, subnet.replace('_', '-'))
-                LOG.info("LB migration: Creating self IP port with name {}, binding:host_id {}".format(port_name, target_host))
+                # f5_network_segment_physical_network is expected to be equal between from_host and to_host
+                port_name = "local-{}a-{}-{}.cc.{}.cloud.sap-{}".format(
+                    CONF.neutron.region_name, target_host, CONF.networking.f5_network_segment_physical_network,
+                    CONF.neutron.region_name, subnet)
+                LOG.info("LB migration: Creating self IP port with name {}, binding:host_id {}"
+                         .format(port_name, target_host))
                 port = {'port': {'name': port_name,
                                  'admin_state_up': True,
                                  'device_owner': constants.DEVICE_OWNER_SELF_IP,
@@ -657,15 +657,15 @@ class ControllerWorker(object):
         # for each LB to be synced.
         for lb in lbs:
             LOG.info("LB migration: LB/Amphora {}: Changing host '{}' to '{}'.".format(lb.id, lb.server_group_id, target_host))
-            self._amphora_repo.update(db_apis.get_session(), lb.id, compute_flavor=target_host)
-            self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host, provisioning_status=constants.PENDING_CREATE)
+            self._amphora_repo.update(db_session, lb.id, compute_flavor=target_host)
+            self._loadbalancer_repo.update(db_session, lb.id, server_group_id=target_host, provisioning_status=constants.PENDING_CREATE)
 
         # Retrying without limit is okay, since this process is always invoked manually and thus observed by a human.
         # When said human sees a load balancer being stuck, they can then fix it without having to invoke this
         # migration call again
         @tenacity.retry()
         def wait_for_active_lb(lb_id):
-            lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
+            lb = self._loadbalancer_repo.get(db_session, id=load_balancer_id)
             assert (lb.provisioning_status == constants.ACTIVE)
 
         # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be created
