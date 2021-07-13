@@ -262,16 +262,10 @@ class StatusManager(object):
             listener_id = self._listener_from_path(stats['tmName'].get('description'))
             loadbalancer_id = self._loadbalancer_from_path(stats['tmName'].get('description'))
 
-            # check if listener is full
+            # checking whether the listener is full can only be done by comparing stats['clientside.curConns'].get(
+            # 'value') to the connection_limit value of the listener DB entry. The performance penalty proved too
+            # high though, especially since there is no customer demand. Therefore we just set the status to OPEN.
             status = constants.OPEN
-            with DatabaseLockSession() as session:
-                listener_entry = self.listener_repo.get(session, id=listener_id)
-                if listener_entry:
-                    max_conns = listener_entry.connection_limit
-                    cur_conns = stats['clientside.curConns'].get('value')
-                    # negative max_conns means no connection limit
-                    if max_conns >= 0 and cur_conns >= max_conns:
-                        status = constants.FULL
 
             _get_lb_msg(loadbalancer_id)['listeners'][listener_id] = {
                 'status': status,
