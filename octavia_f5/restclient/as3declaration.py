@@ -47,7 +47,9 @@ class AS3DeclarationManager(object):
 
         for network_id, loadbalancers in tenants.items():
             # Fetch segmentation id
-            segmentation_id = self._network_driver.get_segmentation_id(network_id)
+            segmentation_id = None
+            if loadbalancers:
+                segmentation_id = self._network_driver.get_segmentation_id(network_id)
 
             # get Tenant
             name = m_tenant.get_name(network_id)

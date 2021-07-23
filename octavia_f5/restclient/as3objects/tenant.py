@@ -39,10 +39,12 @@ def get_tenant(segmentation_id, loadbalancers, status, cert_manager, esd_repo):
     if loadbalancers:
         project_id = loadbalancers[-1].project_id
 
-    tenant = as3.Tenant(
-        defaultRouteDomain=segmentation_id,
-        label='{}{}'.format(constants.PREFIX_PROJECT, project_id or 'none')
-    )
+    tenant_dict = {}
+    if segmentation_id:
+        tenant_dict['label'] = '{}{}'.format(constants.PREFIX_PROJECT, project_id or 'none')
+        tenant_dict['defaultRouteDomain'] = segmentation_id
+
+    tenant = as3.Tenant(**tenant_dict)
 
     # Skip members that re-use load balancer vips
     loadbalancer_ips = [load_balancer.vip.ip_address for load_balancer in loadbalancers
