@@ -174,3 +174,6 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
         except Exception as e:
             LOG.error('Error retrieving physical network dict for f5 network agent "%s": %s', CONF.host, e)
             raise e
+
+    def invalidate_cache(self, hard=True):
+        cache_region.invalidate(hard=hard)

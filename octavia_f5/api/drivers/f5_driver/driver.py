@@ -82,15 +82,15 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         client = self.client.prepare(server=self._get_server(loadbalancer_id))
         client.cast({}, 'failover_load_balancer', **payload)
 
-    def loadbalancer_migrate(self, loadbalancer_id, target_host):
+    def loadbalancer_reschedule(self, loadbalancer_id, target_host):
         payload = {consts.LOAD_BALANCER_ID: loadbalancer_id, 'target_host': target_host}
         client = self.client.prepare(server=self._get_server(loadbalancer_id))
-        client.cast({}, 'migrate_load_balancer', **payload)
+        client.cast({}, 'reschedule_load_balancer', **payload)
 
-    def loadbalancers_migrate(self, source_host, target_host):
+    def loadbalancers_reschedule(self, source_host, target_host):
         payload = {'source_host': source_host, 'target_host': target_host}
         client = self.client.prepare(server=source_host) # note that the user can inject arbitrary server names
-        client.cast({}, 'migrate_load_balancers', **payload)
+        client.cast({}, 'reschedule_load_balancers', **payload)
 
     def loadbalancer_update(self, old_loadbalancer, new_loadbalancer):
         lb_id = new_loadbalancer.loadbalancer_id

@@ -73,6 +73,8 @@ VIF_TYPE = 'f5'
 ESD = 'esd'
 DEVICE_OWNER_LISTENER = 'network:' + 'f5listener'
 DEVICE_OWNER_LEGACY = 'network:' + 'f5lbaasv2'
+# networking-f5 handles self IP port creation, we only need to create self IP ports when migrating LBs between devices
+DEVICE_OWNER_SELF_IP = 'network:' + 'f5selfip'
 PROFILE_L4 = 'basic'
 
 OPEN = 'OPEN'

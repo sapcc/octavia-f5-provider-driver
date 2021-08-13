@@ -1,4 +1,4 @@
-# Copyright 2019, 2020 SAP SE
+# Copyright 2019, 2020, 2021 SAP SE
 # Copyright 2015 Hewlett-Packard Development Company, L.P.
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
@@ -19,12 +19,16 @@ import time
 import prometheus_client as prometheus
 import tenacity
 from futurist import periodics
+from octavia_lib.common import constants as lib_consts
+from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
+from requests import HTTPError
 from six.moves.queue import Empty
 from sqlalchemy.orm import exc as db_exceptions
 
+import rescheduler
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
 from octavia_f5.controller.worker import status_manager, sync_manager
@@ -32,8 +36,6 @@ from octavia_f5.controller.worker.set_queue import SetQueue
 from octavia_f5.db import api as db_apis
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.utils import exceptions, driver_utils
-from octavia_lib.common import constants as lib_consts
-from requests import HTTPError
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -68,6 +70,10 @@ class ControllerWorker(object):
         self.sync = sync_manager.SyncManager(self.status, self._loadbalancer_repo)
         self.network_driver = driver_utils.get_network_driver()
         self.queue = SetQueue()
+        self.rescheduler = rescheduler.Rescheduler()
+
+        self.locks = lockutils.FairLocks()
+
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None),
              (self.full_sync_reappearing_devices, None, None),
@@ -95,13 +101,14 @@ class ControllerWorker(object):
             try:
                 self._metric_as3worker_queue.labels(octavia_host=CONF.host).set(self.queue.qsize())
                 network_id, device = self.queue.get()
-                loadbalancers = self._get_all_loadbalancer(network_id)
-                LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
-                          self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
-                if all([lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers]):
-                    ret = self.sync.tenant_delete(network_id, device)
-                else:
-                    ret = self.sync.tenant_update(network_id, device)
+                with self.locks.get('sync_lbs').write_lock():
+                    loadbalancers = self._get_all_loadbalancer(network_id)
+                    LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
+                              self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
+                    if all([lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers]):
+                        ret = self.sync.tenant_delete(network_id, device)
+                    else:
+                        ret = self.sync.tenant_update(network_id, device)
 
                 if not ret:
                     continue
@@ -547,11 +554,11 @@ class ControllerWorker(object):
     def failover_loadbalancer(self, load_balancer_id):
         pass
 
-    def migrate_loadbalancer(self, load_balancer_id, target_host):
-        pass
+    def reschedule_loadbalancer(self, load_balancer_id, target_host):
+        self.rescheduler.reschedule_loadbalancer(load_balancer_id, target_host)
 
-    def migrate_loadbalancers(self, source_host, target_host):
-        pass
+    def reschedule_loadbalancers(self, source_host, target_host):
+        self.rescheduler.reschedule_loadbalancers(source_host, target_host)
 
     def amphora_cert_rotation(self, amphora_id):
         pass
