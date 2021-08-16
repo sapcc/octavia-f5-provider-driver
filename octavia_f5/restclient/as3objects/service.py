@@ -12,21 +12,20 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia.common import exceptions
 from octavia_f5.common import constants as const
 from octavia_f5.restclient import as3classes as as3, as3types
+from octavia_f5.restclient.as3objects import application as m_app
 from octavia_f5.restclient.as3objects import certificate as m_cert
 from octavia_f5.restclient.as3objects import irule as m_irule
 from octavia_f5.restclient.as3objects import persist as m_persist
 from octavia_f5.restclient.as3objects import policy_endpoint as m_policy
 from octavia_f5.restclient.as3objects import pool as m_pool
-from octavia_f5.restclient.as3objects import pool_member as m_member
 from octavia_f5.restclient.as3objects import tls as m_tls
-from octavia_f5.restclient.as3objects import application as m_app
-from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -176,7 +175,7 @@ def get_service(listener, cert_manager, esd_repository):
                 entities.append((name, irule))
 
         # Pool member certificate handling (TLS backends)
-        if pool.tls_enabled:
+        if pool.tls_enabled and listener.protocol not in [ const.PROTOCOL_TCP, const.PROTOCOL_UDP, const.PROTOCOL_HTTPS ]:
             client_cert = None
             trust_ca = None
             crl_file = None
