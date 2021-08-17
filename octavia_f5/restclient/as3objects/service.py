@@ -175,7 +175,8 @@ def get_service(listener, cert_manager, esd_repository):
                 entities.append((name, irule))
 
         # Pool member certificate handling (TLS backends)
-        if pool.tls_enabled and listener.protocol not in [ const.PROTOCOL_TCP, const.PROTOCOL_UDP, const.PROTOCOL_HTTPS ]:
+        if pool.tls_enabled and listener.protocol in \
+                [ const.PROTOCOL_PROXY, const.PROTOCOL_HTTP, const.PROTOCOL_TERMINATED_HTTPS ]:
             client_cert = None
             trust_ca = None
             crl_file = None
