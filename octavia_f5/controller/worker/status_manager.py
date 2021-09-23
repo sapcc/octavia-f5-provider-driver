@@ -15,14 +15,16 @@
 from collections import defaultdict
 
 import tenacity
+from octavia_lib.api.drivers import driver_lib
+from octavia_lib.api.drivers import exceptions as driver_exceptions
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia.common import data_models
+from octavia.db import api as db_apis
+from octavia.db.repositories import AmphoraRepository
 from octavia_f5.utils import driver_utils as utils
-from octavia_lib.api.drivers import driver_lib
-from octavia_lib.api.drivers import exceptions as driver_exceptions
-from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -61,10 +63,8 @@ class StatusManager(object):
             return [self._status_obj(obj, lib_consts.ACTIVE)]
 
     def update_status(self, loadbalancers):
-        """Set provisioning_state of loadbalancers and all it's
-        children to ACTIVE if PENDING_UPDATE or PENDING_CREATE, else
-        DELETED for PENDING_DELETED.
-        Ignores error state.
+        """For each load balancer set the provisioning_status of it and all its children to ACTIVE if it is
+        PENDING_UPDATE or PENDING_CREATE, or to DELETED if it is PENDING_DELETE. Ignore ERROR status.
 
         :param loadbalancers: octavia loadbalancers list
         """
@@ -142,6 +142,13 @@ class StatusManager(object):
                    "%s") % e.fault_string
             LOG.error(msg)
             raise driver_exceptions.UpdateStatusError(msg)
+        finally:
+            # Update amphora to DELETED if LB is DELETED, so that they get cleaned up together
+            amp_repo = AmphoraRepository()
+            session = db_apis.get_session()
+            for lb in status['loadbalancers']:
+                if lb['provisioning_status'] == lib_consts.DELETED:
+                    amp_repo.update(session, lb['id'], status=lib_consts.DELETED, force_provisioning_status=True)
 
     @staticmethod
     def get_obj_type(obj):
