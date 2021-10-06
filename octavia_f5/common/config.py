@@ -21,6 +21,7 @@ import sys
 from oslo_config import cfg
 from oslo_log import log as logging
 
+from octavia.common import config  # noqa
 from octavia_f5.common import constants
 from octavia_lib.i18n import _
 
