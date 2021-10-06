@@ -44,7 +44,7 @@ def _handle_mutate_config(listener_proc_pid, check_proc_pid, *args, **kwargs):
 
 
 def _prepare_service(argv=None):
-    argv = sys.argv or []
+    argv = argv or []
     config.init(argv[1:])
     logging.set_defaults()
     config.setup_logging(cfg.CONF)
