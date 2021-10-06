@@ -75,11 +75,19 @@ def get_pool(pool, loadbalancer_ips, status):
             service_args['members'].append(
                 m_member.get_member(member, enable_priority_group))
 
+            # add custom member monitors
+            if pool.health_monitor and (member.monitor_address or member.monitor_port):
+                member_hm = m_monitor.get_monitor(pool.health_monitor,
+                                                  member.monitor_address,
+                                                  member.monitor_port)
+                entities.append((m_monitor.get_name(member.id), member_hm))
+
     if pool.health_monitor and not utils.pending_delete(
             pool.health_monitor):
-        hms = m_monitor.get_monitors(pool.health_monitor, pool.members)
-        entities.extend(hms)
-        service_args['monitors'] = [Pointer(use=name) for name, _ in hms]
+        #hms = m_monitor.get_monitors(pool.health_monitor, pool.members)
+        monitor_name = m_monitor.get_name(pool.health_monitor.id)
+        entities.append((monitor_name, m_monitor.get_monitor(pool.health_monitor)))
+        service_args['monitors'] = [Pointer(use=monitor_name)]
 
     entities.append((get_name(pool.id), Pool(**service_args)))
     return entities

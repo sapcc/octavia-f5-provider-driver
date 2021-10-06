@@ -15,7 +15,8 @@ import math
 
 from octavia_f5.common import constants
 from octavia_f5.restclient import as3types
-from octavia_f5.restclient.as3classes import Member
+from octavia_f5.restclient.as3classes import Member, Pointer
+from octavia_f5.restclient.as3objects import monitor as m_monitor
 
 
 def get_name(member_id):
@@ -32,6 +33,7 @@ def normalize_weight(weight):
     """
     ratio = int(math.ceil((weight / 256.) * 100.))
     return ratio
+
 
 def get_member(member, enable_priority_group):
     args = dict()
@@ -52,6 +54,10 @@ def get_member(member, enable_priority_group):
     if enable_priority_group:
         # set Priority group for normal pool to 2, backup to 1
         args['priorityGroup'] = 1 if member.backup else 2
+
+    if member.monitor_address or member.monitor_port:
+        # Add custom monitors
+        args['monitors'] = [Pointer(use=m_monitor.get_name(member.id))]
 
     args['remark'] = as3types.f5remark(member.id)
     return Member(**args)

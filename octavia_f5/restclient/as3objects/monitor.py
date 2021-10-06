@@ -56,38 +56,6 @@ def get_name(healthmonitor_id):
     return "{}{}".format(constants.PREFIX_HEALTH_MONITOR, healthmonitor_id)
 
 
-def get_monitors(health_monitor, members):
-    # Check if all members have a custom address/port, so we could just adapt the monitor
-    monitor_addresses = [member.monitor_address for member in members if member.monitor_port is not None]
-    monitor_ports = [member.monitor_port for member in members if member.monitor_port is not None]
-
-    ref_addr = None
-    ref_port = None
-    if monitor_addresses:
-        ref_addr = monitor_addresses[0]
-    if monitor_ports:
-        ref_port = monitor_ports[0]
-
-    if all(x == ref_addr for x in monitor_addresses) and all(x == ref_port for x in monitor_ports):
-        return [(get_name(health_monitor.id),
-                 get_monitor(health_monitor, ref_addr, ref_port))]
-
-    # Create the standard health monitor without custom addresses/ports
-    entities = [(get_name(health_monitor.id), get_monitor(health_monitor))]
-
-    # Create additional custom health monitors with custom addresses/ports
-    for member in members:
-        # Custom member address
-        if not utils.pending_delete(member) and (member.monitor_address or member.monitor_port):
-            member_hm = get_monitor(health_monitor,
-                                    member.monitor_address,
-                                    member.monitor_port)
-            name = get_name(member.id)
-            entities.append((name, member_hm))
-
-    return entities
-
-
 def get_monitor(health_monitor, target_address=None, target_port=None):
     args = dict()
 
