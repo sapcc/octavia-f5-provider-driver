@@ -73,7 +73,7 @@ def get_pool(pool, loadbalancer_ips, status):
                 continue
 
             service_args['members'].append(
-                m_member.get_member(member, enable_priority_group))
+                m_member.get_member(member, enable_priority_group, pool.health_monitor))
 
             # add custom member monitors
             if pool.health_monitor and (member.monitor_address or member.monitor_port):

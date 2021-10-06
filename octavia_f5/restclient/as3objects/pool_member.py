@@ -35,7 +35,7 @@ def normalize_weight(weight):
     return ratio
 
 
-def get_member(member, enable_priority_group):
+def get_member(member, enable_priority_group, with_monitors):
     args = dict()
     args['servicePort'] = member.protocol_port
     args['serverAddresses'] = [member.ip_address]
@@ -55,7 +55,7 @@ def get_member(member, enable_priority_group):
         # set Priority group for normal pool to 2, backup to 1
         args['priorityGroup'] = 1 if member.backup else 2
 
-    if member.monitor_address or member.monitor_port:
+    if with_monitors and (member.monitor_address or member.monitor_port):
         # Add custom monitors
         args['monitors'] = [Pointer(use=m_monitor.get_name(member.id))]
 
