@@ -34,7 +34,8 @@ class StatusManager(object):
     def __init__(self):
         self._octavia_driver_lib = driver_lib.DriverLibrary(
             status_socket=CONF.driver_agent.status_socket_path,
-            stats_socket=CONF.driver_agent.stats_socket_path
+            stats_socket=CONF.driver_agent.stats_socket_path,
+            get_socket=CONF.driver_agent.get_socket_path
         )
 
     def status_dict(self, obj, cascade=False):
