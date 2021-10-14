@@ -33,18 +33,20 @@ LOG = logging.getLogger(__name__)
 class StatusManager(object):
 
     def __init__(self):
-        # On Stein we don't have the get_socket option yet, so just pass None, it'll be ignored.
-        get_socket = None
+        # On Stein we don't have the get_socket option yet. We can't just pass None though, because while
+        # DriverLibrary.__init__() doesn't have a problem with it due to taking **kwargs, it passes **kwargs to its
+        # super class, which is object, which does not take any arguments...
         try:
-            get_socket = CONF.driver_agent.get_socket_paths
+            self._octavia_driver_lib = driver_lib.DriverLibrary(
+                status_socket=CONF.driver_agent.status_socket_path,
+                stats_socket=CONF.driver_agent.stats_socket_path,
+                get_socket=CONF.driver_agent.get_socket_paths,
+            )
         except cfg.NoSuchOptError:
-            pass
-
-        self._octavia_driver_lib = driver_lib.DriverLibrary(
-            status_socket=CONF.driver_agent.status_socket_path,
-            stats_socket=CONF.driver_agent.stats_socket_path,
-            get_socket=get_socket
-        )
+            self._octavia_driver_lib = driver_lib.DriverLibrary(
+                status_socket=CONF.driver_agent.status_socket_path,
+                stats_socket=CONF.driver_agent.stats_socket_path,
+            )
 
     def status_dict(self, obj, cascade=False):
         """ Returns status dict for octavia object,
