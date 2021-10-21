@@ -84,7 +84,6 @@ def get_pool(pool, loadbalancer_ips, status):
 
     if pool.health_monitor and not utils.pending_delete(
             pool.health_monitor):
-        #hms = m_monitor.get_monitors(pool.health_monitor, pool.members)
         monitor_name = m_monitor.get_name(pool.health_monitor.id)
         entities.append((monitor_name, m_monitor.get_monitor(pool.health_monitor)))
         service_args['monitors'] = [Pointer(use=monitor_name)]

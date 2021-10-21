@@ -52,6 +52,7 @@ def _prepare_service(argv=None):
 
 
 def main():
+    logging.register_options(cfg.CONF)
     _prepare_service(sys.argv)
     gmr.TextGuruMeditation.setup_autorun(version)
     sm = status_manager.StatusManager()
