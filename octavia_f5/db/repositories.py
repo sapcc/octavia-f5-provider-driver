@@ -91,6 +91,7 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
 
         :param session: A Sql Alchemy database session.
         """
+        # FIXME logical error: LBs are only scheduled to where LBs already exist
         # Get possible candidates subquery first
         possible_candidates = session.query(models.Amphora.compute_flavor)
         possible_candidates = possible_candidates.filter_by(
