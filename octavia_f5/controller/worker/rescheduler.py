@@ -163,7 +163,7 @@ class Rescheduler(object):
             # migration call again
             @tenacity.retry()
             def wait_for_active_lb(lb_id):
-                lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
+                lb = self._loadbalancer_repo.get(db_apis.get_session(), id=lb_id)
                 assert (lb.provisioning_status == constants.ACTIVE)
 
             # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be created
