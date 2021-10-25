@@ -51,44 +51,47 @@ class Rescheduler(object):
 
     def reschedule_loadbalancer(self, load_balancer_id, target_host):
         """Fail over one single load balancer from one host to another"""
-        self._reschedule(load_balancer_id, None, target_host)
+
+        load_balancer = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
+        # silently ignore LBs from other hosts
+        if load_balancer.server_group_id != CONF.host:
+            return
+
+        self._reschedule([load_balancer], target_host)
 
     def reschedule_loadbalancers(self, source_host, target_host):
         """Fail over all load balancers from one host to another"""
-        # TODO collect LBs here
-        self._reschedule(None, source_host, target_host)
+        load_balancers = self._loadbalancer_repo.get_all_from_host(db_apis.get_session())
 
-    # TODO Make first arg list of LB IDs, move collection of LB IDs out of this function
-    def _reschedule(self, load_balancer_id, from_host, target_host):
+        # silently ignore LBs if none of them are assigned to this host
+        responsible_for_none = all([lb.server_group_id != CONF.host for lb in load_balancers])
+        if responsible_for_none:
+            return
+
+        # TODO Check if this is even necessary. For now I want to make sure to avoice race conditions etc.
+        responsible_for_all = all([lb.server_group_id == CONF.host for lb in load_balancers])
+        if not responsible_for_all:
+            LOG.error("This worker is responsible for some load balancers that have to be rescheduled, bot not all."
+                      + "Please only reschedule load balancers from one host at a time.")
+            return
+
+        self._reschedule(load_balancers, target_host)
+
+    def _reschedule(self, load_balancers, target_host):
         """Failover a load balancer or all load balancers from a specified host.
 
         If from_host is None, failover only load balancer specified by load_balancer_id to target_host.
         Else failover every load balancer from from_host to target_host.
         """
 
-        # check arguments and get load balancer(s) to failover
-        if from_host is None:
-            # if from_host is unspecified, move only this one LB
-            lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
-            if lb.server_group_id != CONF.host:
-                return
-            if target_host is None:
-                LOG.error("LB migration: Cannot move LB {}: No target host specified".format(load_balancer_id))
-                return
-            lbs = [lb]
-        elif from_host != CONF.host:
-            return # ignore requests not meant for this worker
-        elif target_host is None:
-            LOG.error("LB migration: Cannot move LBs: No target host specified")
+        # check target host
+        if target_host is None:
+            LOG.error("LB migration: Cannot move load balancer(s): No target host specified")
             return
-        else:
-            # move all load balancers from this host
-            lbs = self._loadbalancer_repo.get_all_from_host(db_apis.get_session())
 
         # create missing self IP ports
-        LOG.info("LB migration: Creating missing self IPs, if needed")
-
         # we need to create selfIP ports for every subnet that does not have any already on the target device
+        LOG.info("LB migration: Creating missing self IPs, if needed")
 
         # get all self IP ports
         try:
@@ -111,7 +114,7 @@ class Rescheduler(object):
 
         # get all subnets of load balancers to migrate
         lb_subnets = []
-        for lb in lbs:
+        for lb in load_balancers:
             lb_networking = {
                 'project': lb.project_id,
                 'network': lb.vip.network_id,
@@ -150,7 +153,7 @@ class Rescheduler(object):
             # We are doing this for all LBs at once _before_ their VIP ports are switched over. This is so that the
             # worker of the target host can start working on all of them at once, else we might have to wait a long time
             # for each LB to be synced.
-            for lb in lbs:
+            for lb in load_balancers:
                 LOG.info("LB migration: LB/Amphora {}: Changing host '{}' to '{}'.".format(lb.id, lb.server_group_id, target_host))
                 self._amphora_repo.update(db_apis.get_session(), lb.id, compute_flavor=target_host)
                 self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host, provisioning_status=constants.PENDING_CREATE)
@@ -166,7 +169,7 @@ class Rescheduler(object):
             # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be created
             # before others and thus will stay dormant until this loop tends to them. That should not pose a problem however,
             # since the old load balancers are still in place, still routing traffic.
-            for lb in lbs:
+            for lb in load_balancers:
                 # we must reimplement api.drivers.f5_driver.driver.F5ProviderDriver.loadbalancer_create because it selects
                 # the wrong host to schedule to and needs another LB instance object than we have
                 LOG.info("LB migration: Telling worker of target host to create load balancer {} on host {}".format(lb.id, target_host))
