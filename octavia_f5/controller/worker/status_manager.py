@@ -40,9 +40,11 @@ class StatusManager(object):
             self._octavia_driver_lib = driver_lib.DriverLibrary(
                 status_socket=CONF.driver_agent.status_socket_path,
                 stats_socket=CONF.driver_agent.stats_socket_path,
-                get_socket=CONF.driver_agent.get_socket_paths,
+                get_socket=CONF.driver_agent.get_socket_path,
             )
-        except cfg.NoSuchOptError:
+        except cfg.NoSuchOptError as e:
+            if e.opt_name != 'get_socket_path':
+                raise e
             self._octavia_driver_lib = driver_lib.DriverLibrary(
                 status_socket=CONF.driver_agent.status_socket_path,
                 stats_socket=CONF.driver_agent.stats_socket_path,
