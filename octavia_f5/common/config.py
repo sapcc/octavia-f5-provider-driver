@@ -118,6 +118,9 @@ f5_agent_opts = [
                        "lose the configuration from memory")),
     cfg.BoolOpt('unsafe_mode', default=False,
                 help=_("Use unsafe mode for posting AS3 declarations.")),
+    cfg.ListOpt('valid_hosts', required=True,
+                help=_("List of valid F5 pair names that can be used as target hosts when rescheduling load "
+                       "balancers. They have to be the same value as CONF.host on the workers.")),
 ]
 
 f5_tls_shared = {

@@ -71,9 +71,14 @@ class Rescheduler(object):
         Use reschedule_loadbalancers if you want to reschedule multiple LBs from the same host.
         """
 
-        # check target host
-        if target_host is None:
-            LOG.error("LB migration: Cannot move load balancer(s): No target host specified")
+        # check arguments
+        if len(load_balancers) == 0:
+            LOG.error("Cannot reschedule load balancer(s): No load balancers specified")
+            return
+        valid_hosts = CONF.f5_agent.valid_hosts
+        if target_host not in valid_hosts:
+            LOG.error("Cannot reschedule load balancer(s): Not a valid host: {}. Valid hosts are: {}"
+                      .format(target_host, valid_hosts.join(' ')))
             return
 
         # create missing self IP ports
