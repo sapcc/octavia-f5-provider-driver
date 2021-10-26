@@ -557,8 +557,8 @@ class ControllerWorker(object):
     def reschedule_loadbalancer(self, load_balancer_id, target_host):
         self.rescheduler.reschedule_loadbalancer(load_balancer_id, target_host)
 
-    def reschedule_loadbalancers(self, source_host, target_host):
-        self.rescheduler.reschedule_loadbalancers(source_host, target_host)
+    def reschedule_loadbalancers(self, target_host):
+        self.rescheduler.reschedule_loadbalancers(target_host)
 
     def amphora_cert_rotation(self, amphora_id):
         pass

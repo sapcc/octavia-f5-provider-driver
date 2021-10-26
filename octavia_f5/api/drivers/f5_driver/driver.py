@@ -88,7 +88,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         client.cast({}, 'reschedule_load_balancer', **payload)
 
     def loadbalancers_reschedule(self, source_host, target_host):
-        payload = {'source_host': source_host, 'target_host': target_host}
+        payload = {'target_host': target_host}
         client = self.client.prepare(server=source_host) # note that the user can inject arbitrary server names
         client.cast({}, 'reschedule_load_balancers', **payload)
 

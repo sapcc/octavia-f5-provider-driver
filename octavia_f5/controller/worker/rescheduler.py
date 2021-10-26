@@ -59,26 +59,18 @@ class Rescheduler(object):
 
         self._reschedule([load_balancer], target_host)
 
-    def reschedule_loadbalancers(self, source_host, target_host):
-        """Reschedule all load balancers from one host (source_host) to another (target_host)"""
-        load_balancers = self._loadbalancer_repo.get_all_from_host(db_apis.get_session(), host=source_host)
+    def reschedule_loadbalancers(self, target_host):
+        """Reschedule all load balancers from this host to target_host."""
 
-        # silently ignore LBs if none of them are assigned to this host
-        responsible_for_none = all([lb.server_group_id != CONF.host for lb in load_balancers])
-        if responsible_for_none:
-            return
-
-        # TODO Check if this is even necessary. For now I want to make sure to avoice race conditions etc.
-        responsible_for_all = all([lb.server_group_id == CONF.host for lb in load_balancers])
-        if not responsible_for_all:
-            LOG.error("This worker is responsible for some load balancers that have to be rescheduled, bot not all."
-                      + "Please only reschedule load balancers from one host at a time.")
-            return
-
+        load_balancers = self._loadbalancer_repo.get_all_from_host(db_apis.get_session())
         self._reschedule(load_balancers, target_host)
 
     def _reschedule(self, load_balancers, target_host):
-        """Reschedule all load balancers in list load_balancers to new host target_host."""
+        """Reschedule all load balancers in list load_balancers to new host target_host.
+
+        This is an internal function. It does not check whether the LBs are all on the same host.
+        Use reschedule_loadbalancers if you want to reschedule multiple LBs from the same host.
+        """
 
         # check target host
         if target_host is None:
