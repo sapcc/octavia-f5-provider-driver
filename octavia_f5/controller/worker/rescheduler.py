@@ -199,17 +199,3 @@ class Rescheduler(object):
         # TODO delete LB on old device
 
         LOG.info("LB migration: Done. Sync lock released.")
-
-    def amphora_cert_rotation(self, amphora_id):
-        pass
-
-    def update_amphora_agent_config(self, amphora_id):
-        pass
-
-    def ensure_host_set(self, loadbalancer):
-        """Assigns the current host to loadbalancer by writing
-        it into server_group_id column of loadbalancer table."""
-        if CONF.host[:36] != loadbalancer.server_group_id:
-            self._loadbalancer_repo.update(db_apis.get_session(),
-                                           id=loadbalancer.id,
-                                           server_group_id=CONF.host[:36])
