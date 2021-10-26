@@ -104,13 +104,6 @@ class Rescheduler(object):
                 self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host,
                                                provisioning_status=constants.PENDING_CREATE)
 
-            # Retrying without limit is okay, since this process is always invoked manually and thus observed by a
-            # human. When said human sees a load balancer being stuck, they can then fix it without having to invoke
-            # this rescheduling call again
-            @tenacity.retry()
-            def wait_for_active_lb(lb_id):
-                lb = self._loadbalancer_repo.get(db_apis.get_session(), id=lb_id)
-                assert (lb.provisioning_status == constants.ACTIVE)
 
             # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be
             # created before others and thus will stay dormant until this loop tends to them. That should not pose a
@@ -125,9 +118,9 @@ class Rescheduler(object):
                 client.cast({}, 'create_load_balancer', **payload)
 
                 # wait
-                LOG.info("Waiting for load balancer {} to be created on new host {}..."
-                         .format(lb.id, target_host))
-                wait_for_active_lb(lb.id)
+                # TODO wait asynchronously
+                LOG.info("Waiting for load balancer {} to be created on new host {}...".format(lb.id, target_host))
+                self._wait_for_active_lb(lb.id)
                 LOG.info("Load balancer {} is ACTIVE on new host {}.".format(lb.id, target_host))
 
                 # invalidate cache and rebind port
@@ -215,3 +208,14 @@ class Rescheduler(object):
                              'project_id': lb_networking['project'],
                              }}
             self.neutron_client.create_port(port)
+
+    @tenacity.retry()
+    def _wait_for_active_lb(self, load_balancer_id):
+        """Wait until the load balancer gets into state ACTIVE.
+
+        Retrying without limit is okay, since this process is always invoked manually and thus observed by a human.
+        When said human sees a load balancer being stuck, they can then fix it without having to invoke this
+        rescheduling call again.
+        """
+        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
+        assert (lb.provisioning_status == constants.ACTIVE)
