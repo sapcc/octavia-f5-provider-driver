@@ -89,25 +89,26 @@ class Rescheduler(object):
         lb_networks = self._get_network_components_of_lbs(load_balancers)
         self._create_missing_selfip_ports_on_host(target_host, lb_networks, subnets_with_selfips_on_target_host)
 
-        # now that all selfIP ports exist we can start moving load balancers
+        # now that all selfIP ports exist we can start rescheduling load balancers
         LOG.info("Acquiring sync lock")
         with self.locks.get('sync_lbs').write_lock():
 
-            # set new host in database
+
+            # PASS 1: Set new host in database (amphora table and load_balancer table)
             # We are doing this for all LBs at once _before_ their VIP ports are switched over. This is so that the
-            # worker of the target host can start working on all of them at once, else we might have to wait a long time
-            # for each LB to be synced.
+            # worker of the target host can start working on all of them at once, else we might have to wait a long
+            # time for each LB to be synced.
             for lb in load_balancers:
-                LOG.info("LB/Amphora {}: Changing host '{}' to '{}'."
-                         .format(lb.id, lb.server_group_id, target_host))
+                LOG.info("LB/Amphora {}: Changing host '{}' to '{}'.".format(lb.id, lb.server_group_id, target_host))
                 self._amphora_repo.update(db_apis.get_session(), lb.id, compute_flavor=target_host)
                 self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host,
                                                provisioning_status=constants.PENDING_CREATE)
 
 
-            # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be
-            # created before others and thus will stay dormant until this loop tends to them. That should not pose a
-            # problem however, since the old load balancers are still in place, still routing traffic.
+            # PASS 2: Make target workers create the LBs
+            # Note that some load balancers will be created before others and thus will stay dormant until the third
+            # pass loop tends to them. That should not pose a problem however, since the old load balancers are still
+            # in place on the F5s, still routing traffic.
             for lb in load_balancers:
                 # we must reimplement api.drivers.f5_driver.driver.F5ProviderDriver.loadbalancer_create because it
                 # selects the wrong host to schedule to and needs another LB instance object than we have
@@ -117,13 +118,15 @@ class Rescheduler(object):
                 client = self.driver.client.prepare(server=target_host)
                 client.cast({}, 'create_load_balancer', **payload)
 
-                # wait
-                # TODO wait asynchronously
+
+            # PASS 3: Wait for each LB to finish, then rebind its VIP port
+            for lb in load_balancers:
+                # TODO wait and rebind asynchronously (start a thread for each LB, if that's not too many threads...)
                 LOG.info("Waiting for load balancer {} to be created on new host {}...".format(lb.id, target_host))
                 self._wait_for_active_lb(lb.id)
                 LOG.info("Load balancer {} is ACTIVE on new host {}.".format(lb.id, target_host))
 
-                # invalidate cache and rebind port
+                # invalidate scheduling cache and rebind VIP port
                 LOG.info("Rebinding VIP port of load balancer {} to host {}".format(lb.id, target_host))
                 port_update = {'port': {'binding:host_id': target_host}}
                 self.network_driver.invalidate_cache()
