@@ -78,7 +78,7 @@ class Rescheduler(object):
 
         # create missing self IP ports
         # we need to create selfIP ports for every subnet that does not have any already on the target device
-        LOG.info("LB migration: Creating missing self IPs, if needed")
+        LOG.info("Creating missing self IPs, if needed")
 
         # get all self IP ports
         try:
@@ -88,7 +88,7 @@ class Rescheduler(object):
             }
             target_host_selfip_ports = self.neutron_client.list_ports(**query_filter).get('ports')
         except Exception as e:
-            LOG.error("LB migration: Cannot get ports from Neutron: {}".format(e))
+            LOG.error("Cannot get ports from Neutron: {}".format(e))
             raise e
 
         # map to subnets that have selfIP ports on target host
@@ -120,7 +120,7 @@ class Rescheduler(object):
             if subnet not in subnets_with_selfips_on_target_host:
                 # we only need to create the port for one side, f5 agent creates it for the other side
                 port_name = "local-{}-{}".format(target_host_domain, subnet)
-                LOG.info("LB migration: Creating self IP port with name {}, binding:host_id {}"
+                LOG.info("Creating self IP port with name {}, binding:host_id {}"
                          .format(port_name, target_host))
                 port = {'port': {'name': port_name,
                                  'admin_state_up': False, # SelfIP port will be activated later
@@ -133,7 +133,7 @@ class Rescheduler(object):
                 self.neutron_client.create_port(port)
 
         # now that all selfIP ports exist we can start moving load balancers
-        LOG.info("LB migration: Acquiring sync lock")
+        LOG.info("Acquiring sync lock")
         with self.locks.get('sync_lbs').write_lock():
 
             # set new host in database
@@ -141,7 +141,7 @@ class Rescheduler(object):
             # worker of the target host can start working on all of them at once, else we might have to wait a long time
             # for each LB to be synced.
             for lb in load_balancers:
-                LOG.info("LB migration: LB/Amphora {}: Changing host '{}' to '{}'."
+                LOG.info("LB/Amphora {}: Changing host '{}' to '{}'."
                          .format(lb.id, lb.server_group_id, target_host))
                 self._amphora_repo.update(db_apis.get_session(), lb.id, compute_flavor=target_host)
                 self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host,
@@ -149,7 +149,7 @@ class Rescheduler(object):
 
             # Retrying without limit is okay, since this process is always invoked manually and thus observed by a
             # human. When said human sees a load balancer being stuck, they can then fix it without having to invoke
-            # this migration call again
+            # this rescheduling call again
             @tenacity.retry()
             def wait_for_active_lb(lb_id):
                 lb = self._loadbalancer_repo.get(db_apis.get_session(), id=lb_id)
@@ -161,28 +161,28 @@ class Rescheduler(object):
             for lb in load_balancers:
                 # we must reimplement api.drivers.f5_driver.driver.F5ProviderDriver.loadbalancer_create because it
                 # selects the wrong host to schedule to and needs another LB instance object than we have
-                LOG.info("LB migration: Telling worker of target host to create load balancer {} on host {}"
+                LOG.info("Telling worker of target host to create load balancer {} on host {}"
                          .format(lb.id, target_host))
                 payload = {api_consts.LOAD_BALANCER_ID: lb.id, api_consts.FLAVOR: lb.flavor_id}
                 client = self.driver.client.prepare(server=target_host)
                 client.cast({}, 'create_load_balancer', **payload)
 
                 # wait
-                LOG.info("LB migration: Waiting for load balancer {} to be created on new host {}..."
+                LOG.info("Waiting for load balancer {} to be created on new host {}..."
                          .format(lb.id, target_host))
                 wait_for_active_lb(lb.id)
-                LOG.info("LB migration: Load balancer {} is ACTIVE on new host {}.".format(lb.id, target_host))
+                LOG.info("Load balancer {} is ACTIVE on new host {}.".format(lb.id, target_host))
 
                 # invalidate cache and rebind port
-                LOG.info("LB migration: Rebinding VIP port of load balancer {} to host {}".format(lb.id, target_host))
+                LOG.info("Rebinding VIP port of load balancer {} to host {}".format(lb.id, target_host))
                 port_update = {'port': {'binding:host_id': target_host}}
                 self.network_driver.invalidate_cache()
                 self.neutron_client.update_port(lb.vip.port_id, port_update)
 
                 # since this method can take a very long time, log when it's done
-                LOG.info("LB migration: Done migrating load balancer {}".format(lb.id))
+                LOG.info("Done migrating load balancer {}".format(lb.id))
 
         # TODO mark created self IP ports as admin_state_up:True
         # TODO delete LB on old device
 
-        LOG.info("LB migration: Done. Sync lock released.")
+        LOG.info("Done. Sync lock released.")
