@@ -95,11 +95,11 @@ class Rescheduler(object):
 
         # get all self IP ports
         try:
-            filter = {
+            query_filter = {
                 'device_owner': 'network:f5selfip',
                 'binding:host_id': target_host,
             }
-            target_host_selfip_ports = self.neutron_client.list_ports(**filter).get('ports')
+            target_host_selfip_ports = self.neutron_client.list_ports(**query_filter).get('ports')
         except Exception as e:
             LOG.error("LB migration: Cannot get ports from Neutron: {}".format(e))
             raise e
@@ -154,31 +154,35 @@ class Rescheduler(object):
             # worker of the target host can start working on all of them at once, else we might have to wait a long time
             # for each LB to be synced.
             for lb in load_balancers:
-                LOG.info("LB migration: LB/Amphora {}: Changing host '{}' to '{}'.".format(lb.id, lb.server_group_id, target_host))
+                LOG.info("LB migration: LB/Amphora {}: Changing host '{}' to '{}'."
+                         .format(lb.id, lb.server_group_id, target_host))
                 self._amphora_repo.update(db_apis.get_session(), lb.id, compute_flavor=target_host)
-                self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host, provisioning_status=constants.PENDING_CREATE)
+                self._loadbalancer_repo.update(db_apis.get_session(), lb.id, server_group_id=target_host,
+                                               provisioning_status=constants.PENDING_CREATE)
 
-            # Retrying without limit is okay, since this process is always invoked manually and thus observed by a human.
-            # When said human sees a load balancer being stuck, they can then fix it without having to invoke this
-            # migration call again
+            # Retrying without limit is okay, since this process is always invoked manually and thus observed by a
+            # human. When said human sees a load balancer being stuck, they can then fix it without having to invoke
+            # this migration call again
             @tenacity.retry()
             def wait_for_active_lb(lb_id):
                 lb = self._loadbalancer_repo.get(db_apis.get_session(), id=lb_id)
                 assert (lb.provisioning_status == constants.ACTIVE)
 
-            # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be created
-            # before others and thus will stay dormant until this loop tends to them. That should not pose a problem however,
-            # since the old load balancers are still in place, still routing traffic.
+            # Wait for load balancers to be created, then rebind their port. Note that some load balancers will be
+            # created before others and thus will stay dormant until this loop tends to them. That should not pose a
+            # problem however, since the old load balancers are still in place, still routing traffic.
             for lb in load_balancers:
-                # we must reimplement api.drivers.f5_driver.driver.F5ProviderDriver.loadbalancer_create because it selects
-                # the wrong host to schedule to and needs another LB instance object than we have
-                LOG.info("LB migration: Telling worker of target host to create load balancer {} on host {}".format(lb.id, target_host))
+                # we must reimplement api.drivers.f5_driver.driver.F5ProviderDriver.loadbalancer_create because it
+                # selects the wrong host to schedule to and needs another LB instance object than we have
+                LOG.info("LB migration: Telling worker of target host to create load balancer {} on host {}"
+                         .format(lb.id, target_host))
                 payload = {api_consts.LOAD_BALANCER_ID: lb.id, api_consts.FLAVOR: lb.flavor_id}
                 client = self.driver.client.prepare(server=target_host)
                 client.cast({}, 'create_load_balancer', **payload)
 
                 # wait
-                LOG.info("LB migration: Waiting for load balancer {} to be created on new host {}...".format(lb.id, target_host))
+                LOG.info("LB migration: Waiting for load balancer {} to be created on new host {}..."
+                         .format(lb.id, target_host))
                 wait_for_active_lb(lb.id)
                 LOG.info("LB migration: Load balancer {} is ACTIVE on new host {}.".format(lb.id, target_host))
 
