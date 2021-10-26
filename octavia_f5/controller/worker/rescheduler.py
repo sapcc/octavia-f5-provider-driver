@@ -82,60 +82,12 @@ class Rescheduler(object):
             return
 
         # create missing self IP ports
-        # we need to create selfIP ports for every subnet that does not have any already on the target device
+        # We need to create selfIP ports for every subnet that does not have any already on the target device.
+        # The ports will be activated later.
         LOG.info("Creating missing self IPs, if needed")
-
-        # get all self IP ports
-        try:
-            query_filter = {
-                'device_owner': 'network:f5selfip',
-                'binding:host_id': target_host,
-            }
-            target_host_selfip_ports = self.neutron_client.list_ports(**query_filter).get('ports')
-        except Exception as e:
-            LOG.error("Cannot get ports from Neutron: {}".format(e))
-            raise e
-
-        # map to subnets that have selfIP ports on target host
-        subnets_with_selfips_on_target_host = []
-        for port in target_host_selfip_ports:
-            for ip in port['fixed_ips']:
-                subnet_id = ip['subnet_id']
-                if subnet_id not in subnets_with_selfips_on_target_host:
-                    subnets_with_selfips_on_target_host.append(subnet_id.replace('_', '-'))
-
-        # get all subnets of load balancers to migrate
-        lb_subnets = []
-        for lb in load_balancers:
-            lb_networking = {
-                'project': lb.project_id,
-                'network': lb.vip.network_id,
-                'subnet': lb.vip.subnet_id,
-            }
-            if lb_networking not in lb_subnets:
-                lb_subnets.append(lb_networking)
-
-        # due to unreliable naming conventions we derive the target host name directly from the current one
-        source_host_domain = parse.urlparse(CONF.f5_agent.bigip_urls[0]).hostname
-        target_host_domain = source_host_domain.replace(CONF.host, target_host)
-
-        # find subnets that don't have self IP ports on the target device yet and create needed ports
-        for lb_networking in lb_subnets:
-            subnet = lb_networking['subnet'].replace('_', '-')
-            if subnet not in subnets_with_selfips_on_target_host:
-                # we only need to create the port for one side, f5 agent creates it for the other side
-                port_name = "local-{}-{}".format(target_host_domain, subnet)
-                LOG.info("Creating self IP port with name {}, binding:host_id {}"
-                         .format(port_name, target_host))
-                port = {'port': {'name': port_name,
-                                 'admin_state_up': False, # SelfIP port will be activated later
-                                 'device_owner': constants.DEVICE_OWNER_SELF_IP,
-                                 'binding:host_id': target_host,
-                                 'network_id': lb_networking['network'],
-                                 'description': target_host_domain,
-                                 'project_id': lb_networking['project'],
-                                 }}
-                self.neutron_client.create_port(port)
+        subnets_with_selfips_on_target_host = self._get_subnets_with_selfips_on_host(target_host)
+        lb_networks = self._get_network_components_of_lbs(load_balancers)
+        self._create_missing_selfip_ports_on_host(target_host, lb_networks, subnets_with_selfips_on_target_host)
 
         # now that all selfIP ports exist we can start moving load balancers
         LOG.info("Acquiring sync lock")
@@ -191,3 +143,75 @@ class Rescheduler(object):
         # TODO delete LB on old device
 
         LOG.info("Done. Sync lock released.")
+
+    def _get_subnets_with_selfips_on_host(self, host):
+        """Get all self IP ports on host. Then map them to their subnets and return a list of those."""
+
+        # Get all self IP ports on host
+        try:
+            query_filter = {
+                'device_owner': 'network:f5selfip',
+                'binding:host_id': host,
+            }
+            target_host_selfip_ports = self.neutron_client.list_ports(**query_filter).get('ports')
+        except Exception as e:
+            LOG.error("Cannot get ports from Neutron: {}".format(e))
+            raise e
+
+        # map to subnets that have selfIP ports on target host
+        subnets_with_selfips_on_target_host = []
+        for port in target_host_selfip_ports:
+            for ip in port['fixed_ips']:
+                subnet_id = ip['subnet_id']
+                if subnet_id not in subnets_with_selfips_on_target_host:
+                    subnets_with_selfips_on_target_host.append(subnet_id.replace('_', '-'))
+
+        return subnets_with_selfips_on_target_host
+
+    def _get_network_components_of_lbs(self, load_balancers):
+        """Deduplicate a list of load balancers to a list of their network components, that is project, network,
+        and subnet. """
+
+        lb_subnets = []
+        for lb in load_balancers:
+            lb_networking = {
+                'project': lb.project_id,
+                'network': lb.vip.network_id,
+                'subnet': lb.vip.subnet_id,
+            }
+            if lb_networking not in lb_subnets:
+                lb_subnets.append(lb_networking)
+
+        return lb_subnets
+
+    def _get_target_host_name(self, target_host):
+        """Return the hostname of the target host.
+
+        Due to unreliable naming conventions we have to derive the target host name from the current one.
+        """
+
+        current_host_domain = parse.urlparse(CONF.f5_agent.bigip_urls[0]).hostname
+        return current_host_domain.replace(CONF.host, target_host)
+
+    def _create_missing_selfip_ports_on_host(self, host, lb_networks, skip_subnets, activate_ports_now=False):
+        """For every subnet in lb_networks that doesn't appear in satisfied_subnets, create them."""
+
+        target_host_domain = self._get_target_host_name(host)
+        for lb_networking in lb_networks:
+            lb_subnet = lb_networking['subnet'].replace('_', '-')
+            if lb_subnet in skip_subnets:
+                continue
+
+            # we only need to create the port for one side, f5 agent creates it for the other side
+            # FIXME: F5 agent is still acting strange, creating two self IP ports for the other side...
+            port_name = "local-{}-{}".format(target_host_domain, lb_subnet)
+            LOG.info("Creating self IP port with name {}, binding:host_id {}".format(port_name, host))
+            port = {'port': {'name': port_name,
+                             'admin_state_up': activate_ports_now,
+                             'device_owner': constants.DEVICE_OWNER_SELF_IP,
+                             'binding:host_id': host,
+                             'network_id': lb_networking['network'],
+                             'description': target_host_domain,
+                             'project_id': lb_networking['project'],
+                             }}
+            self.neutron_client.create_port(port)
