@@ -50,7 +50,7 @@ class Rescheduler(object):
         self.locks = lockutils.FairLocks()
 
     def reschedule_loadbalancer(self, load_balancer_id, target_host):
-        """Fail over one single load balancer from one host to another"""
+        """Fail over one single load balancer from its host to another (target_host)"""
 
         load_balancer = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
         # silently ignore LBs from other hosts
@@ -60,8 +60,8 @@ class Rescheduler(object):
         self._reschedule([load_balancer], target_host)
 
     def reschedule_loadbalancers(self, source_host, target_host):
-        """Fail over all load balancers from one host to another"""
-        load_balancers = self._loadbalancer_repo.get_all_from_host(db_apis.get_session())
+        """Reschedule all load balancers from one host (source_host) to another (target_host)"""
+        load_balancers = self._loadbalancer_repo.get_all_from_host(db_apis.get_session(), host=source_host)
 
         # silently ignore LBs if none of them are assigned to this host
         responsible_for_none = all([lb.server_group_id != CONF.host for lb in load_balancers])
@@ -78,11 +78,7 @@ class Rescheduler(object):
         self._reschedule(load_balancers, target_host)
 
     def _reschedule(self, load_balancers, target_host):
-        """Failover a load balancer or all load balancers from a specified host.
-
-        If from_host is None, failover only load balancer specified by load_balancer_id to target_host.
-        Else failover every load balancer from from_host to target_host.
-        """
+        """Reschedule all load balancers in list load_balancers to new host target_host."""
 
         # check target host
         if target_host is None:
@@ -136,7 +132,7 @@ class Rescheduler(object):
                 LOG.info("LB migration: Creating self IP port with name {}, binding:host_id {}"
                          .format(port_name, target_host))
                 port = {'port': {'name': port_name,
-                                 'admin_state_up': False,
+                                 'admin_state_up': False, # SelfIP port will be activated later
                                  'device_owner': constants.DEVICE_OWNER_SELF_IP,
                                  'binding:host_id': target_host,
                                  'network_id': lb_networking['network'],
