@@ -53,11 +53,10 @@ class Rescheduler(object):
         """Fail over one single load balancer from its host to another (target_host)"""
 
         load_balancer = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
-        # silently ignore LBs from other hosts
-        if load_balancer.server_group_id != CONF.host:
-            return
 
-        self._reschedule([load_balancer], target_host)
+        # only reschedule LBs on this host
+        if load_balancer.server_group_id == CONF.host:
+            self._reschedule([load_balancer], target_host)
 
     def reschedule_loadbalancers(self, target_host):
         """Reschedule all load balancers from this host to target_host."""
