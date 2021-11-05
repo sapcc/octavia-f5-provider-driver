@@ -77,7 +77,7 @@ def get_tenant(segmentation_id, loadbalancers, status, cert_manager, esd_repo):
         # Attach pools
         for pool in loadbalancer.pools:
             if not driver_utils.pending_delete(pool):
-                app.add_entities(m_pool.get_pool(loadbalancer.id, pool, loadbalancer_ips, status))
+                app.add_entities(m_pool.get_pool(pool, loadbalancer_ips, status))
 
         # Attach newly created application
         tenant.add_application(m_app.get_name(loadbalancer.id), app)
