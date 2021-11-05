@@ -159,7 +159,8 @@ class StatusManager(object):
             # Update amphora to DELETED if LB is DELETED, so that they get cleaned up together
             amp_repo = AmphoraRepository()
             session = db_apis.get_session()
-            for lb in status['loadbalancers']:
+            lbs = status.get('loadbalancers') or []
+            for lb in lbs:
                 if lb['provisioning_status'] == lib_consts.DELETED:
                     amp_repo.update(session, lb['id'], status=lib_consts.DELETED, force_provisioning_status=True)
 
