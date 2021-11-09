@@ -299,11 +299,16 @@ class StatusManager(object):
             memberstats = self.bigip.get(path=F5_POOL_MEMBER_STATS.format(sub_path)).json()
             for member in members.get('items', []):
                 if 'description' in member:
+                    statobj = None
                     member_id = member['description']
                     base_path = memberstats['selfLink'][:memberstats['selfLink'].find('/stats')]
                     member_path = '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))
                     if member_path in memberstats['entries']:
                         statobj = memberstats['entries'][member_path]
+                    elif member_path.replace('%', '%25') in memberstats['entries']:
+                        statobj = memberstats['entries'][member_path.replace('%', '%25')]
+
+                    if statobj:
                         stats = statobj['nestedStats']['entries']
                         status = constants.NO_CHECK
                         if stats['status.enabledState'].get('description') == 'disabled':
