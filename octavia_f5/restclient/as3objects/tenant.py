@@ -33,7 +33,7 @@ def get_name(network_id):
                          network_id.replace('-', '_'))
 
 
-def get_tenant(segmentation_id, loadbalancers, status, cert_manager, esd_repo):
+def get_tenant(segmentation_id, loadbalancers, status_manager, cert_manager, esd_repo):
 
     project_id = None
     if loadbalancers:
@@ -70,14 +70,14 @@ def get_tenant(segmentation_id, loadbalancers, status, cert_manager, esd_repo):
                         raise e
 
                     LOG.error("Could not retrieve certificate, assuming it is deleted, skipping listener '%s': %s", listener.id, e)
-                    if status:
+                    if status_manager:
                         # Key / Container not found in keystore
-                        status.set_error(listener)
+                        status_manager.set_error(listener)
 
         # Attach pools
         for pool in loadbalancer.pools:
             if not driver_utils.pending_delete(pool):
-                app.add_entities(m_pool.get_pool(pool, loadbalancer_ips, status))
+                app.add_entities(m_pool.get_pool(pool, loadbalancer_ips, status_manager))
 
         # Attach newly created application
         tenant.add_application(m_app.get_name(loadbalancer.id), app)
