@@ -78,8 +78,8 @@ def get_pool(pool, loadbalancer_ips, status):
             # add custom member monitors
             if pool.health_monitor and (member.monitor_address or member.monitor_port):
                 member_hm = m_monitor.get_monitor(pool.health_monitor,
-                                                  member.monitor_address,
-                                                  member.monitor_port)
+                                                  member.monitor_address or member.ip_address,
+                                                  member.monitor_port or member.protocol_port)
                 entities.append((m_monitor.get_name(member.id), member_hm))
 
     if pool.health_monitor and not utils.pending_delete(
