@@ -16,16 +16,20 @@
 import re
 import string
 
+REMARK_FORBIDDEN = ["\"", "\\"]
+LABEL_FORBIDDEN = ["#", "&", "*", "<", ">", "?", "[", "\\", "]", "`", "\""]
 
 def f5remark(remark):
     if not remark:
         return ""
 
     # Remove control characters.
-    nstr = "".join(ch for ch in remark if ch in string.printable)
+    nstr = "".join(ch for ch in remark if
+                   ch in string.printable and
+                   ch not in REMARK_FORBIDDEN)
 
     # Remove double-quote ("), and backslash (\), limit to 64 characters.
-    return re.sub('["\\\\]', '', nstr)[:64]
+    return nstr[:64]
 
 
 def f5label(label):
@@ -33,5 +37,7 @@ def f5label(label):
         return ""
 
     # Remove control characters and limit to 64 characters.
-    nstr = "".join(ch for ch in label if ch in string.printable and ch not in ["&", "`"])
+    nstr = "".join(ch for ch in label if
+                   ch in string.printable and
+                   ch not in LABEL_FORBIDDEN)
     return nstr[:64]
