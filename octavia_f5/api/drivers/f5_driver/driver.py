@@ -266,3 +266,18 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
               support one of the configuration options.
         """
         raise exceptions.NotImplementedError()
+
+    def validate_availability_zone(self, availability_zone_dict):
+        """Validates availability zone profile data.
+
+        This will validate an availability zone profile dataset against the
+        availability zone settings the F5 driver supports.
+
+        :param availability_zone_dict: The availability zone dict to validate.
+        :type availability_zone_dict: dict
+        :return: None
+        :raises DriverError: An unexpected error occurred.
+        :raises UnsupportedOptionError: If the driver does not support
+          one of the availability zone settings.
+        """
+        raise exceptions.NotImplementedError()
