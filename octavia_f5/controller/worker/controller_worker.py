@@ -63,11 +63,15 @@ class ControllerWorker(object):
         self._l7rule_repo = repo.L7RuleRepository()
         self._vip_repo = repo.VipRepository()
         self._quota_repo = repo.QuotasRepository()
+        self._az_repo = repo.AvailabilityZoneRepository()
+        self.queue = SetQueue()
 
+        # instantiate managers/drivers
         self.status = status_manager.StatusManager()
         self.sync = sync_manager.SyncManager(self.status, self._loadbalancer_repo)
         self.network_driver = driver_utils.get_network_driver()
-        self.queue = SetQueue()
+
+        # start thread for reconciliation loop, full sync loop, orphan cleanup loop
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None),
              (self.full_sync_reappearing_devices, None, None),
@@ -77,15 +81,20 @@ class ControllerWorker(object):
         t.daemon = True
         t.start()
 
+        # start thread for AS3 provisioning loop
         LOG.info("Starting as3worker")
         as3worker = threading.Thread(target=self.as3worker)
         as3worker.setDaemon(True)
         as3worker.start()
 
+        # start prometheus server
         if cfg.CONF.f5_agent.prometheus:
             prometheus_port = CONF.f5_agent.prometheus_port
             LOG.info('Starting Prometheus HTTP server on port {}'.format(prometheus_port))
             prometheus.start_http_server(prometheus_port)
+
+        # 'register' this worker to its availability zone
+        self.register_in_availability_zone()
 
         super(ControllerWorker, self).__init__()
 
@@ -566,3 +575,31 @@ class ControllerWorker(object):
             self._loadbalancer_repo.update(db_apis.get_session(),
                                            id=loadbalancer.id,
                                            server_group_id=CONF.host[:36])
+
+    def register_in_availability_zone(self):
+        """
+        Register this worker to its assigned availability zone by creating/modifying the corresponding DB entry.
+
+        An AZ can have multiple workers (multiple F5 devices), so their names are just set as description of the AZ
+        in the DB, separated by spaces.
+        """
+        az_name = CONF.f5_agent.availability_zone
+        if not az_name or az_name == '':
+            return
+        session = db_apis.get_session()
+        az = self._az_repo.get(session, name=az_name)
+        if az:
+            # check if CONF.host is in list of hosts (description field) and if not, add it
+            hosts = az.description.split()
+            if not CONF.host in hosts:
+                hosts.append(CONF.host)
+                self._az_repo.update(session, name=az.name, description=' '.join(hosts))
+        else:
+            az_dict = {
+                'name': az_name,
+                'description': CONF.host,
+                'enabled': True,
+                # AZ profile 00000000-0000-0000-0000-000000000000 is always present, so we just use that
+                'availability_zone_profile_id': '00000000-0000-0000-0000-000000000000'
+            }
+            self._az_repo.create(session, **az_dict)
