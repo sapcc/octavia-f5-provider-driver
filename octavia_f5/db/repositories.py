@@ -21,6 +21,7 @@ from oslo_log import log as logging
 from sqlalchemy import func, asc
 
 from octavia.common import constants as consts
+from octavia.common import exceptions
 from octavia.db import models
 from octavia.db import repositories
 from octavia_lib.common import constants as lib_consts
@@ -31,22 +32,36 @@ LOG = logging.getLogger(__name__)
 
 
 class AmphoraRepository(repositories.AmphoraRepository):
-    def get_candidates(self, session):
-        """ Get F5 (active) BigIP host candidate depending on the load
+    def get_candidates(self, session, az_name=None):
+        """ Get F5 (active) BigIP host candidate depending on the load (amount of listeners in amphora vrrp_priority
+        column) and the desired availability zone.
 
         :param session: A Sql Alchemy database session.
+        :param az_name: Name of the availability zone to schedule to. If it is None, all F5 amphora are considered.
         """
 
-        candidates = session.query(self.model_class)
-        candidates = candidates.filter_by(
+        candidates_query = session.query(self.model_class)
+        candidates_query = candidates_query.filter_by(
             role=consts.ROLE_MASTER,
             load_balancer_id=None)
-        candidates = candidates.order_by(
+        candidates_query = candidates_query.order_by(
             self.model_class.vrrp_priority.asc(),
             self.model_class.updated_at.desc())
-        return [candidate.compute_flavor for candidate in candidates.all()
-                if candidate.vrrp_interface != 'disabled']
+        candidates_amphora_entries = candidates_query.all()
 
+        # If no specific AZ is requested, just return all candidates
+        if not az_name:
+            return [candidate.compute_flavor for candidate in candidates_amphora_entries
+                    if candidate.vrrp_interface != 'disabled']
+
+        # filter by AZ
+        az_repo = repositories.AvailabilityZoneRepository()
+        az = az_repo.get(name=az_name)
+        if not az:
+            raise exceptions.NotFound()
+        hosts = az.description.split()
+        return [candidate.compute_flavor for candidate in candidates_amphora_entries
+                if candidate.vrrp_interface != 'disabled' and candidate.compute_flavor in hosts]
 
 class LoadBalancerRepository(repositories.LoadBalancerRepository):
     def get_all_from_host(self, session, host=None, **filters):
