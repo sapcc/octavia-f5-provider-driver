@@ -34,6 +34,7 @@ from octavia_f5.db import repositories as f5_repos
 from octavia_f5.utils import exceptions, driver_utils
 from octavia_lib.common import constants as lib_consts
 from requests import HTTPError
+from octavia_f5.db.repositories import DatabaseLockSession
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -586,20 +587,26 @@ class ControllerWorker(object):
         az_name = CONF.f5_agent.availability_zone
         if not az_name or az_name == '':
             return
-        session = db_apis.get_session()
-        az = self._az_repo.get(session, name=az_name)
-        if az:
-            # check if CONF.host is in list of hosts (description field) and if not, add it
-            hosts = az.description.split()
-            if not CONF.host in hosts:
-                hosts.append(CONF.host)
-                self._az_repo.update(session, name=az.name, description=' '.join(hosts))
-        else:
-            az_dict = {
-                'name': az_name,
-                'description': CONF.host,
-                'enabled': True,
-                # AZ profile 00000000-0000-0000-0000-000000000000 is always present, so we just use that
-                'availability_zone_profile_id': '00000000-0000-0000-0000-000000000000'
-            }
-            self._az_repo.create(session, **az_dict)
+
+        # Use DatabaseLockSession for safety between concurrently running workers (automatic rollback)
+        # Since DatabaseLockSession does not reraise DBDeadLock exceptions, we use a primitive retry mechanism
+        az = None
+        while not az or not CONF.host in az.description.split():
+            LOG.info("Registering worker {} to availability zone {}".format(CONF.host, az_name))
+            with DatabaseLockSession() as session:
+                az = self._az_repo.get(session, name=az_name)
+                if az:
+                    # check if CONF.host is in list of hosts (description field) and if not, add it
+                    hosts = az.description.split()
+                    if not CONF.host in hosts:
+                        hosts.append(CONF.host)
+                        self._az_repo.update(session, name=az.name, description=' '.join(hosts))
+                else:
+                    az_dict = {
+                        'name': az_name,
+                        'description': CONF.host,
+                        'enabled': True,
+                        # AZ profile 00000000-0000-0000-0000-000000000000 is always present, so we just use that
+                        'availability_zone_profile_id': '00000000-0000-0000-0000-000000000000'
+                    }
+                    self._az_repo.create(session, **az_dict)
