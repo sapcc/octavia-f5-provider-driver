@@ -16,20 +16,43 @@
 Extends octavia base repository with enhanced f5-specific queries
 """
 
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
+from oslo_db import exception as db_exc
 from oslo_log import log as logging
+from oslo_utils import excutils
 from sqlalchemy import func, asc
 
 from octavia.common import constants as consts
 from octavia.common import exceptions
+from octavia.db import api as db_api
 from octavia.db import models
 from octavia.db import repositories
-from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
 
 LOG = logging.getLogger(__name__)
 
+
+class DatabaseLockSession(object):
+    """Provides a database session and rolls it back if an exception occured before exiting with-statement. """
+    def __enter__(self):
+        self._lock_session = db_api.get_session(autocommit=False)
+        return self._lock_session
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_tb is None:
+            self._lock_session.commit()
+        else:
+            if isinstance(exc_type, db_exc.DBDeadlock):
+                LOG.debug('Database reports deadlock. Skipping.')
+                self._lock_session.rollback()
+            elif isinstance(exc_type, db_exc.RetryRequest):
+                LOG.debug('Database is requesting a retry. Skipping.')
+                self._lock_session.rollback()
+            else:
+                with excutils.save_and_reraise_exception():
+                    self._lock_session.rollback()
 
 class AmphoraRepository(repositories.AmphoraRepository):
     def get_candidates(self, session, az_name=None):
