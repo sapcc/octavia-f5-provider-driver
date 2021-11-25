@@ -21,7 +21,7 @@ from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
 from oslo_utils import excutils
-from sqlalchemy import func, asc
+from sqlalchemy import func, asc, or_
 
 from octavia.common import constants as consts
 from octavia.common import exceptions
@@ -63,28 +63,50 @@ class AmphoraRepository(repositories.AmphoraRepository):
         :param az_name: Name of the availability zone to schedule to. If it is None, all F5 amphora are considered.
         """
 
-        candidates_query = session.query(self.model_class)
-        candidates_query = candidates_query.filter_by(
+        # get all hosts
+        candidates = session.query(self.model_class.compute_flavor)
+        candidates = candidates.filter_by(
             role=consts.ROLE_MASTER,
-            load_balancer_id=None)
-        candidates_query = candidates_query.order_by(
+            load_balancer_id=None,
+        ).filter(or_(
+            # !='disabled' gives False on NULL, so we need to check for NULL (None) explicitly
+            self.model_class.vrrp_interface == None, self.model_class.vrrp_interface != 'disabled'))
+
+        # order by listener count
+        candidates = candidates.order_by(
             self.model_class.vrrp_priority.asc(),
             self.model_class.updated_at.desc())
-        candidates_amphora_entries = candidates_query.all()
+        candidates = candidates.all()
+
+        # optionally schedule according to load balancer count instead of (just) listener count
+        if CONF.networking.agent_scheduler == "loadbalancer":
+            lb_count = session.query(models.LoadBalancer.server_group_id.label('host'),
+                                     func.count(models.LoadBalancer.id))\
+                .group_by('host').order_by(func.count(models.LoadBalancer.id).asc()).all()
+            lb_count = { host:lbs for (host,lbs) in lb_count }
+            # Now we have LB count per host, but some may have no LBs, so no entry in lb_count.
+            # But we need to include all hosts from the candidates list.
+            candidates = [ (c[0], lb_count.get(c[0]) or 0) for c in candidates]
+            candidates.sort(key=lambda x: x[1]) # TODO check that sort is ascending
 
         # If no specific AZ is requested, just return all candidates
         if not az_name:
-            return [candidate.compute_flavor for candidate in candidates_amphora_entries
-                    if candidate.vrrp_interface != 'disabled']
+            return [ c[0] for c in candidates ]
 
-        # filter by AZ
+        # get hosts from AZ
         az_repo = repositories.AvailabilityZoneRepository()
-        az = az_repo.get(name=az_name)
+        az = az_repo.get(session, name=az_name)
         if not az:
+            LOG.error("Can't schedule VIP/LB: Availability zone not found: {}".format(az_name))
             raise exceptions.NotFound()
-        hosts = az.description.split()
-        return [candidate.compute_flavor for candidate in candidates_amphora_entries
-                if candidate.vrrp_interface != 'disabled' and candidate.compute_flavor in hosts]
+        hosts_in_az = az.description.split()
+
+        # get hosts from AZ that are candidates
+        candidates = [ c[0] for c in candidates if c[0] in hosts_in_az ]
+        if len(candidates) == 0:
+            LOG.error("Can't schedule VIP/LB: No host candidates in availability zone {}".format(az_name))
+            raise exceptions.NotFound()
+        return candidates
 
 class LoadBalancerRepository(repositories.LoadBalancerRepository):
     def get_all_from_host(self, session, host=None, **filters):
@@ -123,28 +145,6 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
                 models.LoadBalancer.provisioning_status != consts.DELETED)
 
         return [model.to_data_model() for model in query.all()]
-
-    def get_candidates(self, session):
-        """ Get F5 (active) BigIP host candidate depending on loadbalancers scheduled
-
-        :param session: A Sql Alchemy database session.
-        """
-        # FIXME logical error: LBs are only scheduled to where LBs already exist
-        # Get possible candidates subquery first
-        possible_candidates = session.query(models.Amphora.compute_flavor)
-        possible_candidates = possible_candidates.filter_by(
-            status=consts.AMPHORA_READY, load_balancer_id=None, vrrp_interface=None)
-        possible_candidates = possible_candidates.subquery()
-
-        # but schedule according to loadbalancer usage
-        candidates = session.query(models.LoadBalancer.server_group_id, func.count(models.LoadBalancer.id).label('lb_count'))
-        # Skip deleted
-        candidates = candidates.filter(models.LoadBalancer.provisioning_status != consts.DELETED)
-        candidates = candidates.filter(models.LoadBalancer.server_group_id.in_(possible_candidates))
-        candidates = candidates.group_by(models.LoadBalancer.server_group_id)
-        candidates = candidates.order_by(asc('lb_count'))
-        return [candidate[0] for candidate in candidates.all() if candidate[0]]
-
 
 class PoolRepository(repositories.PoolRepository):
     def get_pending_from_host(self, session, host=None):
