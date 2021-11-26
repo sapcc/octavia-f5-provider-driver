@@ -13,15 +13,19 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import json
 import threading
 import time
 
 import prometheus_client as prometheus
 import tenacity
 from futurist import periodics
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
+from oslo_db import api as oslo_db_api
 from oslo_log import log as logging
-from oslo_utils import excutils
+from oslo_utils import excutils, uuidutils
+from requests import HTTPError
 from six.moves.queue import Empty
 from sqlalchemy.orm import exc as db_exceptions
 
@@ -32,9 +36,6 @@ from octavia_f5.controller.worker.set_queue import SetQueue
 from octavia_f5.db import api as db_apis
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.utils import exceptions, driver_utils
-from octavia_lib.common import constants as lib_consts
-from requests import HTTPError
-from octavia_f5.db.repositories import DatabaseLockSession
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -65,6 +66,7 @@ class ControllerWorker(object):
         self._vip_repo = repo.VipRepository()
         self._quota_repo = repo.QuotasRepository()
         self._az_repo = repo.AvailabilityZoneRepository()
+        self._azp_repo = repo.AvailabilityZoneProfileRepository()
         self.queue = SetQueue()
 
         # instantiate managers/drivers
@@ -95,7 +97,8 @@ class ControllerWorker(object):
             prometheus.start_http_server(prometheus_port)
 
         # 'register' this worker to its availability zone
-        self.register_in_availability_zone()
+        if CONF.f5_agent.availability_zone:
+            self.register_in_availability_zone(CONF.f5_agent.availability_zone)
 
         super(ControllerWorker, self).__init__()
 
@@ -577,36 +580,38 @@ class ControllerWorker(object):
                                            id=loadbalancer.id,
                                            server_group_id=CONF.host[:36])
 
-    def register_in_availability_zone(self):
+    @oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
+    def register_in_availability_zone(self, az_name):
         """
         Register this worker to its assigned availability zone by creating/modifying the corresponding DB entry.
 
-        An AZ can have multiple workers (multiple F5 devices), so their names are just set as description of the AZ
-        in the DB, separated by spaces.
+        An AZ can have multiple workers (multiple F5 device-pairs), so the worker host are set in the
+        corresponding availability zone profile metadata as a json array.
         """
-        az_name = CONF.f5_agent.availability_zone
-        if not az_name or az_name == '':
-            return
 
-        # Use DatabaseLockSession for safety between concurrently running workers (automatic rollback)
-        # Since DatabaseLockSession does not reraise DBDeadLock exceptions, we use a primitive retry mechanism
-        az = None
-        while not az or not CONF.host in az.description.split():
-            LOG.info("Registering worker {} to availability zone {}".format(CONF.host, az_name))
-            with DatabaseLockSession() as session:
-                az = self._az_repo.get(session, name=az_name)
-                if az:
-                    # check if CONF.host is in list of hosts (description field) and if not, add it
-                    hosts = az.description.split()
-                    if not CONF.host in hosts:
-                        hosts.append(CONF.host)
-                        self._az_repo.update(session, name=az.name, description=' '.join(hosts))
-                else:
-                    az_dict = {
-                        'name': az_name,
-                        'description': CONF.host,
-                        'enabled': True,
-                        # AZ profile 00000000-0000-0000-0000-000000000000 is always present, so we just use that
-                        'availability_zone_profile_id': '00000000-0000-0000-0000-000000000000'
-                    }
-                    self._az_repo.create(session, **az_dict)
+        with db_apis.get_lock_session() as lock_session:
+            az = self._az_repo.get(lock_session, name=az_name)
+            metadata = self._az_repo.get_availability_zone_metadata_dict(lock_session, az_name)
+            hosts = metadata.get('hosts', [])
+            if az:
+                if not CONF.host in hosts:
+                    # add host to availibility zone metadata (profile)
+                    hosts.append(CONF.host)
+                    self._azp_repo.update(lock_session, id=az.availability_zone_profile_id,
+                                          availability_zone_data=json.dumps({'hosts': hosts}))
+            else:
+                # Create availability zone and availability zone profile with current host
+                azp_dict = {
+                    'id': uuidutils.generate_uuid(),
+                    'name': az_name,
+                    'provider_name': 'f5',
+                    'availability_zone_data': json.dumps({'hosts': [CONF.host]})
+                }
+                self._azp_repo.create(lock_session, **azp_dict)
+                az_dict = {
+                    'name': az_name,
+                    'description': az_name,
+                    'enabled': True,
+                    'availability_zone_profile_id': azp_dict['id']
+                }
+                self._az_repo.create(lock_session, **az_dict)
