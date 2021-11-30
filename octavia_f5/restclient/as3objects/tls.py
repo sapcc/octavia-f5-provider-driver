@@ -37,7 +37,7 @@ def get_pool_name(pool_id):
     return "{}{}".format(constants.PREFIX_TLS_POOL, pool_id)
 
 
-def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode='NONE'):
+def get_tls_server(certificate_ids, listener, authentication_ca=None):
     """ returns AS3 TLS_Server
 
     :param certificate_ids: reference ids to AS3 certificate objs
@@ -52,16 +52,14 @@ def get_tls_server(certificate_ids, authentication_ca=None, authentication_mode=
     }
 
     service_args = {
-        'certificates': [{'certificate': cert_id} for cert_id in set(certificate_ids)]
+        'certificates': [{'certificate': cert_id} for cert_id in set(certificate_ids)],
+        'ciphers': listener.tls_ciphers
     }
 
     if authentication_ca:
         service_args['authenticationTrustCA'] = authentication_ca
         service_args['authenticationInviteCA'] = authentication_ca
-        service_args['authenticationMode'] = mode_map[authentication_mode]
-
-    if CONF.f5_tls_server.default_ciphers:
-        service_args['ciphers'] = CONF.f5_tls_server.default_ciphers
+        service_args['authenticationMode'] = mode_map[listener.client_authentication]
 
     if CONF.f5_tls_server.forward_proxy_bypass is not None:
         service_args['forwardProxyBypassEnabled'] = CONF.f5_tls_server.forward_proxy_bypass
