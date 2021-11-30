@@ -583,19 +583,18 @@ class ControllerWorker(object):
     @oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
     def register_in_availability_zone(self, az_name):
         """
-        Register this worker to its assigned availability zone by creating/modifying the corresponding DB entry.
+        Register this worker to an availability zone by creating/modifying the corresponding DB entry.
 
-        An AZ can have multiple workers (multiple F5 device-pairs), so the worker host are set in the
+        An AZ can have multiple workers (multiple F5 device-pairs), so the worker hosts are set in the
         corresponding availability zone profile metadata as a json array.
         """
-
         with db_apis.get_lock_session() as lock_session:
             az = self._az_repo.get(lock_session, name=az_name)
-            metadata = self._az_repo.get_availability_zone_metadata_dict(lock_session, az_name)
-            hosts = metadata.get('hosts', [])
             if az:
+                metadata = self._az_repo.get_availability_zone_metadata_dict(lock_session, az_name)
+                hosts = metadata.get('hosts', [])
                 if not CONF.host in hosts:
-                    # add host to availibility zone metadata (profile)
+                    # add host to availibility zone profile metadata
                     hosts.append(CONF.host)
                     self._azp_repo.update(lock_session, id=az.availability_zone_profile_id,
                                           availability_zone_data=json.dumps({'hosts': hosts}))

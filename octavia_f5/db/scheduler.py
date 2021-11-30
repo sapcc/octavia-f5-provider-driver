@@ -30,7 +30,7 @@ class Scheduler(object):
 
     def get_candidates(self, session, az_name=None):
         """ Get F5 (active) BigIP host candidate depending on the load (amount of listeners in amphora vrrp_priority
-        column) and the desired availability zone.
+        column or amount of load balancers) and the desired availability zone.
 
         :param session: A Sql Alchemy database session.
         :param az_name: Name of the availability zone to schedule to. If it is None, all F5 amphora are considered.
