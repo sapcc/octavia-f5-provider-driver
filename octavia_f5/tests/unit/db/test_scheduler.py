@@ -17,6 +17,7 @@ from unittest import mock
 from oslo_config import cfg
 from oslo_config import fixture as oslo_fixture
 from oslo_utils import uuidutils
+from oslo_db.sqlalchemy import session as db_session
 
 from octavia.db import repositories as repo
 from octavia.tests.functional.db import base
@@ -94,14 +95,15 @@ class TestScheduler(base.OctaviaDBTestBase):
     @mock.patch('octavia_f5.controller.worker.sync_manager.SyncManager')
     def test_get_candidate_by_az(self, mock_sync_manager, mock_status_manager):
         self.conf.config(group="networking", agent_scheduler="loadbalancer")
+        self.conf.config(group="f5_agent", prometheus=False)
 
         # Register host FAKE_DEVICE_PAIR_1 as fake-az
-        self.session.autocommit = False
+        cw = controller_worker.ControllerWorker()
         with mock.patch('octavia_f5.db.api.get_session', return_value=self.session):
-            cw = controller_worker.ControllerWorker()
+            self.session.autocommit = False
             self.conf.config(host=self.FAKE_DEVICE_PAIR_1)
             cw.register_in_availability_zone(self.FAKE_AZ)
-        self.session.autocommit = True
+            self.session.autocommit = True
 
         candidates = self.scheduler.get_candidates(self.session, az_name=self.FAKE_AZ)
         self.assertEqual([self.FAKE_DEVICE_PAIR_1], candidates,
