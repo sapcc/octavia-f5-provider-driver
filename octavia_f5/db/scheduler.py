@@ -42,7 +42,8 @@ class Scheduler(object):
             func.count(models.LoadBalancer.id)
         ).join(
             models.LoadBalancer,
-            models.Amphora.compute_flavor == models.LoadBalancer.server_group_id
+            models.Amphora.compute_flavor == models.LoadBalancer.server_group_id,
+            isouter=True
         ).filter(
             models.Amphora.role == consts.ROLE_MASTER,
             models.Amphora.load_balancer_id == None,
@@ -54,7 +55,7 @@ class Scheduler(object):
 
         if CONF.networking.agent_scheduler == "loadbalancer":
             # order by loadbalancer count
-            candidates.order_by(
+            candidates = candidates.order_by(
                 func.count(models.LoadBalancer.id).asc(),
                 models.Amphora.updated_at.desc())
         else:
@@ -75,7 +76,7 @@ class Scheduler(object):
             omit_hosts = set()
             for az in azs:
                 metadata = self.az_repo.get_availability_zone_metadata_dict(session, az)
-                omit_hosts.add(metadata.get('hosts', []))
+                omit_hosts.update(metadata.get('hosts', []))
             candidates = candidates.filter(
                 models.Amphora.compute_flavor.notin_(omit_hosts))
         return [candidate[0] for candidate in candidates.all()]
