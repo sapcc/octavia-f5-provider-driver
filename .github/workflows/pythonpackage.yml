@@ -25,7 +25,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pbr "octavia<7.0.0" -c https://raw.githubusercontent.com/sapcc/requirements/stable/ussuri/upper-constraints.txt
+        pip install pbr oslotest "octavia<7.0.0" -c https://raw.githubusercontent.com/sapcc/requirements/stable/ussuri/upper-constraints.txt
         pip install -e . -c https://raw.githubusercontent.com/sapcc/requirements/stable/ussuri/upper-constraints.txt
     - name: Lint with flake8
       run: |
