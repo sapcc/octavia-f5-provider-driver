@@ -17,12 +17,12 @@ from oslo_config import cfg
 from oslo_config import fixture as oslo_fixture
 from oslo_utils import uuidutils
 
-from octavia.controller.queue import endpoint
-from octavia.controller.worker import controller_worker
-from octavia.tests.unit.controller.queue import test_endpoint
+from octavia.controller.queue.v1 import endpoints
+from octavia.controller.worker.v1 import controller_worker
+from octavia.tests.unit.controller.queue.v1 import test_endpoints
 
 
-class TestEndpoint(test_endpoint.TestEndpoint):
+class TestEndpoint(test_endpoints.TestEndpoints):
 
     def setUp(self):
         super(TestEndpoint, self).setUp()
@@ -31,11 +31,11 @@ class TestEndpoint(test_endpoint.TestEndpoint):
         conf.config(octavia_plugins='f5_plugin')
 
         mock_class = mock.create_autospec(controller_worker.ControllerWorker)
-        self.worker_patcher = mock.patch('octavia.controller.queue.endpoint.'
-                                         'stevedore_driver')
+        self.worker_patcher = mock.patch('octavia.controller.queue.v1.'
+                                         'endpoints.stevedore_driver')
         self.worker_patcher.start().ControllerWorker = mock_class
 
-        self.ep = endpoint.Endpoint()
+        self.ep = endpoints.Endpoints()
         self.context = {}
         self.resource_updates = {}
         self.resource_id = 1234

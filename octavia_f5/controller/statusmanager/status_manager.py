@@ -21,14 +21,16 @@ import prometheus_client as prometheus
 import requests
 import sqlalchemy
 from oslo_config import cfg
+from oslo_db import exception as db_exc
 from oslo_log import log as logging
+from oslo_utils import excutils
 from stevedore import driver as stevedore_driver
 
 from octavia.common import constants as o_const
 from octavia.common import rpc
+from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
-from octavia_f5.db.repositories import DatabaseLockSession
 from octavia_f5.restclient.bigip import bigip_restclient, bigip_auth
 
 CONF = cfg.CONF
@@ -38,6 +40,27 @@ F5_VIRTUAL_STATS = '/mgmt/tm/ltm/virtual/stats'
 F5_POOL_STATS = '/mgmt/tm/ltm/pool/stats'
 F5_POOL_MEMBERS = '/mgmt/tm/ltm/pool/{}/members'
 F5_POOL_MEMBER_STATS = '/mgmt/tm/ltm/pool/{}/members/stats'
+
+
+class DatabaseLockSession(object):
+    """Provides a database session and rolls it back if an exception occured before exiting with-statement."""
+    def __enter__(self):
+        self._lock_session = db_api.get_session(autocommit=False)
+        return self._lock_session
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if exc_tb is None:
+            self._lock_session.commit()
+        else:
+            if isinstance(exc_type, db_exc.DBDeadlock):
+                LOG.debug('Database reports deadlock. Skipping.')
+                self._lock_session.rollback()
+            elif isinstance(exc_type, db_exc.RetryRequest):
+                LOG.debug('Database is requesting a retry. Skipping.')
+                self._lock_session.rollback()
+            else:
+                with excutils.save_and_reraise_exception():
+                    self._lock_session.rollback()
 
 
 def update_health(obj):
