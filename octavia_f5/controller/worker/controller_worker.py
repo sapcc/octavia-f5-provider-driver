@@ -13,15 +13,19 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import json
 import threading
 import time
 
 import prometheus_client as prometheus
 import tenacity
 from futurist import periodics
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
+from oslo_db import api as oslo_db_api
 from oslo_log import log as logging
-from oslo_utils import excutils
+from oslo_utils import excutils, uuidutils
+from requests import HTTPError
 from six.moves.queue import Empty
 from sqlalchemy.orm import exc as db_exceptions
 
@@ -32,8 +36,6 @@ from octavia_f5.controller.worker.set_queue import SetQueue
 from octavia_f5.db import api as db_apis
 from octavia_f5.db import repositories as f5_repos
 from octavia_f5.utils import exceptions, driver_utils
-from octavia_lib.common import constants as lib_consts
-from requests import HTTPError
 
 CONF = cfg.CONF
 CONF.import_group('f5_agent', 'octavia_f5.common.config')
@@ -63,11 +65,16 @@ class ControllerWorker(object):
         self._l7rule_repo = repo.L7RuleRepository()
         self._vip_repo = repo.VipRepository()
         self._quota_repo = repo.QuotasRepository()
+        self._az_repo = repo.AvailabilityZoneRepository()
+        self._azp_repo = repo.AvailabilityZoneProfileRepository()
+        self.queue = SetQueue()
 
+        # instantiate managers/drivers
         self.status = status_manager.StatusManager()
         self.sync = sync_manager.SyncManager(self.status, self._loadbalancer_repo)
         self.network_driver = driver_utils.get_network_driver()
-        self.queue = SetQueue()
+
+        # start thread for reconciliation loop, full sync loop, orphan cleanup loop
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None),
              (self.full_sync_reappearing_devices, None, None),
@@ -77,15 +84,21 @@ class ControllerWorker(object):
         t.daemon = True
         t.start()
 
+        # start thread for AS3 provisioning loop
         LOG.info("Starting as3worker")
         as3worker = threading.Thread(target=self.as3worker)
         as3worker.setDaemon(True)
         as3worker.start()
 
+        # start prometheus server
         if cfg.CONF.f5_agent.prometheus:
             prometheus_port = CONF.f5_agent.prometheus_port
             LOG.info('Starting Prometheus HTTP server on port {}'.format(prometheus_port))
             prometheus.start_http_server(prometheus_port)
+
+        # 'register' this worker to its availability zone
+        if CONF.f5_agent.availability_zone:
+            self.register_in_availability_zone(CONF.f5_agent.availability_zone)
 
         super(ControllerWorker, self).__init__()
 
@@ -566,3 +579,38 @@ class ControllerWorker(object):
             self._loadbalancer_repo.update(db_apis.get_session(),
                                            id=loadbalancer.id,
                                            server_group_id=CONF.host[:36])
+
+    @oslo_db_api.wrap_db_retry(max_retries=5, retry_on_deadlock=True)
+    def register_in_availability_zone(self, az_name):
+        """
+        Register this worker to an availability zone by creating/modifying the corresponding DB entry.
+
+        An AZ can have multiple workers (multiple F5 device-pairs), so the worker hosts are set in the
+        corresponding availability zone profile metadata as a json array.
+        """
+        with db_apis.get_lock_session() as lock_session:
+            az = self._az_repo.get(lock_session, name=az_name)
+            if az:
+                metadata = self._az_repo.get_availability_zone_metadata_dict(lock_session, az_name)
+                hosts = metadata.get('hosts', [])
+                if not CONF.host in hosts:
+                    # add host to availibility zone profile metadata
+                    hosts.append(CONF.host)
+                    self._azp_repo.update(lock_session, id=az.availability_zone_profile_id,
+                                          availability_zone_data=json.dumps({'hosts': hosts}))
+            else:
+                # Create availability zone and availability zone profile with current host
+                azp_dict = {
+                    'id': uuidutils.generate_uuid(),
+                    'name': az_name,
+                    'provider_name': 'f5',
+                    'availability_zone_data': json.dumps({'hosts': [CONF.host]})
+                }
+                self._azp_repo.create(lock_session, **azp_dict)
+                az_dict = {
+                    'name': az_name,
+                    'description': az_name,
+                    'enabled': True,
+                    'availability_zone_profile_id': azp_dict['id']
+                }
+                self._az_repo.create(lock_session, **az_dict)

@@ -16,36 +16,16 @@
 Extends octavia base repository with enhanced f5-specific queries
 """
 
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 from oslo_log import log as logging
-from sqlalchemy import func, asc
 
 from octavia.common import constants as consts
 from octavia.db import models
 from octavia.db import repositories
-from octavia_lib.common import constants as lib_consts
 
 CONF = cfg.CONF
-
 LOG = logging.getLogger(__name__)
-
-
-class AmphoraRepository(repositories.AmphoraRepository):
-    def get_candidates(self, session):
-        """ Get F5 (active) BigIP host candidate depending on the load
-
-        :param session: A Sql Alchemy database session.
-        """
-
-        candidates = session.query(self.model_class)
-        candidates = candidates.filter_by(
-            role=consts.ROLE_MASTER,
-            load_balancer_id=None)
-        candidates = candidates.order_by(
-            self.model_class.vrrp_priority.asc(),
-            self.model_class.updated_at.desc())
-        return [candidate.compute_flavor for candidate in candidates.all()
-                if candidate.vrrp_interface != 'disabled']
 
 
 class LoadBalancerRepository(repositories.LoadBalancerRepository):
@@ -85,28 +65,6 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
                 models.LoadBalancer.provisioning_status != consts.DELETED)
 
         return [model.to_data_model() for model in query.all()]
-
-    def get_candidates(self, session):
-        """ Get F5 (active) BigIP host candidate depending on loadbalancers scheduled
-
-        :param session: A Sql Alchemy database session.
-        """
-        # FIXME logical error: LBs are only scheduled to where LBs already exist
-        # Get possible candidates subquery first
-        possible_candidates = session.query(models.Amphora.compute_flavor)
-        possible_candidates = possible_candidates.filter_by(
-            status=consts.AMPHORA_READY, load_balancer_id=None, vrrp_interface=None)
-        possible_candidates = possible_candidates.subquery()
-
-        # but schedule according to loadbalancer usage
-        candidates = session.query(models.LoadBalancer.server_group_id, func.count(models.LoadBalancer.id).label('lb_count'))
-        # Skip deleted
-        candidates = candidates.filter(models.LoadBalancer.provisioning_status != consts.DELETED)
-        candidates = candidates.filter(models.LoadBalancer.server_group_id.in_(possible_candidates))
-        candidates = candidates.group_by(models.LoadBalancer.server_group_id)
-        candidates = candidates.order_by(asc('lb_count'))
-        return [candidate[0] for candidate in candidates.all() if candidate[0]]
-
 
 class PoolRepository(repositories.PoolRepository):
     def get_pending_from_host(self, session, host=None):

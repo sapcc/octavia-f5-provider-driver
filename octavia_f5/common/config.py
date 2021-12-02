@@ -118,6 +118,8 @@ f5_agent_opts = [
                        "lose the configuration from memory")),
     cfg.BoolOpt('unsafe_mode', default=False,
                 help=_("Use unsafe mode for posting AS3 declarations.")),
+    cfg.StrOpt('availability_zone', default=None,
+                help=_("Name of the availability zone the F5 device of this worker is assigned to.")),
 ]
 
 f5_tls_shared = {

@@ -18,7 +18,7 @@ from oslo_config import fixture as oslo_fixture
 
 from octavia.common import constants as consts
 from octavia.tests.unit import base
-from octavia.tests.unit.api.drivers import sample_data_models
+from octavia.tests.common import sample_data_models
 from octavia_f5.api.drivers.f5_driver import driver
 from octavia_lib.api.drivers import data_models as driver_dm
 

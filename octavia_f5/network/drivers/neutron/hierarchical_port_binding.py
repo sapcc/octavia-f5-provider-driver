@@ -24,6 +24,7 @@ from octavia.network.drivers.neutron import allowed_address_pairs as aap
 from octavia.network.drivers.neutron import utils
 from octavia_f5.common import constants
 from octavia_f5.db import repositories
+from octavia_f5.db import scheduler
 
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
@@ -40,8 +41,7 @@ cache.configure_cache_region(CONF, cache_region)
 class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
     def __init__(self):
         super(HierachicalPortBindingDriver, self).__init__()
-        self.amp_repo = repositories.AmphoraRepository()
-        self.lb_repo = repositories.LoadBalancerRepository()
+        self.scheduler = scheduler.Scheduler()
         self.physical_network = self.get_physical_network()
 
     def allocate_vip(self, load_balancer):
@@ -66,13 +66,7 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
         # select a candidate to schedule to
         try:
             session = db_apis.get_session()
-            if CONF.networking.agent_scheduler == 'listener':
-                candidate = self.amp_repo.get_candidates(session)[0]
-            else:
-                try:
-                    candidate = self.lb_repo.get_candidates(session)[0]
-                except IndexError:
-                    candidate = self.amp_repo.get_candidates(session)[0]
+            candidate = self.scheduler.get_candidates(session, load_balancer.availability_zone)[0]
         except (ValueError, IndexError) as e:
             message = _('Scheduling failed, no ready candidates found')
             LOG.exception(message)

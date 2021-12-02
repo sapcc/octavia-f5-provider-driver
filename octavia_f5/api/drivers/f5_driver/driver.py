@@ -234,16 +234,6 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         # Let Octavia create the port
         raise exceptions.NotImplementedError()
 
-    def loadbalancer_failover(self, loadbalancer_id):
-        """Performs a fail over of a load balancer.
-
-        :param loadbalancer_id (string): ID of the load balancer to failover.
-        :return: Nothing if the failover request was accepted.
-        :raises DriverError: An unexpected error occurred in the driver.
-        :raises: NotImplementedError if driver does not support request.
-        """
-        raise exceptions.NotImplementedError()
-
     def get_supported_flavor_metadata(self):
         """Returns the valid flavor metadata keys and descriptions.
 
@@ -266,3 +256,25 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
               support one of the configuration options.
         """
         raise exceptions.NotImplementedError()
+
+    def validate_availability_zone(self, availability_zone_dict):
+        """Validates availability zone profile data.
+
+        This will validate an availability zone profile dataset against the
+        availability zone settings the F5 driver supports.
+
+        :param availability_zone_dict: The availability zone dict to validate.
+        :type availability_zone_dict: dict
+        :return: None
+        :raises DriverError: An unexpected error occurred.
+        :raises UnsupportedOptionError: If the driver does not support
+          one of the availability zone settings.
+        """
+        if len(availability_zone_dict.get('hosts', [])) > 0:
+            return
+
+        raise exceptions.UnsupportedOptionError(
+                user_fault_string='Failed to get the supported availability '
+                                  'zone metadata.',
+                operator_fault_string='Failed to get hosts from availability '
+                                  'zone metadata: {}'.format(availability_zone_dict))

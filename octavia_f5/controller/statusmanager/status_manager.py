@@ -26,8 +26,8 @@ from oslo_log import log as logging
 from oslo_utils import excutils
 from stevedore import driver as stevedore_driver
 
-from octavia.common import rpc
 from octavia.common import constants as o_const
+from octavia.common import rpc
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
