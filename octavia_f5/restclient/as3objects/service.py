@@ -46,7 +46,7 @@ def get_esd_entities(servicetype, esd):
     """
     Map F5 ESD (Enhanced Service Definition) to service components.
 
-    :param servicetype: octavia listener type
+    :param servicetype: as3 service type
     :param esd: parsed ESD repository
     :return: AS3 service flags according to ESD definition
     """
@@ -57,7 +57,7 @@ def get_esd_entities(servicetype, esd):
 
     # client / server tcp profiles
     if servicetype in [const.SERVICE_HTTP, const.SERVICE_HTTPS,
-                       const.SERVICE_TCP]:
+                       const.SERVICE_TCP, const.SERVICE_L4]:
         ctcp = esd.get('lbaas_ctcp', None)
         stcp = esd.get('lbaas_stcp', None)
         if stcp and ctcp:
@@ -303,8 +303,10 @@ def get_service(listener, cert_manager, esd_repository):
     # Ensure no duplicate iRules
     service_args['iRules'] = list(set(service_args['iRules']))
 
-    # fastL4 profile doesn't support iRules, fallback to TCP Profile when iRules detected
-    if service_args['_servicetype'] == const.SERVICE_L4 and len(service_args['iRules']) > 0:
+    # fastL4 profile doesn't support iRules or custom TCP profiles,
+    # fallback to TCP Service when iRules/Profiles detected
+    if service_args['_servicetype'] == const.SERVICE_L4 and (
+            len(service_args['iRules']) > 0 or 'profileTCP' in service_args):
         service_args['_servicetype'] = const.SERVICE_TCP
 
     # add default profiles to supported listeners
