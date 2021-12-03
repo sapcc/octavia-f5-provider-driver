@@ -5,7 +5,7 @@ name: Python package
 
 on:
   push:
-    branches: [ master ]
+    branches: [ stable/ussuri-m3 ]
   pull_request:
 
 jobs:
