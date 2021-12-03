@@ -285,7 +285,7 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def create_load_balancer(self, load_balancer_id, flavor=None):
+    def create_load_balancer(self, load_balancer_id, flavor=None, availability_zone=None):
         lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
         # We are retrying to fetch load-balancer since API could
         # be still busy inserting the LB into the database.
