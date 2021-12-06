@@ -53,7 +53,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         else:
             # fetch scheduled server from VIP port
             network_driver = driver_utils.get_network_driver()
-            return network_driver.get_scheduled_host(loadbalancer.vip_port_id)
+            return network_driver.get_scheduled_host(loadbalancer.vip.port_id)
 
     def loadbalancer_create(self, loadbalancer):
         if loadbalancer.flavor == driver_dm.Unset:
