@@ -31,5 +31,5 @@ class NoopNetworkDriverF5(driver.NoopNetworkDriver):
     def get_scheduled_host(self, port_id):
         return CONF.host
 
-    def get_segmentation_id(self, network_id):
+    def get_segmentation_id(self, network_id, host=None):
         return 1234
