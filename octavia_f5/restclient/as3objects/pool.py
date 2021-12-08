@@ -105,7 +105,7 @@ def _get_lb_method(method):
         return 'least-connections-member'
     elif lb_method == 'RATIO_LEAST_CONNECTIONS':
         return 'ratio-least-connections-member'
-    elif lb_method == constants.LB_ALGORITHM_SOURCE_IP:
+    elif lb_method == constants.LB_ALGORITHM_SOURCE_IP or lb_method == constants.LB_ALGORITHM_SOURCE_IP_PORT:
         return 'least-connections-node'
     elif lb_method == 'OBSERVED_MEMBER':
         return 'observed-member'
