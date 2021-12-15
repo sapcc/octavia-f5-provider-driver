@@ -1,4 +1,4 @@
-#  Copyright 2021 SAP SE
+#  Copyright 2022 SAP SE
 #
 #  Licensed under the Apache License, Version 2.0 (the "License"); you may
 #  not use this file except in compliance with the License. You may obtain
@@ -16,6 +16,7 @@ import json
 from unittest import mock
 
 from oslo_config import cfg
+from oslo_config import fixture as oslo_fixture
 from oslo_utils import uuidutils
 
 import octavia.tests.unit.base as base
@@ -43,6 +44,11 @@ _db_session = mock.MagicMock()
 @mock.patch('octavia_f5.controller.worker.sync_manager.SyncManager')
 @mock.patch('octavia_f5.db.api.get_session', return_value=_db_session)
 class TestControllerWorker(base.TestCase):
+    def setUp(self):
+        super(TestControllerWorker, self).setUp()
+        conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
+        conf.config(group="f5_agent", prometheus=False)
+
     @mock.patch('octavia.db.repositories.AvailabilityZoneRepository')
     @mock.patch('octavia.db.repositories.AvailabilityZoneProfileRepository')
     def test_register_in_availability_zone(self,

@@ -93,8 +93,7 @@ class StatusManager(object):
             max_workers=CONF.health_manager.health_update_threads)
         self.stats_executor = futurist.ThreadPoolExecutor(
             max_workers=CONF.health_manager.stats_update_threads)
-        # pylint: disable=unnecessary-comprehension
-        self.bigips = [bigip for bigip in self.initialize_bigips()]
+        self.bigips = list(self.initialize_bigips())
         # Cache reachability of every bigip
         self.bigip_status = {bigip.hostname: False
                              for bigip in self.bigips}

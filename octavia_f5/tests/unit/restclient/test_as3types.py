@@ -19,7 +19,7 @@ from octavia_f5.restclient.as3types import f5label, f5remark
 class TestAS3Types(base.TestCase):
     def test_f5remark(self):
         self.assertEqual(f5remark("test test test"), "test test test")
-        self.assertEqual(f5remark("\Programm Files"), "Programm Files")
+        self.assertEqual(f5remark("\\Programm Files"), "Programm Files")
         self.assertEqual(len(f5remark(65 * "A")), 64)
 
         FORBIDDEN_CHARACTERS = "\\\""

@@ -1,4 +1,4 @@
-# Copyright 2020 SAP SE
+# Copyright 2022 SAP SE
 #
 # Licensed under the Apache License, Version 2.0 (the "License"); you may
 # not use this file except in compliance with the License. You may obtain
@@ -134,3 +134,14 @@ class ListenerRepository(repositories.ListenerRepository):
                              ]))
 
         return [model.to_data_model() for model in query.all()]
+
+
+class AmphoraRepository(repositories.AmphoraRepository):
+    def get_devices_for_host(self, session, host):
+
+        query = session.query(self.model_class.cached_zone)
+        # pylint: disable=singleton-comparison
+        query = query.filter(self.model_class.compute_flavor == host,
+                             self.model_class.cached_zone != None)
+
+        return [model[0] for model in query.all()]
