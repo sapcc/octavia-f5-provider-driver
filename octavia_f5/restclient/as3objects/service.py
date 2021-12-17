@@ -99,7 +99,7 @@ def get_service(listener, cert_manager, esd_repository):
     vip = listener.load_balancer.vip
     project_id = listener.load_balancer.project_id
     label = as3types.f5label(listener.name or listener.description)
-    virtual_address = '{}/32'.format(vip.ip_address)
+    virtual_address = '{}'.format(vip.ip_address)
     service_args = {
         'virtualPort': listener.protocol_port,
         'persistenceMethods': [],
