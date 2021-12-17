@@ -138,7 +138,7 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
         return res['port']['binding:host_id']
 
     @MEMOIZE
-    def get_segmentation_id(self, network_id, host=None):
+    def get_segmentation_id(self, network_id, host):
         # List neutron ports associated with the Amphora
         try:
             network = self.neutron_client.show_network(network_id)
@@ -152,7 +152,7 @@ class HierachicalPortBindingDriver(aap.AllowedAddressPairsDriver):
         raise base.NetworkException('No segmentation id for network "{}" found'.format(network_id))
 
     @MEMOIZE
-    def get_physical_network(self, host=None):
+    def get_physical_network(self, host):
         """
         This function tries to figure out it's own physical network via the networking-f5 agent
         driver's device_mappings
