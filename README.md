@@ -25,7 +25,7 @@ Instead, otherwise unused tables are used in a specific way:
   - For each load balancer an amphora entry is created. This is done to prevent problems with Octavias health manager, which makes assumptions about amphora entries.
   - For each F5 device that is managed by a provider driver worker a special entry is created in the `amphora` table. Here, `load_balancer_id` will always be null, `compute_flavor` contains the name of the managed F5 device, `cached_zone` its hostname, and `vrrp_priority` the amount of listeners on that device.
 	`status` is set to `ALLOCATED` if the device is offline (no entry in device status response), `READY` if it is online, or `BOOTING` if it was offline and is now back online. In the latter case the device receives a full sync and the status is set to `READY`.
-    If `vrrp_interface` is set to 'disabled' for a given F5 amphora entry, the [hiarchical port binding driver](./octavia_f5/network/drivers/neutron/hierarchical_port_binding.py) will not take that device into account when scheduling new load balancers.
+    If `vrrp_interface` is set to 'disabled' for a given F5 amphora entry, the [scheduler](./octavia_f5/db/scheduler.py#L53) will not take that device into account when scheduling new load balancers.
 
 # F5-specific configuration options
 There are lots of F5-specific configuration options. They can be found in `octavia_f5/common/config.py`.
