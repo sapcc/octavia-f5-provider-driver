@@ -17,9 +17,8 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia_f5.common import constants
-from octavia_f5.restclient import as3types
 from octavia_f5.restclient import as3classes as as3
-from octavia_f5.utils import driver_utils as utils
+from octavia_f5.restclient import as3types
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)

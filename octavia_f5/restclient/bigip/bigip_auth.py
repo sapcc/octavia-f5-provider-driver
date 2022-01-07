@@ -12,11 +12,11 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from urllib import parse
+
 import requests
-from requests import cookies
+import tenacity
 from requests.auth import HTTPBasicAuth, AuthBase
-from six.moves.urllib import parse
-from tenacity import *
 
 BIGIP_TOKEN_HEADER = 'X-F5-Auth-Token'
 BIGIP_TOKEN_MAX_TIMEOUT = '36000'
@@ -55,6 +55,8 @@ class BigIPTokenAuth(AuthBase):
 
         # Consume content and release the original connection
         # to allow our new request to reuse the same one.
+        # pylint: disable=pointless-statement
+        # noinspection PyStatementEffect
         r.content
         r.raw.release_conn()
         prep = r.request.copy()
@@ -75,9 +77,9 @@ class BigIPTokenAuth(AuthBase):
         r.register_hook('response', self.handle_401)
         return r
 
-    @retry(
-        wait=wait_incrementing(3, 5, 10),
-        stop=stop_after_attempt(3)
+    @tenacity.retry(
+        wait=tenacity.wait_incrementing(3, 5, 10),
+        stop=tenacity.stop_after_attempt(3)
     )
     def get_token(self):
         """ Get F5-Auth-Token

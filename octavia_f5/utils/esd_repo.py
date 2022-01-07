@@ -21,11 +21,11 @@ reference
 import glob
 import json
 import os
-import six
 
 from oslo_config import cfg
-from octavia.common import exceptions
 from oslo_log import log as logging
+
+from octavia.common import exceptions
 
 CONF = cfg.CONF
 
@@ -38,9 +38,9 @@ class EsdJSONValidation(object):
     """
 
     def __init__(self, esddir):
-        assert esddir != None
+        assert esddir is not None
         self.esdJSONFileList = glob.glob(os.path.join(esddir, '*.json'))
-        assert len(self.esdJSONFileList) > 0 # check that files have been found
+        assert self.esdJSONFileList
         self.esdJSONDict = {}
 
     def read_json(self):
@@ -150,27 +150,27 @@ class EsdRepository(EsdJSONValidation):
 
     valid_esd_tags = {
         'lbaas_fastl4': {
-            'value_type': six.string_types},
+            'value_type': str},
         'lbaas_ctcp': {
-            'value_type': six.string_types},
+            'value_type': str},
         'lbaas_stcp': {
-            'value_type': six.string_types},
+            'value_type': str},
         'lbaas_http': {
-            'value_type': six.string_types},
+            'value_type': str},
         'lbaas_one_connect': {
-            'value_type': six.string_types},
+            'value_type': str},
         'lbaas_http_compression': {
-            'value_type': six.string_types},
+            'value_type': str},
         'lbaas_cssl_profile': {
-            'value_type': six.string_types},
+            'value_type': str},
         'lbaas_sssl_profile': {
-            'value_type': six.string_types},
+            'value_type': str},
         'lbaas_irule': {
             'value_type': list},
         'lbaas_policy': {
             'value_type': list},
         'lbaas_persist': {
-            'value_type': six.string_types},
+            'value_type': str},
         'lbaas_fallback_persist': {
-            'value_type': six.string_types}
+            'value_type': str}
     }

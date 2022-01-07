@@ -93,6 +93,7 @@ class StatusManager(object):
             max_workers=CONF.health_manager.health_update_threads)
         self.stats_executor = futurist.ThreadPoolExecutor(
             max_workers=CONF.health_manager.stats_update_threads)
+        # pylint: disable=unnecessary-comprehension
         self.bigips = [bigip for bigip in self.initialize_bigips()]
         # Cache reachability of every bigip
         self.bigip_status = {bigip.hostname: False
@@ -343,7 +344,7 @@ class StatusManager(object):
                     compute_flavor=CONF.host,
                     vrrp_priority=num_listeners,
                     cached_zone=device_name,
-                    status=constants.AMPHORA_ALLOCATED)
+                    status=o_const.AMPHORA_ALLOCATED)
             else:
                 self.amp_repo.update(
                     session,
@@ -370,11 +371,11 @@ class StatusManager(object):
                 device_entry = self.amp_repo.get(session, **amp_dict)
 
                 # determine status
-                status = constants.AMPHORA_ALLOCATED  # offline if not available
+                status = o_const.AMPHORA_ALLOCATED  # offline if not available
                 if self.bigip_status[bigip.hostname]:
-                    status = constants.AMPHORA_READY  # back online if available
-                    if device_entry is None or device_entry.status != constants.AMPHORA_READY:
-                        status = constants.AMPHORA_BOOTING  # needs full sync if no DB entry or not yet marked as ready
+                    status = o_const.AMPHORA_READY  # back online if available
+                    if device_entry is None or device_entry.status != o_const.AMPHORA_READY:
+                        status = o_const.AMPHORA_BOOTING  # needs full sync if no DB entry or not yet marked as ready
 
                 # update attributes
                 amp_dict['status'] = status

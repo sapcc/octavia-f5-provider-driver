@@ -14,7 +14,6 @@
 
 import json
 
-import six
 from oslo_log import log as logging
 
 from octavia_f5.common import constants
@@ -26,10 +25,10 @@ LOG = logging.getLogger(__name__)
 def unpack(obj):
     if isinstance(obj, BaseDescription):
         return obj.to_dict()
-    elif isinstance(obj, list):
+    if isinstance(obj, list):
         return [unpack(o) for o in obj]
-    else:
-        return obj
+
+    return obj
 
 
 class BaseDescription(object):
@@ -59,7 +58,7 @@ class BaseDescription(object):
 
     def to_dict(self):
         data = self.__dict__.copy()
-        for key, value in six.iteritems(data):
+        for key, value in data.items():
             if isinstance(value, BaseDescription):
                 data[key] = value.to_dict()
             elif isinstance(value, list):

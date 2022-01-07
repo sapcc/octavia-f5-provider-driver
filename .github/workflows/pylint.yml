@@ -1,0 +1,24 @@
+name: Pylint
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.6"]
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v2
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r test-requirements.txt -c https://raw.githubusercontent.com/sapcc/requirements/stable/ussuri/upper-constraints.txt
+    - name: Analysing the code with pylint
+      run: |
+        tools/coding-checks.sh --pylint
+

@@ -47,6 +47,7 @@ class PolicyActionNotSupported(AS3Exception):
 
 class MonitorDeletionException(AS3Exception):
     def __init__(self, tenant, application, monitor):
+        super(MonitorDeletionException).__init__()
         self.tenant = tenant
         self.application = application
         self.monitor = monitor
@@ -54,4 +55,5 @@ class MonitorDeletionException(AS3Exception):
 
 class DeleteAllTenantsException(Exception):
     def __init__(self):
+        super(DeleteAllTenantsException).__init__()
         self.message = 'Delete called without tenant, would wipe all AS3 Declaration, ignoring.'

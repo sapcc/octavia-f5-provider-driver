@@ -14,7 +14,6 @@
 # limitations under the License.
 
 
-from octavia.common import constants
 from octavia.common.data_models import BaseDataModel
 
 

@@ -23,7 +23,6 @@ from octavia.network import base
 from octavia.network.drivers.neutron import allowed_address_pairs as aap
 from octavia.network.drivers.neutron import utils
 from octavia_f5.common import constants
-from octavia_f5.db import repositories
 from octavia_f5.db import scheduler
 
 LOG = logging.getLogger(__name__)

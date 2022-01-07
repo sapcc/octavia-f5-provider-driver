@@ -12,9 +12,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from urllib import parse
+
 import requests
 from oslo_log import log as logging
-from six.moves.urllib import parse
 from urllib3.util.retry import Retry
 
 from octavia_f5.restclient.bigip.timeout_http_adapter import TimeoutHTTPAdapter

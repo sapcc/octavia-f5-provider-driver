@@ -12,11 +12,14 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from octavia_f5.common import constants as const
+from octavia_lib.common import constants
+
+from octavia_f5.common import constants as f5_const
 from octavia_f5.restclient import as3types
-from octavia_f5.restclient.as3classes import *
+from octavia_f5.restclient.as3classes import Policy_Compare_String, Policy_Condition, Policy_Action, \
+    Endpoint_Policy_Rule, Endpoint_Policy
 from octavia_f5.restclient.as3objects import pool
-from octavia_f5.utils.exceptions import *
+from octavia_f5.utils.exceptions import PolicyTypeNotSupported, CompareTypeNotSupported, PolicyActionNotSupported
 
 COMPARE_TYPE_MAP = {
     'STARTS_WITH': 'starts-with',
@@ -31,29 +34,30 @@ COMPARE_TYPE_INVERT_MAP = {
     'EQUAL_TO': 'does-not-equal'
 }
 COND_TYPE_MAP = {
-    #const.L7RULE_TYPE_HOST_NAME: {'match_key': 'host', 'type': 'httpUri'},
+    # constants.L7RULE_TYPE_HOST_NAME: {'match_key': 'host', 'type': 'httpUri'},
     # Workaround for https://github.com/F5Networks/f5-appsvcs-extension/issues/229, match Host in httpHeader
-    const.L7RULE_TYPE_HOST_NAME: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name', 'override_key': 'Host'},
-    const.L7RULE_TYPE_PATH: {'match_key': 'path', 'type': 'httpUri'},
-    const.L7RULE_TYPE_FILE_TYPE: {'match_key': 'extension', 'type': 'httpUri'},
-    const.L7RULE_TYPE_HEADER: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name'},
-    const.L7RULE_TYPE_SSL_DN_FIELD: {'match_key': 'serverName', 'type': 'sslExtension'},
-    const.L7RULE_TYPE_COOKIE: {'match_key': 'all', 'type': 'httpCookie', 'key_name': 'name'},
+    constants.L7RULE_TYPE_HOST_NAME: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name',
+                                      'override_key': 'Host'},
+    constants.L7RULE_TYPE_PATH: {'match_key': 'path', 'type': 'httpUri'},
+    constants.L7RULE_TYPE_FILE_TYPE: {'match_key': 'extension', 'type': 'httpUri'},
+    constants.L7RULE_TYPE_HEADER: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name'},
+    constants.L7RULE_TYPE_SSL_DN_FIELD: {'match_key': 'serverName', 'type': 'sslExtension'},
+    constants.L7RULE_TYPE_COOKIE: {'match_key': 'all', 'type': 'httpCookie', 'key_name': 'name'},
 }
 SUPPORTED_ACTION_TYPE = [
-    const.L7POLICY_ACTION_REDIRECT_TO_POOL,
-    const.L7POLICY_ACTION_REDIRECT_TO_URL,
-    const.L7POLICY_ACTION_REDIRECT_PREFIX,
-    const.L7POLICY_ACTION_REJECT
+    constants.L7POLICY_ACTION_REDIRECT_TO_POOL,
+    constants.L7POLICY_ACTION_REDIRECT_TO_URL,
+    constants.L7POLICY_ACTION_REDIRECT_PREFIX,
+    constants.L7POLICY_ACTION_REJECT
 ]
 
 
 def get_name(policy_id):
-    return "{}{}".format(constants.PREFIX_POLICY, policy_id)
+    return "{}{}".format(f5_const.PREFIX_POLICY, policy_id)
 
 
 def get_wrapper_name(listener_id):
-    return "{}{}".format(constants.PREFIX_WRAPPER_POLICY, listener_id)
+    return "{}{}".format(f5_const.PREFIX_WRAPPER_POLICY, listener_id)
 
 
 def _get_condition(l7rule):
@@ -89,20 +93,20 @@ def _get_action(l7policy):
         raise PolicyActionNotSupported()
 
     args = dict()
-    if l7policy.action == const.L7POLICY_ACTION_REDIRECT_TO_POOL:
+    if l7policy.action == constants.L7POLICY_ACTION_REDIRECT_TO_POOL:
         args['type'] = 'forward'
         pool_name = pool.get_name(l7policy.redirect_pool_id)
         args['select'] = {'pool': {'use': pool_name}}
         args['event'] = 'request'
-    elif l7policy.action == const.L7POLICY_ACTION_REDIRECT_TO_URL:
+    elif l7policy.action == constants.L7POLICY_ACTION_REDIRECT_TO_URL:
         args['type'] = 'httpRedirect'
         args['location'] = l7policy.redirect_url
         args['event'] = 'request'
-    elif l7policy.action == const.L7POLICY_ACTION_REDIRECT_PREFIX:
+    elif l7policy.action == constants.L7POLICY_ACTION_REDIRECT_PREFIX:
         args['type'] = 'httpRedirect'
         args['location'] = 'tcl:{}[HTTP::uri]'.format(l7policy.redirect_prefix)
         args['event'] = 'request'
-    elif l7policy.action == const.L7POLICY_ACTION_REJECT:
+    elif l7policy.action == constants.L7POLICY_ACTION_REJECT:
         args['type'] = 'drop'
         args['event'] = 'request'
     return Policy_Action(**args)

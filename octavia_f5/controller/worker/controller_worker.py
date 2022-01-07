@@ -16,6 +16,7 @@
 import json
 import threading
 import time
+from queue import Empty
 
 import prometheus_client as prometheus
 import tenacity
@@ -26,7 +27,6 @@ from oslo_db import api as oslo_db_api
 from oslo_log import log as logging
 from oslo_utils import excutils, uuidutils
 from requests import HTTPError
-from six.moves.queue import Empty
 from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.db import repositories as repo
@@ -133,7 +133,6 @@ class ControllerWorker(object):
             except Exception as e:
                 LOG.exception(e)
                 # restart
-                pass
 
     @periodics.periodic(86400, run_immediately=True)
     def cleanup_orphaned_tenants(self):
@@ -166,7 +165,7 @@ class ControllerWorker(object):
 
         # Get all pending devices
         booting_devices = self._amphora_repo.get_all(
-            session, status=constants.AMPHORA_BOOTING,
+            session, status=lib_consts.AMPHORA_BOOTING,
             compute_flavor=CONF.host, load_balancer_id=None)
 
         for device in booting_devices[0]:
@@ -180,11 +179,11 @@ class ControllerWorker(object):
             lbs = self._loadbalancer_repo.get_all_from_host(session, show_deleted=False)
 
             # deduplicate
-            for network_id in set([lb.vip.network_id for lb in lbs]):
+            for network_id in set(lb.vip.network_id for lb in lbs):
                 self.queue.put((network_id, device.cached_zone))
 
             # Set device ready
-            self._amphora_repo.update(session, device.id, status=constants.AMPHORA_READY)
+            self._amphora_repo.update(session, device.id, status=lib_consts.AMPHORA_READY)
             session.commit()
 
     @periodics.periodic(120, run_immediately=True)
@@ -239,7 +238,7 @@ class ControllerWorker(object):
 
         # Deduplicate into networks
         # because each network is synced separately
-        pending_networks = set([lb.vip.network_id for lb in lbs])
+        pending_networks = set(lb.vip.network_id for lb in lbs)
         for network_id in pending_networks:
             self.queue.put_nowait((network_id, None))
 
