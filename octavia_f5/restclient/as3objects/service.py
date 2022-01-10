@@ -17,7 +17,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia.common import exceptions
-from octavia_f5.common import constants as const
+from octavia_f5.common import constants as f5_const
 from octavia_f5.restclient import as3classes as as3, as3types
 from octavia_f5.restclient.as3objects import application as m_app
 from octavia_f5.restclient.as3objects import certificate as m_cert
@@ -39,7 +39,7 @@ def get_name(listener_id):
     :param listener_id: listener id
     :return: AS3 object name
     """
-    return "{}{}".format(const.PREFIX_LISTENER, listener_id)
+    return "{}{}".format(f5_const.PREFIX_LISTENER, listener_id)
 
 
 def get_esd_entities(servicetype, esd):
@@ -56,8 +56,8 @@ def get_esd_entities(servicetype, esd):
         service_args['iRules'] = [as3.BigIP(rule) for rule in irules]
 
     # client / server tcp profiles
-    if servicetype in [const.SERVICE_HTTP, const.SERVICE_HTTPS,
-                       const.SERVICE_TCP, const.SERVICE_L4]:
+    if servicetype in [f5_const.SERVICE_HTTP, f5_const.SERVICE_HTTPS,
+                       f5_const.SERVICE_TCP, f5_const.SERVICE_L4]:
         ctcp = esd.get('lbaas_ctcp', None)
         stcp = esd.get('lbaas_stcp', None)
         if stcp and ctcp:
@@ -71,7 +71,7 @@ def get_esd_entities(servicetype, esd):
         else:
             service_args['profileTCP'] = 'normal'
 
-    if servicetype in [const.SERVICE_HTTP, const.SERVICE_HTTPS]:
+    if servicetype in [f5_const.SERVICE_HTTP, f5_const.SERVICE_HTTPS]:
         # OneConnect (Multiplex) Profile
         oneconnect = esd.get('lbaas_one_connect', None)
         if oneconnect:
@@ -118,26 +118,26 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['virtualAddresses'] = [virtual_address]
 
     # Determine service type
-    if listener.protocol == const.PROTOCOL_TCP:
+    if listener.protocol == lib_consts.PROTOCOL_TCP:
         service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
     # UDP
-    elif listener.protocol == const.PROTOCOL_UDP:
-        service_args['_servicetype'] = const.SERVICE_UDP
+    elif listener.protocol == lib_consts.PROTOCOL_UDP:
+        service_args['_servicetype'] = f5_const.SERVICE_UDP
     # HTTP
-    elif listener.protocol == const.PROTOCOL_HTTP:
-        service_args['_servicetype'] = const.SERVICE_HTTP
+    elif listener.protocol == lib_consts.PROTOCOL_HTTP:
+        service_args['_servicetype'] = f5_const.SERVICE_HTTP
     # HTTPS (non-terminated, forward TCP traffic)
-    elif listener.protocol == const.PROTOCOL_HTTPS:
+    elif listener.protocol == lib_consts.PROTOCOL_HTTPS:
         service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
     # Proxy
-    elif listener.protocol == const.PROTOCOL_PROXY:
-        service_args['_servicetype'] = const.SERVICE_TCP
+    elif listener.protocol == lib_consts.PROTOCOL_PROXY:
+        service_args['_servicetype'] = f5_const.SERVICE_TCP
         name, irule = m_irule.get_proxy_irule()
         service_args['iRules'].append(name)
         entities.append((name, irule))
     # Terminated HTTPS
-    elif listener.protocol == const.PROTOCOL_TERMINATED_HTTPS:
-        service_args['_servicetype'] = const.SERVICE_HTTPS
+    elif listener.protocol == lib_consts.PROTOCOL_TERMINATED_HTTPS:
+        service_args['_servicetype'] = f5_const.SERVICE_HTTPS
         service_args['serverTLS'] = m_tls.get_listener_name(listener.id)
         service_args['redirect80'] = False
 
@@ -169,14 +169,14 @@ def get_service(listener, cert_manager, esd_repository):
             service_args['pool'] = default_pool
 
             # only consider Proxy pool, everything else is determined by listener type
-            if pool.protocol == const.PROTOCOL_PROXY:
+            if pool.protocol == lib_consts.PROTOCOL_PROXY:
                 name, irule = m_irule.get_proxy_irule()
                 service_args['iRules'].append(name)
                 entities.append((name, irule))
 
         # Pool member certificate handling (TLS backends)
         if pool.tls_enabled and listener.protocol in \
-                [const.PROTOCOL_PROXY, const.PROTOCOL_HTTP, const.PROTOCOL_TERMINATED_HTTPS]:
+                [lib_consts.PROTOCOL_PROXY, lib_consts.PROTOCOL_HTTP, lib_consts.PROTOCOL_TERMINATED_HTTPS]:
             client_cert = None
             trust_ca = None
             crl_file = None
@@ -208,7 +208,7 @@ def get_service(listener, cert_manager, esd_repository):
             ))
 
     # Insert header irules
-    if service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+    if service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
         # HTTP profiles only
         for name, irule in m_irule.get_header_irules(listener.insert_headers):
             service_args['iRules'].append(name)
@@ -219,7 +219,7 @@ def get_service(listener, cert_manager, esd_repository):
         persistence = listener.default_pool.session_persistence
         lb_algorithm = listener.default_pool.lb_algorithm
 
-        if service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+        if service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
             # Add APP_COOKIE / HTTP_COOKIE persistance only in HTTP profiles
             if persistence.type == 'APP_COOKIE' and persistence.cookie_name:
                 # generate iRule for cookie_name
@@ -288,7 +288,7 @@ def get_service(listener, cert_manager, esd_repository):
             endpoint_policies.append(policy)
 
     # UDP listener won't support policies
-    if endpoint_policies and not service_args['_servicetype'] == const.SERVICE_UDP:
+    if endpoint_policies and not service_args['_servicetype'] == f5_const.SERVICE_UDP:
         # add a regular endpoint policy
         policy_name = m_policy.get_wrapper_name(listener.id)
 
@@ -304,21 +304,21 @@ def get_service(listener, cert_manager, esd_repository):
 
     # fastL4 profile doesn't support iRules or custom TCP profiles,
     # fallback to TCP Service when iRules/Profiles detected
-    if service_args['_servicetype'] == const.SERVICE_L4 and (
+    if service_args['_servicetype'] == f5_const.SERVICE_L4 and (
             service_args['iRules'] or 'profileTCP' in service_args):
-        service_args['_servicetype'] = const.SERVICE_TCP
+        service_args['_servicetype'] = f5_const.SERVICE_TCP
 
     # add default profiles to supported listeners
-    if CONF.f5_agent.profile_http and service_args['_servicetype'] in const.SERVICE_HTTP_TYPES:
+    if CONF.f5_agent.profile_http and service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
         if 'profileHTTP' not in service_args:
             service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http)
-    if CONF.f5_agent.profile_l4 and service_args['_servicetype'] == const.SERVICE_L4:
+    if CONF.f5_agent.profile_l4 and service_args['_servicetype'] == f5_const.SERVICE_L4:
         if 'profileL4' not in service_args:
             service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)
-    if CONF.f5_agent.profile_tcp and service_args['_servicetype'] in const.SERVICE_TCP_TYPES:
+    if CONF.f5_agent.profile_tcp and service_args['_servicetype'] in f5_const.SERVICE_TCP_TYPES:
         if 'profileTCP' not in service_args:
             service_args['profileTCP'] = as3.BigIP(CONF.f5_agent.profile_tcp)
-    if CONF.f5_agent.profile_udp and service_args['_servicetype'] == const.SERVICE_UDP:
+    if CONF.f5_agent.profile_udp and service_args['_servicetype'] == f5_const.SERVICE_UDP:
         if 'profileUDP' not in service_args:
             service_args['profileUDP'] = as3.BigIP(CONF.f5_agent.profile_udp)
 
