@@ -12,12 +12,12 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from stevedore import driver
+from octavia_lib.api.drivers import data_models
+from octavia_lib.common import constants
 from oslo_config import cfg
 from oslo_log import log as logging
+from stevedore import driver
 
-from octavia_f5.common import constants
-from octavia_lib.api.drivers import data_models
 
 CONF = cfg.CONF
 

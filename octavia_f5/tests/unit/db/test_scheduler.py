@@ -14,14 +14,14 @@
 
 from unittest import mock
 
+from octavia.common import constants
 from oslo_config import cfg
 from oslo_config import fixture as oslo_fixture
 from oslo_utils import uuidutils
-from oslo_db.sqlalchemy import session as db_session
 
 from octavia.db import repositories as repo
 from octavia.tests.functional.db import base
-from octavia_f5.common import config, constants  # noqa
+from octavia_f5.common import config, constants as f5_const  # noqa
 from octavia_f5.controller.worker import controller_worker
 from octavia_f5.db import scheduler
 

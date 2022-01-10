@@ -37,6 +37,7 @@ class Scheduler(object):
         """
 
         # get all hosts
+        # pylint: disable=singleton-comparison
         candidates = session.query(
             models.Amphora.compute_flavor,
             func.count(models.LoadBalancer.id)
@@ -72,7 +73,7 @@ class Scheduler(object):
                 models.Amphora.compute_flavor.in_(hosts))
         else:
             # we need to filter out all az-aware hosts
-            azs = set([az.name for az in self.az_repo.get_all(session)[0]])
+            azs = set(az.name for az in self.az_repo.get_all(session)[0])
             omit_hosts = set()
             for az in azs:
                 metadata = self.az_repo.get_availability_zone_metadata_dict(session, az)

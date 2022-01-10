@@ -13,10 +13,10 @@
 # under the License.
 
 import prometheus_client as prometheus
+import tenacity
 from oslo_config import cfg
 from oslo_log import log as logging
-from requests import ConnectionError, Timeout, RequestException
-from tenacity import *
+from requests import ConnectionError, Timeout
 
 from octavia_f5.db import api as db_apis
 from octavia_f5.restclient import as3declaration
@@ -56,6 +56,7 @@ class SyncManager(object):
 
     def __init__(self, status_manager, loadbalancer_repo):
         self._bigip = None
+        # pylint: disable=unnecessary-comprehension
         self._bigips = [bigip for bigip in self.initialize_bigips()]
         self._declaration_manager = as3declaration.AS3DeclarationManager(status_manager)
         self._loadbalancer_repo = loadbalancer_repo
@@ -125,6 +126,7 @@ class SyncManager(object):
         for bigip in self._bigips:
             if bigip != self._bigip:
                 return bigip
+        return None
 
     def failover(self, active_device=True):
         if len(self._bigips) == 1:
@@ -133,7 +135,7 @@ class SyncManager(object):
         else:
             # Failover to bigip which is active (if active_device == True) or passive (if active_device == False)
             active_devices = [bigip for bigip in self._bigips if bigip.is_active == active_device]
-            if len(active_devices) <= 0:
+            if not active_devices:
                 raise exceptions.FailoverException("Cannot failover: No device found that's in desired state.")
             self._bigip = next(iter(active_devices))
         LOG.info("failover() triggered, target device is %s", self._bigip.hostname)
@@ -150,11 +152,11 @@ class SyncManager(object):
         hook=force_failover,
         exceptions=(ConnectionError, Timeout, exceptions.FailoverException)
     )
-    @retry(
-        retry=retry_if_exception_type(ConnectionError),
-        wait=wait_incrementing(
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(ConnectionError),
+        wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS)
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS)
     )
     def tenant_update(self, network_id, device=None):
         """ Synchronous call to update F5s with all loadbalancers of a tenant (network_id).
@@ -176,7 +178,7 @@ class SyncManager(object):
 
         # No config syncing if we are in migration mode or specificly syncing one device
         if not CONF.f5_agent.migration and not device and CONF.f5_agent.sync_to_group:
-                decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
+            decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
         return self.bigip(device).post(tenants=[m_part.get_name(network_id)], payload=decl)
 
@@ -184,11 +186,11 @@ class SyncManager(object):
         hook=force_failover,
         exceptions=(ConnectionError, Timeout, exceptions.FailoverException)
     )
-    @retry(
-        retry=retry_if_exception_type(ConnectionError),
-        wait=wait_incrementing(
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(ConnectionError),
+        wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS)
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS)
     )
     def tenant_delete(self, network_id, device=None):
         """ Delete a Tenant.
@@ -205,15 +207,15 @@ class SyncManager(object):
 
         # No config syncing if we are in migration mode or specificly syncing one device
         if not CONF.f5_agent.migration and not device and CONF.f5_agent.sync_to_group:
-                decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
+            decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
         return self.bigip(device).post(tenants=[m_part.get_name(network_id)], payload=decl)
 
-    @retry(
-        retry=retry_if_exception_type(ConnectionError),
-        wait=wait_incrementing(
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(ConnectionError),
+        wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=stop_after_attempt(RETRY_ATTEMPTS)
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS)
     )
     def get_tenants(self, device=None):
         return self.bigip(device).get_tenants()

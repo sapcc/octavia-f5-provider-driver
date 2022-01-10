@@ -12,18 +12,15 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
+from octavia_lib.api.drivers import data_models as driver_dm
+from octavia_lib.api.drivers import exceptions
 from oslo_config import cfg
 from oslo_log import log as logging
 
-try:
-    from octavia.api.drivers.amphora_driver import driver
-except ImportError:
-    from octavia.api.drivers.amphora_driver.v1 import driver
+from octavia.api.drivers.amphora_driver.v1 import driver
 from octavia.common import constants as consts
 from octavia.db import api as db_apis
 from octavia_f5.utils import driver_utils
-from octavia_lib.api.drivers import data_models as driver_dm
-from octavia_lib.api.drivers import exceptions
 
 CONF = cfg.CONF
 CONF.import_group('oslo_messaging', 'octavia.common.config')
@@ -50,10 +47,10 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
             db_apis.get_session(), id=loadbalancer_id)
         if loadbalancer.server_group_id:
             return loadbalancer.server_group_id
-        else:
-            # fetch scheduled server from VIP port
-            network_driver = driver_utils.get_network_driver()
-            return network_driver.get_scheduled_host(loadbalancer.vip.port_id)
+
+        # fetch scheduled server from VIP port
+        network_driver = driver_utils.get_network_driver()
+        return network_driver.get_scheduled_host(loadbalancer.vip.port_id)
 
     def loadbalancer_create(self, loadbalancer):
         if loadbalancer.flavor == driver_dm.Unset:
@@ -270,7 +267,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         :raises UnsupportedOptionError: If the driver does not support
           one of the availability zone settings.
         """
-        if len(availability_zone_dict.get('hosts', [])) > 0:
+        if 'hosts' in availability_zone_dict:
             return
 
         raise exceptions.UnsupportedOptionError(

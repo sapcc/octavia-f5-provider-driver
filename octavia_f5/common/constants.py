@@ -12,8 +12,6 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from octavia_lib.common.constants import *
-
 PROJECT_ID = 'project_id'
 
 BIGIP = 'bigip'

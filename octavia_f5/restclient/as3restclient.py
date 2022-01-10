@@ -12,14 +12,13 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import json
+from urllib import parse
 import time
 
 import futurist
 import prometheus_client as prometheus
 from oslo_config import cfg
 from oslo_log import log as logging
-from six.moves.urllib import parse
 
 from octavia_f5.restclient import as3logging
 from octavia_f5.restclient.as3classes import AS3
@@ -128,8 +127,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
                             r.status_code = result['code']
                     except (KeyError, ValueError):
                         pass
-            return r
-
+        return r
 
     def wait_for_task_finished(self, task_id):
         """ Waits for AS3 task to be finished successfully
@@ -196,6 +194,7 @@ class AS3ExternalContainerRestClient(AS3RestClient):
 
         See: https://clouddocs.f5.com/products/extensions/f5-appsvcs-extension/latest/userguide/as3-container.html
     """
+
     def __init__(self, bigip_url, as3_url, auth=None):
         self.as3_url = parse.urlsplit(as3_url, allow_fragments=False)
         super(AS3ExternalContainerRestClient, self).__init__(bigip_url, auth)
@@ -208,9 +207,9 @@ class AS3ExternalContainerRestClient(AS3RestClient):
                 scheme=self.as3_url.scheme, netloc=self.as3_url.netloc,
                 path=url, query='', fragment='')
             return parse.urlunsplit(url_tuple)
-        else:
-            # derive regular bigip url
-            return super(AS3ExternalContainerRestClient, self).get_url(url)
+
+        # derive regular bigip url
+        return super(AS3ExternalContainerRestClient, self).get_url(url)
 
     def post(self, tenants, payload):
         if isinstance(payload, AS3):

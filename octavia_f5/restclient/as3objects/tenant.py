@@ -15,6 +15,7 @@
 from oslo_config import cfg
 from oslo_log import log as logging
 
+from octavia_lib.common import constants as lib_consts
 from octavia.common import exceptions as o_exceptions
 from octavia_f5.common import constants
 from octavia_f5.restclient import as3classes as as3
@@ -52,7 +53,7 @@ def get_tenant(segmentation_id, loadbalancers, status_manager, cert_manager, esd
 
     for loadbalancer in loadbalancers:
         # Skip load balancer in (pending) deletion
-        if loadbalancer.provisioning_status in [constants.PENDING_DELETE]:
+        if loadbalancer.provisioning_status in [lib_consts.PENDING_DELETE]:
             continue
 
         # Create generic application

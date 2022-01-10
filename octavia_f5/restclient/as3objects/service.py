@@ -176,7 +176,7 @@ def get_service(listener, cert_manager, esd_repository):
 
         # Pool member certificate handling (TLS backends)
         if pool.tls_enabled and listener.protocol in \
-                [ const.PROTOCOL_PROXY, const.PROTOCOL_HTTP, const.PROTOCOL_TERMINATED_HTTPS ]:
+                [const.PROTOCOL_PROXY, const.PROTOCOL_HTTP, const.PROTOCOL_TERMINATED_HTTPS]:
             client_cert = None
             trust_ca = None
             crl_file = None
@@ -232,15 +232,15 @@ def get_service(listener, cert_manager, esd_repository):
                 name, obj_persist = m_persist.get_app_cookie(escaped_cookie)
                 service_args['persistenceMethods'] = [as3.Pointer(name)]
                 entities.append((name, obj_persist))
-                if lb_algorithm == 'SOURCE_IP':
+                if lb_algorithm == lib_consts.LB_ALGORITHM_SOURCE_IP:
                     service_args['fallbackPersistenceMethod'] = 'source-address'
 
-            elif persistence.type == 'HTTP_COOKIE':
+            elif persistence.type == lib_consts.SESSION_PERSISTENCE_HTTP_COOKIE:
                 service_args['persistenceMethods'] = ['cookie']
-                if lb_algorithm == 'SOURCE_IP':
+                if lb_algorithm == lib_consts.LB_ALGORITHM_SOURCE_IP:
                     service_args['fallbackPersistenceMethod'] = 'source-address'
 
-        if persistence.type == 'SOURCE_IP':
+        if persistence.type == lib_consts.LB_ALGORITHM_SOURCE_IP:
             if not persistence.persistence_timeout and not persistence.persistence_granularity:
                 service_args['persistenceMethods'] = ['source-address']
             else:
@@ -250,7 +250,6 @@ def get_service(listener, cert_manager, esd_repository):
                 )
                 service_args['persistenceMethods'] = [as3.Pointer(name)]
                 entities.append((name, obj_persist))
-
 
     # Map listener tags to ESDs
     for tag in listener.tags:
@@ -306,7 +305,7 @@ def get_service(listener, cert_manager, esd_repository):
     # fastL4 profile doesn't support iRules or custom TCP profiles,
     # fallback to TCP Service when iRules/Profiles detected
     if service_args['_servicetype'] == const.SERVICE_L4 and (
-            len(service_args['iRules']) > 0 or 'profileTCP' in service_args):
+            service_args['iRules'] or 'profileTCP' in service_args):
         service_args['_servicetype'] = const.SERVICE_TCP
 
     # add default profiles to supported listeners

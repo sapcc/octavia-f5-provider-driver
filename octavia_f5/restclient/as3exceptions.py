@@ -16,7 +16,6 @@ class TypeNotSupportedException(Exception):
     """Exception raised for not supported types.
 
     """
-    pass
 
 
 class RequiredKeyMissingException(Exception):
@@ -27,6 +26,7 @@ class RequiredKeyMissingException(Exception):
     """
 
     def __init__(self, key):
+        super(RequiredKeyMissingException).__init__()
         self.message = 'Missing required key \'{}\'.'.format(key)
 
 
@@ -38,6 +38,7 @@ class IncompatibleSubTypeException(Exception):
     """
 
     def __init__(self, got, expected):
+        super(IncompatibleSubTypeException).__init__()
         self.message = 'Incompatible subtype \'{}\', expected \'{}\'.'.format(
             got, expected)
 
@@ -46,11 +47,9 @@ class DuplicatedKeyException(Exception):
     """Exception raised for duplicated keys.
 
     """
-    pass
 
 
 class UnprocessableEntityException(Exception):
     """Exception raised for generic F5 AS3 failure.
-    
+
     """
-    pass

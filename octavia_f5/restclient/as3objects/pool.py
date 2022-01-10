@@ -13,9 +13,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from octavia_f5.common import constants
 from oslo_log import log as logging
 
+from octavia.common import constants
+from octavia_f5.common import constants as f5_consts
 from octavia_f5.restclient import as3types
 from octavia_f5.restclient.as3classes import Pool, Pointer
 from octavia_f5.restclient.as3objects import monitor as m_monitor
@@ -31,7 +32,7 @@ def get_name(pool_id):
     :param pool_id: pool id
     :return: AS3 object name
     """
-    return "{}{}".format(constants.PREFIX_POOL, pool_id)
+    return "{}{}".format(f5_consts.PREFIX_POOL, pool_id)
 
 
 def get_pool(pool, loadbalancer_ips, status):
@@ -103,18 +104,19 @@ def _get_lb_method(method):
 
     if lb_method == constants.LB_ALGORITHM_LEAST_CONNECTIONS:
         return 'least-connections-member'
-    elif lb_method == 'RATIO_LEAST_CONNECTIONS':
+    if lb_method == 'RATIO_LEAST_CONNECTIONS':
         return 'ratio-least-connections-member'
-    elif lb_method == constants.LB_ALGORITHM_SOURCE_IP or lb_method == constants.LB_ALGORITHM_SOURCE_IP_PORT:
-        return 'least-connections-node'
-    elif lb_method == 'OBSERVED_MEMBER':
-        return 'observed-member'
-    elif lb_method == 'PREDICTIVE_MEMBER':
-        return 'predictive-member'
-    elif lb_method == 'RATIO':
-        return 'ratio-member'
-    else:
+    if lb_method == constants.LB_ALGORITHM_SOURCE_IP:
         return 'round-robin'
+    if lb_method == 'OBSERVED_MEMBER':
+        return 'observed-member'
+    if lb_method == 'PREDICTIVE_MEMBER':
+        return 'predictive-member'
+    if lb_method == 'RATIO':
+        return 'ratio-member'
+
+    # every other algorithm are unsupported
+    return 'round-robin'
 
 
 # from service_adpater.py f5_driver-agent
@@ -127,7 +129,7 @@ def _set_lb_method(lbaas_lb_method, members):
     """
     lb_method = _get_lb_method(lbaas_lb_method)
 
-    if lb_method == 'SOURCE_IP':
+    if lb_method == constants.LB_ALGORITHM_SOURCE_IP:
         return lb_method
 
     member_has_weight = False
@@ -137,7 +139,7 @@ def _set_lb_method(lbaas_lb_method, members):
             break
 
     if member_has_weight:
-        if lb_method == 'LEAST_CONNECTIONS':
+        if lb_method == constants.LB_ALGORITHM_LEAST_CONNECTIONS:
             return _get_lb_method('RATIO_LEAST_CONNECTIONS')
         return _get_lb_method('RATIO')
     return lb_method

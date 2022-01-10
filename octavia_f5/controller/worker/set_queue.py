@@ -12,7 +12,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from six.moves.queue import Queue
+from queue import Queue
 
 
 class SetQueue(Queue):

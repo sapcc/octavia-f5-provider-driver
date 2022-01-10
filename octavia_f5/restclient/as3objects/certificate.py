@@ -35,12 +35,12 @@ def get_certificate(remark, tlscontainer):
     :param tlscontainer: tls container to create certificate object from
     :return: AS3 Certificate
     """
+
     def _decode(pem):
         try:
             return pem.decode('utf-8').replace('\r', '').replace(' \n', '\n')
         except AttributeError:
             return pem.replace('\r', '').replace(' \n', '\n')
-
 
     # TLS certificate is always the first one
     certificates = [_decode(tlscontainer.certificate)]
@@ -77,6 +77,6 @@ def get_ca_bundle(bundle, remark='', label=''):
     service_args = {
         'remark': as3types.f5remark(remark),
         'label': as3types.f5label(label),
-        'bundle': bundle.decode('utf-8').replace('\r',  '')
+        'bundle': bundle.decode('utf-8').replace('\r', '')
     }
     return CA_Bundle(**service_args)

@@ -72,8 +72,8 @@ class StatusManager(object):
 
         if utils.pending_delete(obj):
             return [self._status_obj(obj, lib_consts.DELETED)]
-        else:
-            return [self._status_obj(obj, lib_consts.ACTIVE)]
+
+        return [self._status_obj(obj, lib_consts.ACTIVE)]
 
     def update_status(self, loadbalancers):
         """For each load balancer set the provisioning_status of it and all its children to ACTIVE if it is
@@ -192,6 +192,8 @@ class StatusManager(object):
         # L7Rule
         if isinstance(obj, data_models.L7Rule):
             return lib_consts.L7RULES
+
+        return None
 
     def set_error(self, obj):
         """Set provisioning_state of octavia object to ERROR

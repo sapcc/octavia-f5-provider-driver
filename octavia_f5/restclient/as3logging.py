@@ -12,9 +12,9 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import json
+from urllib import parse
 
-from six.moves.urllib import parse
+import json
 
 
 def get_response_log(response):

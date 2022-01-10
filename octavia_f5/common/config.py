@@ -13,20 +13,20 @@
 #    License for the specific language governing permissions and limitations
 #    under the License.
 
-"""
-Routines for configuring Octavia F5 Provider
-"""
 import sys
-
+from octavia_lib.i18n import _
 from oslo_config import cfg
 from oslo_log import log as logging
 
+# pylint: disable=unused-import
 from octavia.common import config  # noqa
 from octavia_f5.common import constants
-from octavia_lib.i18n import _
 
 LOG = logging.getLogger(__name__)
 
+"""
+Routines for configuring Octavia F5 Provider
+"""
 
 def init(args, **kwargs):
     cfg.CONF(args=args, project='octavia_f5',
@@ -135,11 +135,11 @@ f5_tls_shared = {
                        "handled by certain broken SSL implementations.")),
     cfg.BoolOpt('single_use_dh', default=None,
                 help=_("Creates a new key when using temporary/ephemeral DH parameters. "
-                       "This option must be used to prevent small subgroup attacks, when " 
-                       "the DH parameters were not generated using strong primes (for " 
-                       "example. when using DSA-parameters). If strong primes were used, " 
-                       "it is not strictly necessary to generate a new DH key during each " 
-                       "handshake, but F5 Networks recommends it. Enable the Single DH Use " 
+                       "This option must be used to prevent small subgroup attacks, when "
+                       "the DH parameters were not generated using strong primes (for "
+                       "example. when using DSA-parameters). If strong primes were used, "
+                       "it is not strictly necessary to generate a new DH key during each "
+                       "handshake, but F5 Networks recommends it. Enable the Single DH Use "
                        "option whenever temporary or ephemeral DH parameters are used.")),
     cfg.BoolOpt('tls_1_0', default=None,
                 help=_("Allow TLS 1.0 Ciphers.")),
@@ -148,13 +148,13 @@ f5_tls_shared = {
     cfg.BoolOpt('tls_1_2', default=None,
                 help=_("Allow TLS 1.2 Ciphers.")),
     cfg.BoolOpt('tls_1_3', default=None,
-                help=_("Allow TLS 1.3 Ciphers. Note: tls_1_1 is only supported in tmos " 
+                help=_("Allow TLS 1.3 Ciphers. Note: tls_1_1 is only supported in tmos "
                        "version 14.0+.")),
 }
 
 f5_tls_server_opts = {
     cfg.BoolOpt('cache_certificate', default=None,
-                help=_("Enables or disables (default) caching certificates by IP address " 
+                help=_("Enables or disables (default) caching certificates by IP address "
                        "and port number.")),
     cfg.BoolOpt('stapler_ocsp', default=None,
                 help=_("Specifies whether to enable OCSP stapling.")),
