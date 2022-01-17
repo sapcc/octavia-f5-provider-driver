@@ -369,7 +369,10 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
                 # Not a valid selfip, delete and remove from original list
                 LOG.info("Orphaned SelfIP for Network %s found, deleting port %s",
                          selfip['network_id'], selfip['id'])
-                self.neutron_client.delete_port(selfip['id'])
+                try:
+                    self.neutron_client.delete_port(selfip['id'])
+                except neutron_client_exceptions.NetworkNotFoundClient:
+                    pass
                 selfips.remove(selfip)
 
         # create missing selfips
@@ -381,8 +384,11 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
                 if subnet_id is None:
                     continue
                 # Create SelfIP Port for device
-                selfip_dict = self._make_selfip_dict(project_id, network_id, subnet_id, f5host, hosts_id[0])
-                selfips.append(self.neutron_client.create_port(selfip_dict))
+                try:
+                    selfip_dict = self._make_selfip_dict(project_id, network_id, subnet_id, f5host, hosts_id[0])
+                    selfips.append(self.neutron_client.create_port(selfip_dict))
+                except neutron_client_exceptions.NetworkNotFoundClient:
+                    pass
 
         return [utils.convert_port_dict_to_model(selfip) for selfip in selfips]
 

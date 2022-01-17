@@ -207,6 +207,9 @@ class L2SyncManager(BaseTaskFlowEngine):
         :param network_id: Neutron Network ID
         :param device: optional device host to sync, defaults to all devices to sync
         """
+        if not selfips:
+            return
+
         network = self._network_driver.get_network(network_id)
         fs = {}
         for bigip in self._bigips:

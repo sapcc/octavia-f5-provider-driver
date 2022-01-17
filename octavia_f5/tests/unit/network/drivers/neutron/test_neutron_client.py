@@ -16,6 +16,7 @@ from unittest import mock
 
 import copy
 from oslo_utils import uuidutils
+from neutronclient.common import exceptions as neutron_client_exceptions
 
 from octavia.common import clients, data_models
 from octavia.network import base as network_base
@@ -551,3 +552,17 @@ class TestNeutronClient(base.TestCase):
         create_port.assert_not_called()
         self.assertEqual(len(selfips), 1)
         self.assertIsInstance(selfips[0], network_models.Port)
+
+    def test_ensure_selfips_no_network(self):
+        create_port = self.driver.neutron_client.create_port
+        create_port.side_effect = [neutron_client_exceptions.NetworkNotFoundClient()]
+        delete_port = self.driver.neutron_client.delete_port
+
+        fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
+                                      network_id=t_constants.MOCK_NETWORK_ID)
+        lbs = [data_models.LoadBalancer(id='1', vip=fake_lb_vip,
+                                        project_id='test-project')]
+
+        selfips = self.driver.ensure_selfips(lbs, MOCK_CANDIDATE, True)
+        delete_port.assert_not_called()
+        self.assertEqual(len(selfips), 0)
