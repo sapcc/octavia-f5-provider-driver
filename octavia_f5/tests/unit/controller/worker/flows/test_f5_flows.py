@@ -173,42 +173,49 @@ class TestF5Flows(base.TestCase):
                        'provider:segmentation_id': 1234}]
         )
 
+        mock_guests_response = MockResponse(
+            {'items': [
+                {'name': 'test-host-1',
+                 'vlans': []}
+            ]}, 200)
         mock_vlan_response = MockResponse(
             {'name': 'vlan-1234',
              'interfacesReference': {
                  'items': []
              }}, 200)
-
-        mock_bigip = mock.MagicMock()
-        mock_bigip.get.side_effect = empty_response
         mock_vcmp = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_vcmp.post.side_effect = [mock_vlan_response]
         mock_vcmp.get.side_effect = [MockResponse({}, 404),
+                                     mock_guests_response,
                                      mock_vlan_response]
+        mock_vcmp.patch.side_effect = empty_response
         f5flows = f5_flows.F5Flows()
 
         engines.run(f5flows.ensure_vcmp_l2(),
                     store={'network': mock_network,
                            'bigip': mock_vcmp,
-                           'bigip_guests': [mock_bigip]})
+                           'bigip_guest_names': ['test-host-1']})
 
         get_calls = [
             mock.call(path='/mgmt/tm/net/vlan/vlan-1234?expandSubcollections=true'),
             mock.call(path='/mgmt/tm/vcmp/guest'),
         ]
+        patch_calls = [
+            mock.call(json={'name': 'vlan-1234',
+                            'interfaces': [{'tagged': True,
+                                            'tagMode': 'service',
+                                            'name': 'portchannel1'}]},
+                      path='/mgmt/tm/net/vlan/vlan-1234'),
+            mock.call(json={'vlans': ['/Common/vlan-1234']},
+                      path='/mgmt/tm/vcmp/guest/test-host-1')
+        ]
         mock_vcmp.get.assert_has_calls(get_calls)
+        mock_vcmp.patch.assert_has_calls(patch_calls)
         mock_vcmp.post.assert_called_with(
             json={'name': 'vlan-1234', 'tag': 1234,
                   'mtu': 9000, 'hardwareSyncookie': 'enabled',
                   'synFloodRateLimit': 2000, 'syncacheThreshold': 32000},
             path='/mgmt/tm/net/vlan'
-        )
-        mock_vcmp.patch.assert_called_with(
-            json={'name': 'vlan-1234',
-                  'interfaces': [{'tagged': True,
-                                  'tagMode': 'service',
-                                  'name': 'portchannel1'}]},
-            path='/mgmt/tm/net/vlan/vlan-1234'
         )
 
     def test_f5_flow_remove_vcmp_l2(self):
@@ -226,8 +233,6 @@ class TestF5Flows(base.TestCase):
                  'vlans': []},
             ]}, 200)
 
-        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_bigip.hostname = 'test-host-1'
         mock_vcmp = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_vcmp.get.side_effect = [mock_guests_response]
         f5flows = f5_flows.F5Flows()
@@ -235,7 +240,7 @@ class TestF5Flows(base.TestCase):
         engines.run(f5flows.remove_vcmp_l2(),
                     store={'network': mock_network,
                            'bigip': mock_vcmp,
-                           'bigip_guests': [mock_bigip]})
+                           'bigip_guest_names': ['test-host-1']})
 
         mock_vcmp.get.assert_called_with(path='/mgmt/tm/vcmp/guest')
         mock_vcmp.delete.assert_called_with(path='/mgmt/tm/net/vlan/vlan-1234')
@@ -255,9 +260,6 @@ class TestF5Flows(base.TestCase):
                 {'name': 'test-host-2', 'vlans': []},
                 {'name': 'test-host-3', 'vlans': ['/Common/vlan-1234']}
             ]}, 200)
-
-        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_bigip.hostname = 'test-host-1'
         mock_vcmp = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_vcmp.get.side_effect = [mock_guests_response]
         f5flows = f5_flows.F5Flows()
@@ -265,7 +267,7 @@ class TestF5Flows(base.TestCase):
         engines.run(f5flows.remove_vcmp_l2(),
                     store={'network': mock_network,
                            'bigip': mock_vcmp,
-                           'bigip_guests': [mock_bigip]})
+                           'bigip_guest_names': ['test-host-1']})
 
         mock_vcmp.get.assert_called_with(path='/mgmt/tm/vcmp/guest')
         mock_vcmp.delete.assert_not_called()

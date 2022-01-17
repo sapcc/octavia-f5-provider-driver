@@ -102,7 +102,7 @@ class EnsureGuestVLAN(task.Task):
     @decorators.RaisesIControlRestError()
     def execute(self,
                 bigip: bigip_restclient.BigIPRestClient,
-                bigip_guests: [bigip_restclient.BigIPRestClient],
+                bigip_guest_names: [str],
                 device_vlan: dict,
                 *args, **kwargs):
 
@@ -112,7 +112,7 @@ class EnsureGuestVLAN(task.Task):
         guests = device_response.json()
         for guest in guests.get('items', []):
             # Check if it's a managed guest
-            if guest['name'] not in [g.hostname for g in bigip_guests]:
+            if guest['name'] not in bigip_guest_names:
                 continue
 
             device_guest = guest
@@ -346,14 +346,14 @@ class GetVCMPGuests(task.Task):
 class CleanupVLANIfNotOwnedByGuest(task.Task):
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
-                bigip_guests: [bigip_restclient.BigIPRestClient],
+                bigip_guest_names: [str],
                 device_guests: list):
         """ Task to delete VLAN on a VCMP Host  """
         name = f'vlan-{network.vlan_id}'
 
         for guest in device_guests:
             # skip own guest
-            if guest['name'] in [g.hostname for g in bigip_guests]:
+            if guest['name'] in bigip_guest_names:
                 continue
 
             # if vlan is in use by other guest, don't delete it
@@ -371,13 +371,13 @@ class CleanupGuestVLAN(task.Task):
     @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
-                bigip_guests: [bigip_restclient.BigIPRestClient],
+                bigip_guest_names: [str],
                 device_guests: list):
 
         path = f"/Common/vlan-{network.vlan_id}"
         for guest in device_guests:
             # Check if it's a managed guest
-            if guest['name'] not in [g.hostname for g in bigip_guests]:
+            if guest['name'] not in bigip_guest_names:
                 continue
 
             # Remove vlan from list

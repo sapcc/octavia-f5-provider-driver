@@ -140,8 +140,13 @@ class L2SyncManager(BaseTaskFlowEngine):
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
             fs[self.executor.submit(self._do_ensure_l2_flow, selfips=selfips_for_host, store=store)] = bigip
 
+        if CONF.networking.override_vcmp_guest_names:
+            guest_names = CONF.networking.override_vcmp_guest_names
+        else:
+            guest_names = [bigip.hostname for bigip in self._bigips]
+
         for vcmp in self._vcmps:
-            store = {'bigip': vcmp, 'network': network, 'bigip_guests': self._bigips}
+            store = {'bigip': vcmp, 'network': network, 'bigip_guest_names': guest_names}
             fs[self.executor.submit(self._do_ensure_vcmp_l2_flow, store=store)] = vcmp
 
         failed_bigips = []
@@ -177,8 +182,13 @@ class L2SyncManager(BaseTaskFlowEngine):
             store = {'bigip': bigip, 'network': network}
             fs[self.executor.submit(self._do_remove_l2_flow, store=store)] = bigip
 
+        if CONF.networking.override_vcmp_guest_names:
+            guest_names = CONF.networking.override_vcmp_guest_names
+        else:
+            guest_names = [bigip.hostname for bigip in self._bigips]
+
         for vcmp in self._vcmps:
-            store = {'bigip': vcmp, 'bigip_guests': self._bigips, 'network': network}
+            store = {'bigip': vcmp, 'bigip_guest_names': guest_names, 'network': network}
             fs[self.executor.submit(self._do_remove_vcmp_l2_flow, store=store)] = vcmp
 
         for f in futures.as_completed(fs, timeout=30):

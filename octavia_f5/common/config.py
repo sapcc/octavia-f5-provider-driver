@@ -204,6 +204,10 @@ f5_networking_opts = [
                 item_type=cfg.types.URI(schemes=['http', 'https']),
                 default=[],
                 help=_('The URL of the bigip vcmp host devices')),
+    cfg.ListOpt('override_vcmp_guest_names',
+                default=[],
+                help=_('List of vcmp guest names to use for identifying the '
+                       'correct vcmp guest - defaults to the bigip hostname.')),
     cfg.BoolOpt('route_on_active',
                 default=True,
                 help=_("Sync routes only to active bigip device, this option"
