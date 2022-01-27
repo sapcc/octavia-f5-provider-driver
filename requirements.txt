@@ -11,3 +11,4 @@ oslo.db>=4.27.0 # Apache-2.0
 oslo.log>=3.36.0 # Apache-2.0
 requests>=2.14.2 # Apache-2.0
 prometheus_client>=0.6.0
+taskflow>=4.1.0 # Apache-2.0

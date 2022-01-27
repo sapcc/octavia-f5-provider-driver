@@ -13,6 +13,12 @@
 # under the License.
 
 import functools
+from contextlib import ContextDecorator
+from urllib.parse import urlparse
+
+from requests import HTTPError
+
+from octavia_f5.utils.exceptions import IControlRestException
 
 
 class RunHookOnException(object):
@@ -30,3 +36,23 @@ class RunHookOnException(object):
                 self.hook(*args, **kwargs)
                 return func(*args, **kwargs)
         return wrapper
+
+
+class RaisesIControlRestError(ContextDecorator):
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc_val, traceback):
+        if exc_type == HTTPError:
+            parsed = urlparse(exc_val.request.url)
+            redacted = parsed._replace(netloc="{}:{}@{}".format(parsed.username, "???", parsed.hostname))
+            try:
+                message = exc_val.response.json()
+                if 'message' in message:
+                    message = message['message']
+            except Exception:
+                message = exc_val.response.content
+            raise IControlRestException(
+                f"HTTP {exc_val.response.status_code} for {exc_val.request.method} {redacted.geturl()}: {message}"
+            )
+        return False

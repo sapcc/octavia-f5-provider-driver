@@ -37,6 +37,7 @@ class BigIPRestClient(requests.Session):
         self.mount("http://", adapter)
         self.verify = verify
         self.auth = auth
+        self._active = None
 
     def get_url(self, url):
         """Create the URL based off this partial path."""
@@ -55,14 +56,24 @@ class BigIPRestClient(requests.Session):
 
     @property
     def is_active(self):
+        if self._active is None:
+            return self.update_status()
+        return self._active
+
+    def update_status(self):
+        """ Update status if device is active or not
+
+        :rtype: bool
+        """
         try:
             r = self.get(self.get_url(BIGIP_DEVICE_PATH), timeout=3)
         except requests.exceptions.RequestException:
-            return False
+            return self._active or False
 
-        return any([device['name'] == self.hostname and
-                    device['failoverState'] == 'active'
-                    for device in r.json().get('items', [])])
+        self._active = any([device['name'] == self.hostname and
+                           device['failoverState'] == 'active'
+                           for device in r.json().get('items', [])])
+        return self._active
 
     def get(self, url=None, **kwargs):
         """ Override get for baseurl compatbility
@@ -71,6 +82,38 @@ class BigIPRestClient(requests.Session):
             url = self.get_url(kwargs.pop('path'))
 
         return super(BigIPRestClient, self).get(url, **kwargs)
+
+    def post(self, url=None, **kwargs):
+        """ Override get for baseurl compatbility
+        """
+        if 'path' in kwargs:
+            url = self.get_url(kwargs.pop('path'))
+
+        return super(BigIPRestClient, self).post(url, **kwargs)
+
+    def delete(self, url=None, **kwargs):
+        """ Override get for baseurl compatbility
+        """
+        if 'path' in kwargs:
+            url = self.get_url(kwargs.pop('path'))
+
+        return super(BigIPRestClient, self).delete(url, **kwargs)
+
+    def patch(self, url=None, **kwargs):
+        """ Override get for baseurl compatbility
+        """
+        if 'path' in kwargs:
+            url = self.get_url(kwargs.pop('path'))
+
+        return super(BigIPRestClient, self).patch(url, **kwargs)
+
+    def put(self, url=None, **kwargs):
+        """ Override get for baseurl compatbility
+        """
+        if 'path' in kwargs:
+            url = self.get_url(kwargs.pop('path'))
+
+        return super(BigIPRestClient, self).put(url, **kwargs)
 
     def config_sync(self, device_group):
         """ Performing a ConfigSync

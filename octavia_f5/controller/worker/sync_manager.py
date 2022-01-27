@@ -56,8 +56,7 @@ class SyncManager(object):
 
     def __init__(self, status_manager, loadbalancer_repo):
         self._bigip = None
-        # pylint: disable=unnecessary-comprehension
-        self._bigips = [bigip for bigip in self.initialize_bigips()]
+        self._bigips = list(self.initialize_bigips())
         self._declaration_manager = as3declaration.AS3DeclarationManager(status_manager)
         self._loadbalancer_repo = loadbalancer_repo
 
@@ -100,6 +99,10 @@ class SyncManager(object):
             instances.append(instance)
         return instances
 
+    def bigips(self):
+        """ :returns all BigIP instances """
+        return self._bigips
+
     def bigip(self, device=None):
         """ :returns the (active/specific) BigIP device, e.g.:
         - active BigIP device (device = None)
@@ -134,7 +137,7 @@ class SyncManager(object):
             self._bigip = self._bigips[0]
         else:
             # Failover to bigip which is active (if active_device == True) or passive (if active_device == False)
-            active_devices = [bigip for bigip in self._bigips if bigip.is_active == active_device]
+            active_devices = [bigip for bigip in self._bigips if bigip.update_status() == active_device]
             if not active_devices:
                 raise exceptions.FailoverException("Cannot failover: No device found that's in desired state.")
             self._bigip = next(iter(active_devices))

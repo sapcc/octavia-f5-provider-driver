@@ -31,7 +31,7 @@ from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
-from octavia_f5.controller.worker import status_manager, sync_manager
+from octavia_f5.controller.worker import status_manager, sync_manager, l2_sync_manager
 from octavia_f5.controller.worker.set_queue import SetQueue
 from octavia_f5.db import api as db_apis
 from octavia_f5.db import repositories as f5_repos
@@ -72,13 +72,15 @@ class ControllerWorker(object):
         # instantiate managers/drivers
         self.status = status_manager.StatusManager()
         self.sync = sync_manager.SyncManager(self.status, self._loadbalancer_repo)
+        self.l2sync = l2_sync_manager.L2SyncManager()
         self.network_driver = driver_utils.get_network_driver()
 
         # start thread for reconciliation loop, full sync loop, orphan cleanup loop
         worker = periodics.PeriodicWorker(
             [(self.pending_sync, None, None),
              (self.full_sync_reappearing_devices, None, None),
-             (self.cleanup_orphaned_tenants, None, None)]
+             (self.cleanup_orphaned_tenants, None, None),
+             (self.full_sync_l2, None, None)]
         )
         t = threading.Thread(target=worker.start)
         t.daemon = True
@@ -111,13 +113,22 @@ class ControllerWorker(object):
                 loadbalancers = self._get_all_loadbalancer(network_id)
                 LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
                           self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
-                if all([lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers]):
-                    ret = self.sync.tenant_delete(network_id, device)
+                selfips = self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=True)
+                if all(lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers):
+                    self.sync.tenant_delete(network_id, device).raise_for_status()
+                    # Cleanup l2 configuration and remove selfip ports
+                    self.l2sync.remove_l2_flow(network_id, device)
+                    self.network_driver.cleanup_selfips(selfips)
                 else:
-                    ret = self.sync.tenant_update(network_id, device)
-
-                if not ret:
-                    continue
+                    if all(lb.provisioning_status == lib_consts.PENDING_CREATE
+                           for lb in loadbalancers):
+                        # Network is new - ensure complete l2 flow
+                        self.l2sync.ensure_l2_flow(selfips, network_id, device)
+                    elif any(lb.provisioning_status in [lib_consts.PENDING_CREATE, lib_consts.PENDING_DELETE]
+                             for lb in loadbalancers):
+                        # Network already exists, just ensure correct selfips
+                        self.l2sync.sync_l2_selfips_flow(selfips, network_id, device)
+                    self.sync.tenant_update(network_id, device).raise_for_status()
 
                 # update status of just-synced LBs
                 self.status.update_status(loadbalancers)
@@ -185,6 +196,15 @@ class ControllerWorker(object):
             # Set device ready
             self._amphora_repo.update(session, device.id, status=lib_consts.AMPHORA_READY)
             session.commit()
+
+    @periodics.periodic(24*60*60, run_immediately=True)
+    def full_sync_l2(self):
+        session = db_apis.get_session()
+
+        # get all load balancers (of this host)
+        loadbalancers = self._loadbalancer_repo.get_all_from_host(
+            session, show_deleted=False)
+        self.l2sync.full_sync(loadbalancers)
 
     @periodics.periodic(120, run_immediately=True)
     def pending_sync(self):
@@ -555,6 +575,7 @@ class ControllerWorker(object):
         """
         if amphora_id == CONF.host and not CONF.f5_agent.migration:
             self.sync.failover()
+            self.l2sync.failover()
 
     def failover_loadbalancer(self, load_balancer_id):
         pass

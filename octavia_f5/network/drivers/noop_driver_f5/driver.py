@@ -23,6 +23,8 @@ CONF = cfg.CONF
 
 class NoopNetworkDriverF5(driver.NoopNetworkDriver):
     def __init__(self):
+        self.physical_network = 'physnet'
+        self.physical_interface = 'portchannel1'
         super(NoopNetworkDriverF5, self).__init__()
 
     def allocate_vip(self, load_balancer):

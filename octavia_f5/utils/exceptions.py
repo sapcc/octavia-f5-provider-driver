@@ -25,6 +25,10 @@ class FailoverException(Exception):
     pass
 
 
+class IControlRestException(Exception):
+    pass
+
+
 class PolicyHasNoRules(AS3Exception):
     pass
 

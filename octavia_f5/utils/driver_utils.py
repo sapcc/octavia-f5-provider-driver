@@ -20,8 +20,8 @@ from stevedore import driver
 
 
 CONF = cfg.CONF
-
 LOG = logging.getLogger(__name__)
+_NETWORK_DRIVER = None
 
 
 def pending_delete(obj):
@@ -29,12 +29,15 @@ def pending_delete(obj):
 
 
 def get_network_driver():
-    CONF.import_group('controller_worker', 'octavia.common.config')
-    return driver.DriverManager(
-        namespace='octavia.network.drivers',
-        name=CONF.controller_worker.network_driver,
-        invoke_on_load=True
-    ).driver
+    global _NETWORK_DRIVER
+    if _NETWORK_DRIVER is None:
+        CONF.import_group('controller_worker', 'octavia.common.config')
+        _NETWORK_DRIVER = driver.DriverManager(
+            namespace='octavia.network.drivers',
+            name=CONF.controller_worker.network_driver,
+            invoke_on_load=True
+        ).driver
+    return _NETWORK_DRIVER
 
 
 def lb_to_vip_obj(lb):

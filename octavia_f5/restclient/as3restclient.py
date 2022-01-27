@@ -158,13 +158,13 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
             params['async'] = 'true'
         if CONF.f5_agent.unsafe_mode:
             params['unsafe'] = 'true'
-        return super(AS3RestClient, self).post(url, json=payload.to_dict(), params=params).ok
+        return super(AS3RestClient, self).post(url, json=payload.to_dict(), params=params)
 
     @_metric_patch_exceptions.count_exceptions()
     @_metric_patch_duration.time()
     def patch(self, tenants, patch_body):
         url = self.get_url(AS3_DECLARE_PATH)
-        return super(AS3RestClient, self).patch(url, json=patch_body).ok
+        return super(AS3RestClient, self).patch(url, json=patch_body)
 
     @_metric_delete_exceptions.count_exceptions()
     @_metric_delete_duration.time()
@@ -173,7 +173,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
             raise exceptions.DeleteAllTenantsException()
 
         url = '{}/{}'.format(self.get_url(AS3_DECLARE_PATH), ','.join(tenants))
-        return super(AS3RestClient, self).delete(url).ok
+        return super(AS3RestClient, self).delete(url)
 
     def info(self):
         info = self.get(self.get_url(AS3_INFO_PATH), timeout=3)

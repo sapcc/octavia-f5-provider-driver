@@ -50,6 +50,7 @@ f5_agent_opts = [
     cfg.BoolOpt('bigip_verify', default=False,
                 help=_('Verify AS3 endpoint TLS cert.')),
     cfg.ListOpt('bigip_urls',
+                default=[],
                 item_type=cfg.types.URI(schemes=['http', 'https']),
                 help=_('The URL to the bigip host device with AS3 endpoint')),
     cfg.StrOpt('as3_endpoint',
@@ -167,14 +168,50 @@ f5_networking_opts = [
                 help=_('Enable caching of segmentation ids and ports')),
     cfg.IntOpt('cache_time', default=3600,
                help=_('Caching time in seconds (default=3600)')),
-    cfg.StrOpt('f5_network_segment_physical_network', default=None,
-               help=_('Restrict discovery of network segmentation ID '
-                      'to a specific physical network name, autodiscovery by default.')),
+    cfg.IntOpt('max_workers',
+               default=10,
+               help=_('The maximum number of l2 taskflow workers')),
+    cfg.StrOpt('physical_interface_mapping',
+               default=None,
+               deprecated_name='f5_network_segment_physical_network',
+               help=_('<physical_network>:<physical_interface> tuple '
+                      'mapping the used physical network name to the '
+                      'BigIP-specific physical network interface to be used '
+                      'for flat and VLAN networks. If no physical_interface '
+                      'specified, "portchannel1" will be used.')),
     cfg.StrOpt('agent_scheduler', default='loadbalancer',
                choices=['listener', 'loadbalancer'],
                help=_('Select scheduler for new VIPs (and therefore loadbalancers). '
                       'Possible options: "listener": Use agent with lowest amount of listener, '
                       '"loadbalancer": use agent with lowest amount of loadbalancer.')),
+    cfg.BoolOpt('hardware_syncookie',
+                default=True,
+                help=_("Enables hardware syncookie mode on a VLAN. When "
+                       "enabled, the hardware per-VLAN SYN cookie protection "
+                       "will be triggered when the certain traffic threshold "
+                       "is reached on supported platforms.")),
+    cfg.IntOpt('syn_flood_rate_limit',
+               default=2000,
+               help=_("Specifies the max number of SYN flood packets per "
+                      "second received on the VLAN before the hardware "
+                      "per-VLAN SYN cookie protection is triggered.")),
+    cfg.IntOpt('syncache_threshold',
+               default=32000,
+               help=_("Specifies the number of outstanding SYN packets on "
+                      "the VLAN that will trigger the hardware per-VLAN SYN "
+                      "cookie protection.")),
+    cfg.ListOpt('vcmp_urls',
+                item_type=cfg.types.URI(schemes=['http', 'https']),
+                default=[],
+                help=_('The URL of the bigip vcmp host devices')),
+    cfg.ListOpt('override_vcmp_guest_names',
+                default=[],
+                help=_('List of vcmp guest names to use for identifying the '
+                       'correct vcmp guest - defaults to the bigip hostname.')),
+    cfg.BoolOpt('route_on_active',
+                default=True,
+                help=_("Sync routes only to active bigip device, this option"
+                       "is useful if automatic full-sync is activated.")),
 ]
 
 f5_status_manager_opts = [
