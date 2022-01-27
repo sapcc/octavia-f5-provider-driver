@@ -404,7 +404,8 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
         aap = {
             'port': {
                 'allowed_address_pairs': [
-                    {'ip_address': selfip.fixed_ips[0].ip_address} for selfip in selfips
+                    {'ip_address': selfip.fixed_ips[0].ip_address}
+                    for selfip in selfips if selfip.fixed_ips
                 ]
             }
         }
