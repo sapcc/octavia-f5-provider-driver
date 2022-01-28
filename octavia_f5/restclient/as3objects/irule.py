@@ -55,8 +55,7 @@ X_SSL_CLIENT_VERIFY = """when HTTP_REQUEST {
 }"""
 X_SSL_CLIENT_HAS_CERT = """when HTTP_REQUEST {
     if { [HTTP::has_responded] }{ return }
-    set cert_count [SSL::cert count]
-    if { [info exists cert_count] && $cert_count > 0 }{
+    if { [SSL::cert count] > 0 }{
         HTTP::header insert "X-SSL-CLIENT-HAS-CERT" 1
     } else {
         HTTP::header insert "X-SSL-CLIENT-HAS-CERT" 0
