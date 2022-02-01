@@ -197,7 +197,7 @@ class TestF5Flows(base.TestCase):
                            'bigip_guest_names': ['test-host-1']})
 
         get_calls = [
-            mock.call(path='/mgmt/tm/net/vlan/vlan-1234?expandSubcollections=true'),
+            mock.call(path='/mgmt/tm/net/vlan/~Common~vlan-1234?expandSubcollections=true'),
             mock.call(path='/mgmt/tm/vcmp/guest'),
         ]
         patch_calls = [

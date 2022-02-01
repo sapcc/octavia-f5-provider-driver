@@ -22,6 +22,7 @@ from taskflow.listeners import logging as tf_logging
 
 from octavia.common import data_models as octavia_models
 from octavia.common.base_taskflow import BaseTaskFlowEngine
+from octavia.network import base
 from octavia.network import data_models as network_models
 from octavia_f5.controller.worker.flows import f5_flows
 from octavia_f5.restclient.bigip import bigip_auth
@@ -131,6 +132,9 @@ class L2SyncManager(BaseTaskFlowEngine):
             return
 
         network = self._network_driver.get_network(network_id)
+        if not network.has_bound_segment():
+            raise Exception(f"Failed ensure_l2_flow for network_id={network_id}: No segment bound")
+
         fs = {}
         for bigip in self._bigips:
             if device and bigip.hostname != device:
@@ -173,7 +177,17 @@ class L2SyncManager(BaseTaskFlowEngine):
         :param device: optional device host to sync, defaults to all devices to sync
         """
 
-        network = self._network_driver.get_network(network_id)
+        try:
+            network = self._network_driver.get_network(network_id)
+        except base.NetworkNotFound:
+            LOG.warning("remove_l2_flow: Network %s not found, skipping", network_id)
+            return
+
+        if not network.has_bound_segment():
+            LOG.debug("remove_l2_flow: Network %s has no existing segment binding, skipping",
+                      network_id)
+            return
+
         fs = {}
         for bigip in self._bigips:
             if device and bigip.hostname != device:
@@ -211,6 +225,9 @@ class L2SyncManager(BaseTaskFlowEngine):
             return
 
         network = self._network_driver.get_network(network_id)
+        if not network.has_bound_segment():
+            raise Exception(f"Failed sync_l2_selfips_flow for network_id={network_id}: No segment bound")
+
         fs = {}
         for bigip in self._bigips:
             if device and bigip.hostname != device:
