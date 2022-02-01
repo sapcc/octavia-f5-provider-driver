@@ -248,7 +248,15 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
 
         :rtype: octavia_f5 network object
         """
-        network_dict = self.neutron_client.show_network(network_id)
+        try:
+            network_dict = self.neutron_client.show_network(network_id)
+        except neutron_client_exceptions.NotFound:
+            message = _(f"Network not found (network id: {network_id}).")
+            raise base.NetworkNotFound(message)
+        except Exception:
+            message = _(f"Error retrieving network (network id: {network_id}.")
+            LOG.exception(message)
+            raise base.NetworkException(message)
         return f5_utils.convert_network_dict_to_model(network_dict)
 
     @MEMOIZE

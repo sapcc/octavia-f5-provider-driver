@@ -11,7 +11,8 @@
 #  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #  License for the specific language governing permissions and limitations
 #  under the License.
-
+import requests
+import tenacity
 from netaddr import IPNetwork
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -32,6 +33,11 @@ class EnsureVLAN(task.Task):
     """ Task to create or update VLAN if needed """
 
     @decorators.RaisesIControlRestError()
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(requests.HTTPError),
+        wait=tenacity.wait_fixed(2),
+        stop=tenacity.stop_after_attempt(3)
+    )
     def execute(self,
                 bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network,
@@ -46,7 +52,7 @@ class EnsureVLAN(task.Task):
             'syncacheThreshold': CONF.networking.syncache_threshold
         }
 
-        device_response = bigip.get(path=f"/mgmt/tm/net/vlan/{vlan['name']}?expandSubcollections=true")
+        device_response = bigip.get(path=f"/mgmt/tm/net/vlan/~Common~{vlan['name']}?expandSubcollections=true")
         # Create vlan if not existing
         if device_response.status_code == 404:
             res = bigip.post(path='/mgmt/tm/net/vlan', json=vlan)
@@ -55,7 +61,7 @@ class EnsureVLAN(task.Task):
 
         device_vlan = device_response.json()
         if not vlan.items() <= device_vlan.items():
-            res = bigip.patch(path=f"/mgmt/tm/net/vlan/{vlan['name']}",
+            res = bigip.patch(path=f"/mgmt/tm/net/vlan/~Common~{vlan['name']}",
                               json=vlan)
             res.raise_for_status()
             return res.json()
@@ -324,7 +330,7 @@ class CleanupVLAN(task.Task):
                 bigip: bigip_restclient.BigIPRestClient):
         """ Task to delete VLAN """
         name = f'vlan-{network.vlan_id}'
-        res = bigip.delete(path=f"/mgmt/tm/net/vlan/{name}")
+        res = bigip.delete(path=f"/mgmt/tm/net/vlan/~Common~{name}")
         if not res.ok:
             LOG.warning("%s: Failed CleanupVLAN for vlan_id=%s: %s",
                         bigip.hostname, network.vlan_id, res.content)
