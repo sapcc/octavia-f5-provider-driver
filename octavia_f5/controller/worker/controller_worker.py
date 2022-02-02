@@ -284,16 +284,14 @@ class ControllerWorker(object):
             'in_use_member': None,
         }
 
-        lock_session = db_apis.get_session(autocommit=False)
         try:
-            self._quota_repo.update(lock_session, project_id=project_id, quota=reset_dict)
-            lock_session.commit()
+            self._quota_repo.update(db_apis.get_session(),
+                                    project_id=project_id, quota=reset_dict)
         except Exception:
             with excutils.save_and_reraise_exception():
                 LOG.error('Failed to reset quota for '
                           'project: %(proj)s the project may have excess '
                           'quota in use.', {'proj': project_id})
-                lock_session.rollback()
 
     """
     Loadbalancer
