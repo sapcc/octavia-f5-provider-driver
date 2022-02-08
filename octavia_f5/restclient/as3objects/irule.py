@@ -28,7 +28,6 @@ X_FORWARDED_FOR = """when HTTP_REQUEST {
 }"""
 X_FORWARDED_PORT = """when HTTP_REQUEST {
     if { [HTTP::has_responded] }{ return }
-    HTTP::header remove "X-Forwarded-Port"
     HTTP::header insert "X-Forwarded-Port" [TCP::local_port]
 }"""
 X_FORWARDED_PROTO = """when CLIENT_ACCEPTED {
