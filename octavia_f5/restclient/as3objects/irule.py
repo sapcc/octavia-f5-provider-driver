@@ -23,11 +23,8 @@ when SERVER_CONNECTED {
     TCP::respond $proxyheader
 }"""
 X_FORWARDED_FOR = """when HTTP_REQUEST {
-  if {[HTTP::header exists X-Forwarded-For]}{
-    HTTP::header replace X-Forwarded-For "[HTTP::header X-Forwarded-For], [getfield [IP::client_addr] "%" 1]"
-  } else {
-    HTTP::header insert X-Forwarded-For [getfield [IP::client_addr] "%" 1]
-  }
+    if { [HTTP::has_responded] }{ return }
+    HTTP::header insert "X-Forwarded-For" [getfield [IP::remote_addr] "%" 1]
 }"""
 X_FORWARDED_PORT = """when HTTP_REQUEST {
     if { [HTTP::has_responded] }{ return }
