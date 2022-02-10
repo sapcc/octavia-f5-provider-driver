@@ -49,11 +49,9 @@ class Network(BaseDataModel):
         self.segments = segments
         self._network_driver = driver_utils.get_network_driver()
 
-    @property
-    def default_gateway_ip(self):
-        for subnet_id in sorted(self.subnets):
-            subnet = self._network_driver.get_subnet(subnet_id)
-            return subnet.gateway_ip
+    def default_gateway_ip(self, subnet_id):
+        subnet = self._network_driver.get_subnet(subnet_id)
+        return subnet.gateway_ip
 
     def has_bound_segment(self):
         for segment in self.segments:

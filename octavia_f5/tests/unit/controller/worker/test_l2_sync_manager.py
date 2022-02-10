@@ -30,8 +30,14 @@ LOG = logging.getLogger(__name__)
 
 MOCK_BIGIP_HOSTNAME = 'test-guest-hostname'
 MOCK_VCMP_HOSTNAME = 'test-vcmp-hostname'
+MOCK_FIXED_IP = network_models.FixedIP(
+    ip_address='1.2.3.4',
+    subnet_id=uuidutils.generate_uuid()
+)
 MOCK_SELFIP = network_models.Port(
-    name=f"local-{MOCK_BIGIP_HOSTNAME}-{uuidutils.generate_uuid()}")
+    name=f"local-{MOCK_BIGIP_HOSTNAME}-{MOCK_FIXED_IP.subnet_id}",
+    fixed_ips=[MOCK_FIXED_IP]
+)
 
 
 class TestL2SyncManager(base.TestCase):
@@ -63,7 +69,8 @@ class TestL2SyncManager(base.TestCase):
             name=f"local-OTHER_HOST-{uuidutils.generate_uuid()}")
         self.manager.ensure_l2_flow([MOCK_SELFIP, other_selfip], 'test-network-id')
         mock_l2_flow.assert_called_once_with(selfips=[MOCK_SELFIP],
-            store={'bigip': self.manager._bigips[0], 'network': mock_get_network.return_value})
+            store={'bigip': self.manager._bigips[0], 'network': mock_get_network.return_value,
+                   'subnet_id': MOCK_FIXED_IP.subnet_id})
         mock_vcmp_l2_flow.assert_called_once_with(
             store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                    'bigip_guest_names': [MOCK_BIGIP_HOSTNAME]})
@@ -82,7 +89,8 @@ class TestL2SyncManager(base.TestCase):
 
         self.manager.ensure_l2_flow([MOCK_SELFIP], 'test-network-id')
         mock_l2_flow.assert_called_once_with(selfips=[MOCK_SELFIP],
-            store={'bigip': self.manager._bigips[0], 'network': mock_get_network.return_value})
+            store={'bigip': self.manager._bigips[0], 'network': mock_get_network.return_value,
+                   'subnet_id': MOCK_FIXED_IP.subnet_id})
         mock_vcmp_l2_flow.assert_called_once_with(
             store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                    'bigip_guest_names': ['test-host-2']})
@@ -102,7 +110,8 @@ class TestL2SyncManager(base.TestCase):
                              e.args[0])
 
         mock_l2_flow.assert_called_once_with(selfips=[MOCK_SELFIP],
-            store={'bigip': self.manager._bigips[0], 'network': mock_get_network.return_value})
+            store={'bigip': self.manager._bigips[0], 'network': mock_get_network.return_value,
+                   'subnet_id': MOCK_FIXED_IP.subnet_id})
         mock_vcmp_l2_flow.assert_called_once_with(
             store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                    'bigip_guest_names': [MOCK_BIGIP_HOSTNAME]})

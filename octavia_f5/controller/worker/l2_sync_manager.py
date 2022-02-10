@@ -140,8 +140,9 @@ class L2SyncManager(BaseTaskFlowEngine):
             if device and bigip.hostname != device:
                 continue
 
-            store = {'bigip': bigip, 'network': network}
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
+            subnet_ids = set(sip.fixed_ips[0].subnet_id for sip in selfips_for_host)
+            store = {'bigip': bigip, 'network': network, 'subnet_id': subnet_ids.pop()}
             fs[self.executor.submit(self._do_ensure_l2_flow, selfips=selfips_for_host, store=store)] = bigip
 
         if CONF.networking.override_vcmp_guest_names:
