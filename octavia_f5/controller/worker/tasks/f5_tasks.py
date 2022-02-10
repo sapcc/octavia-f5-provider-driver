@@ -232,6 +232,7 @@ class EnsureRoute(task.Task):
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
+                subnet_id: str,
                 network: f5_network_models.Network):
 
         if CONF.networking.route_on_active and not bigip.is_active:
@@ -239,7 +240,7 @@ class EnsureRoute(task.Task):
             return None
 
         name = f"vlan-{network.vlan_id}"
-        gw = f"{network.default_gateway_ip}%{network.vlan_id}"
+        gw = f"{network.default_gateway_ip(subnet_id)}%{network.vlan_id}"
         network_name = f"default%{network.vlan_id}"
         route = {'name': name, 'gw': gw, 'network': network_name}
 

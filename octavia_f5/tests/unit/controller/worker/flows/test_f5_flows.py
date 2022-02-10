@@ -86,7 +86,8 @@ class TestF5Flows(base.TestCase):
 
         engines.run(f5flows.ensure_l2([selfip_port]),
                     store={'network': mock_network,
-                           'bigip': mock_bigip})
+                           'bigip': mock_bigip,
+                           'subnet_id': selfip_fixed_ip.subnet_id})
 
         calls = [
             mock.call(json={'name': 'vlan-1234', 'tag': 1234,
@@ -160,7 +161,8 @@ class TestF5Flows(base.TestCase):
 
         engines.run(f5flows.ensure_l2([selfip_port]),
                     store={'network': mock_network,
-                           'bigip': mock_bigip})
+                           'bigip': mock_bigip,
+                           'subnet_id': selfip_fixed_ip.subnet_id})
 
         mock_bigip.get.assert_called()
         mock_bigip.patch.assert_not_called()
