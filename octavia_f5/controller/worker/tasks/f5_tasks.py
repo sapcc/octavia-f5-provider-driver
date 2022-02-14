@@ -246,24 +246,26 @@ class EnsureRoute(task.Task):
 
         device_response = bigip.get(path=f"/mgmt/tm/net/route/~Common~{route['name']}")
         if device_response.status_code == 404:
-            # Remove legacy named route and recreate the vlan-id named one
-            legacy_route = bigip.get(path=f"/mgmt/tm/net/route/~Common~net-{network.id}")
-            if legacy_route.ok:
-                bigip.delete(path=f"/mgmt/tm/net/route/~Common~net-{network.id}")
+            path=f"/mgmt/tm/net/route/~Common~net-{network.id}"
+            device_response = bigip.get(path=path)
 
+        if device_response.status_code == 404:
             # Create route_domain if not existing
             res = bigip.post(path='/mgmt/tm/net/route', json=route)
             res.raise_for_status()
             return res.json()
 
         device_route = device_response.json()
-        if not route.items() <= device_route.items():
+        if route['gw'] != device_route['gw'] or route['network'] != device_route['network']:
             # Change gw if needed
-            res = bigip.patch(path='/mgmt/tm/net/route/{}'.format(device_route['name']),
-                              json=route)
-            # Changing the gateway is not always guarenteed to work, full sync will handle it
+            res = bigip.patch(path='/mgmt/tm/net/route/{}'.format(device_route['fullPath']),
+                              json={route['gw'], route['network']})
             if not res.ok:
-                LOG.warning('Route gw update %s failed with: %s', route, res.content)
+                # If the network also changed, we probably had a legacy named route with wrong values.
+                # re-create it (last resort)
+                bigip.delete(path=f"/mgmt/tm/net/route/~Common~net-{network.id}")
+                res = bigip.post(path='/mgmt/tm/net/route', json=route)
+                res.raise_for_status()
             return res.json()
 
         # No Changes needed
