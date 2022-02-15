@@ -69,7 +69,7 @@ class TestF5Tasks(base.TestCase):
 
         mock_bigip.get.assert_called_with(path='/mgmt/tm/net/route/~Common~vlan-1234')
         mock_bigip.patch.assert_called_with(path='/mgmt/tm/net/route/~Common~vlan-1234',
-                                            json={'2.3.4.5%1234', 'default%1234'})
+                                            json={'gw': '2.3.4.5%1234', 'network': 'default%1234'})
         mock_bigip.post.assert_not_called()
 
 
