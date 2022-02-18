@@ -128,7 +128,7 @@ class ControllerWorker(object):
                              for lb in loadbalancers):
                         # Network already exists, just ensure correct selfips
                         self.l2sync.sync_l2_selfips_flow(selfips, network_id, device)
-                    self.sync.tenant_update(network_id, device).raise_for_status()
+                    self.sync.tenant_update(network_id, device, selfips).raise_for_status()
 
                 # update status of just-synced LBs
                 self.status.update_status(loadbalancers)

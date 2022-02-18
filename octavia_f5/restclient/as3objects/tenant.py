@@ -34,7 +34,7 @@ def get_name(network_id):
                          network_id.replace('-', '_'))
 
 
-def get_tenant(segmentation_id, loadbalancers, status_manager, cert_manager, esd_repo):
+def get_tenant(segmentation_id, loadbalancers, skip_members, status_manager, cert_manager, esd_repo):
 
     project_id = None
     if loadbalancers:
@@ -47,9 +47,9 @@ def get_tenant(segmentation_id, loadbalancers, status_manager, cert_manager, esd
 
     tenant = as3.Tenant(**tenant_dict)
 
-    # Skip members that re-use load balancer vips
+    # Skip members that re-use load balancer vips and selfips
     loadbalancer_ips = [load_balancer.vip.ip_address for load_balancer in loadbalancers
-                        if not driver_utils.pending_delete(load_balancer)]
+                        if not driver_utils.pending_delete(load_balancer)] + skip_members
 
     for loadbalancer in loadbalancers:
         # Skip load balancer in (pending) deletion
