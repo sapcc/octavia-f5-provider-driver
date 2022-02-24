@@ -151,12 +151,12 @@ def get_proxy_irule():
 
 def get_app_cookie_irule(cookie_name):
     """
-    Returns iRule for app cookie persistance with cookie_name.
+    Returns iRule for app cookie persistence with cookie_name.
     :return: iRule entity (tuple with iRule name and definition)
     """
     app_cookie_irule = APP_COOKIE_SESSION_PERSIST.format(_cookie=cookie_name)
     irule = IRule(app_cookie_irule,
-                  remark="Persistance app cookie")
+                  remark="persistence app cookie")
     name = '{}app_cookie_{}'.format(constants.PREFIX_IRULE, cookie_name)
     return name, irule
 
