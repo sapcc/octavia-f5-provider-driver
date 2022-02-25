@@ -15,8 +15,9 @@
 from unittest import mock
 
 import copy
-from oslo_utils import uuidutils
 from neutronclient.common import exceptions as neutron_client_exceptions
+from octavia_lib.common import constants as lib_consts
+from oslo_utils import uuidutils
 
 from octavia.common import clients, data_models
 from octavia.network import base as network_base
@@ -565,4 +566,23 @@ class TestNeutronClient(base.TestCase):
 
         selfips = self.driver.ensure_selfips(lbs, MOCK_CANDIDATE, True)
         delete_port.assert_not_called()
+        self.assertEqual(len(selfips), 0)
+
+    def test_ensure_selfips_delete_orphaned(self):
+        selfip_ports = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
+        list_ports = self.driver.neutron_client.list_ports
+        list_ports.return_value = selfip_ports
+        delete_port = self.driver.neutron_client.delete_port
+        create_port = self.driver.neutron_client.create_port
+
+        fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
+                                      network_id=t_constants.MOCK_NETWORK_ID)
+        lbs = [data_models.LoadBalancer(id='1', vip=fake_lb_vip,
+                                        project_id='test-project',
+                                        provisioning_status=lib_consts.PENDING_DELETE)]
+
+        # check if deletes unexpected subnet selfip
+        selfips = self.driver.ensure_selfips(lbs, MOCK_CANDIDATE, True)
+        delete_port.assert_called_once_with(MOCK_NEUTRON_SELFIP_PORTS['ports'][0]['id'])
+        create_port.assert_not_called()
         self.assertEqual(len(selfips), 0)

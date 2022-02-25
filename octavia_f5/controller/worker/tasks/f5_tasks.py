@@ -258,12 +258,12 @@ class EnsureRoute(task.Task):
         device_route = device_response.json()
         if route['gw'] != device_route['gw'] or route['network'] != device_route['network']:
             # Change gw if needed
-            res = bigip.patch(path='/mgmt/tm/net/route/{}'.format(device_route['fullPath']),
+            res = bigip.patch(path=f"/mgmt/tm/net/route/~Common~{device_route['name']}",
                               json={'gw': route['gw'], 'network': route['network']})
             if not res.ok:
                 # If the network also changed, we probably had a legacy named route with wrong values.
                 # re-create it (last resort)
-                bigip.delete(path=f"/mgmt/tm/net/route/~Common~net-{network.id}")
+                bigip.delete(path=f"/mgmt/tm/net/route/~Common~{device_route['name']}")
                 res = bigip.post(path='/mgmt/tm/net/route', json=route)
                 res.raise_for_status()
             return res.json()

@@ -110,7 +110,8 @@ class L2SyncManager(BaseTaskFlowEngine):
         }
 
         LOG.debug("%s: L2 SelfIP sync diff for network %s: %s",
-                  store['bigip'].hostname, store['network'].id, selfips)
+                  store['bigip'].hostname, store['network'].id, {'add': [p.id for p in selfips['add']],
+                                                                 'remove': [p.id for p in selfips['remove']]})
 
         e = self._taskflow_load(self._f5flows.sync_l2_selfips(selfips), store=store)
         with tf_logging.LoggingListener(e, log=LOG):

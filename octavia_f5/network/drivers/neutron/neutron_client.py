@@ -19,6 +19,7 @@ import re
 import requests.exceptions
 import tenacity
 from neutronclient.common import exceptions as neutron_client_exceptions
+from octavia_lib.common import constants as lib_consts
 from oslo_cache import core as cache
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -354,11 +355,13 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
         else:
             hosts_id = [agent]
 
-        requested_subnets = set(lb.vip.subnet_id for lb in load_balancers)
+        all_subnets = set(lb.vip.subnet_id for lb in load_balancers)
+        needed_subnets = set(lb.vip.subnet_id for lb in load_balancers
+                             if lb.provisioning_status != lib_consts.PENDING_DELETE)
         filter = {'device_owner': [constants.DEVICE_OWNER_SELFIP,
                                    constants.DEVICE_OWNER_LEGACY],
                   'binding:host_id': hosts_id,
-                  'fixed_ips': [f'subnet_id={subnet}' for subnet in requested_subnets]}
+                  'fixed_ips': [f'subnet_id={subnet}' for subnet in all_subnets]}
         selfips = self.neutron_client.list_ports(**filter).get('ports', [])
 
         # For every subnet and f5host, we expect a selfip
@@ -371,7 +374,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
 
             host, subnet = m.group(1, 2)
             # only accepts existing selfip if it's assigned to a valid host, unique and uses an expected subnet
-            if host in f5hosts and subnet in requested_subnets and subnet not in f5hosts[host]:
+            if host in f5hosts and subnet in needed_subnets and subnet not in f5hosts[host]:
                 f5hosts[m.group(1)].add(m.group(2))
             elif cleanup_orphans:
                 # Not a valid selfip, delete and remove from original list
@@ -388,7 +391,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
         network_id = load_balancers[0].vip.network_id
         for f5host, existing_selfip_subnets in f5hosts.items():
             # iterate over missing subnet selfips per device
-            for subnet_id in requested_subnets.difference(existing_selfip_subnets):
+            for subnet_id in needed_subnets.difference(existing_selfip_subnets):
                 if subnet_id is None:
                     continue
                 # Create SelfIP Port for device
