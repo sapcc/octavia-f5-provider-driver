@@ -29,7 +29,10 @@ BIGIP_CM_PATH = '/mgmt/tm/cm'
 class BigIPRestClient(requests.Session):
     def __init__(self, bigip_url, verify=True, auth=None):
         super(BigIPRestClient, self).__init__()
-        self.url = parse.urlsplit(bigip_url, allow_fragments=False)
+        self.url = parse.urlparse(bigip_url, allow_fragments=False)
+
+        # Remove any user/pw, since it's been already configured via auth
+        self.url = self.url._replace(netloc=self.url.hostname)
         retry = Retry(total=3, backoff_factor=1, status_forcelist=(429, 500, 502, 503, 504))
         adapter = TimeoutHTTPAdapter(max_retries=retry, pool_connections=1, pool_maxsize=2)
 
