@@ -12,7 +12,7 @@
 #  License for the specific language governing permissions and limitations
 #  under the License.
 
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, and_
 from oslo_config import cfg
 from oslo_log import log as logging
 
@@ -43,7 +43,8 @@ class Scheduler(object):
             func.count(models.LoadBalancer.id)
         ).join(
             models.LoadBalancer,
-            models.Amphora.compute_flavor == models.LoadBalancer.server_group_id,
+            and_(models.Amphora.compute_flavor == models.LoadBalancer.server_group_id,
+                 models.LoadBalancer.provisioning_status != consts.DELETED),
             isouter=True
         ).filter(
             models.Amphora.role == consts.ROLE_MASTER,

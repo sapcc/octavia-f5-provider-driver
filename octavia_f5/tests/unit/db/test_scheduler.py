@@ -91,6 +91,20 @@ class TestScheduler(base.OctaviaDBTestBase):
         self.repos.amphora.update(self.session, self.device_amphora_1.id,
                                   vrrp_priority=old_prio)
 
+    def test_get_candidate_with_deleted(self):
+        self.conf.config(group="networking", agent_scheduler="loadbalancer")
+        lbs = [self._create_lb(uuidutils.generate_uuid(), self.FAKE_DEVICE_PAIR_1,
+                               provisioning_status=constants.DELETED),
+               self._create_lb(uuidutils.generate_uuid(), self.FAKE_DEVICE_PAIR_2)]
+
+        candidates = self.scheduler.get_candidates(self.session)
+        self.assertEqual(
+            candidates, [self.FAKE_DEVICE_PAIR_1, self.FAKE_DEVICE_PAIR_2],
+            "Order of device pairs not consistent")
+        for lb in lbs:
+            self.repos.load_balancer.delete(self.session, id=lb.id)
+
+
     @mock.patch('octavia_f5.controller.worker.status_manager.StatusManager')
     @mock.patch('octavia_f5.controller.worker.sync_manager.SyncManager')
     def test_get_candidate_by_az(self, mock_sync_manager, mock_status_manager):
@@ -113,11 +127,12 @@ class TestScheduler(base.OctaviaDBTestBase):
         self.assertEqual([self.FAKE_DEVICE_PAIR_2], candidates,
                          "Candidates should only include non-AZ device pairs")
 
-    def _create_lb(self, id, host=FAKE_DEVICE_PAIR_1):
+    def _create_lb(self, id, host=FAKE_DEVICE_PAIR_1,
+                   provisioning_status=constants.ACTIVE):
         return self.repos.load_balancer.create(
             self.session, id=id, project_id=self.FAKE_PROJ_ID,
             name="lb_name", description="lb_description",
-            provisioning_status=constants.ACTIVE,
+            provisioning_status=provisioning_status,
             operating_status=constants.ONLINE,
             server_group_id=host, enabled=True
         )
