@@ -220,7 +220,7 @@ def get_service(listener, cert_manager, esd_repository):
         lb_algorithm = listener.default_pool.lb_algorithm
 
         if service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
-            # Add APP_COOKIE / HTTP_COOKIE persistance only in HTTP profiles
+            # Add APP_COOKIE / HTTP_COOKIE persistence only in HTTP profiles
             if persistence.type == 'APP_COOKIE' and persistence.cookie_name:
                 # generate iRule for cookie_name
                 escaped_cookie = persistence.cookie_name
@@ -228,7 +228,7 @@ def get_service(listener, cert_manager, esd_repository):
                 irule_name, irule = m_irule.get_app_cookie_irule(escaped_cookie)
                 entities.append((irule_name, irule))
 
-                # add iRule to universal persistance profile
+                # add iRule to universal persistence profile
                 name, obj_persist = m_persist.get_app_cookie(escaped_cookie)
                 service_args['persistenceMethods'] = [as3.Pointer(name)]
                 entities.append((name, obj_persist))
