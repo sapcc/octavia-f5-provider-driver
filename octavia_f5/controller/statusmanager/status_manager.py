@@ -183,7 +183,7 @@ class StatusManager(object):
 
     def failover_check(self):
         """ We assume that the current active and reachable device (self._active_bigip) is active,
-            If it's not the case, a failover happend.
+            If it's not the case, a failover happened.
         """
         if self.bigip_status[self.bigip.hostname] and not self.bigip.is_active:
             self._metric_failover.inc()
@@ -205,8 +205,8 @@ class StatusManager(object):
             # Try reaching device
             available = True
             try:
-                requests.get(bigip.scheme + '://' + bigip.hostname,
-                             timeout=timeout, verify=False)
+                requests.get(bigip.scheme + '://' + bigip.hostname, timeout=timeout, verify=False)
+                LOG.info('Found device with URL {}'.format(bigip.hostname))
             except requests.exceptions.Timeout:
                 LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
                          timeout, bigip.hostname))
