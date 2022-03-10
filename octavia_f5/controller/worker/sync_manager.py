@@ -161,7 +161,7 @@ class SyncManager(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS)
     )
-    def tenant_update(self, network_id, device=None, selfips=None):
+    def tenant_update(self, network_id, device=None, selfips=[]):
         """ Synchronous call to update F5s with all loadbalancers of a tenant (network_id).
 
            :param network_id: the as3 tenant
@@ -171,20 +171,17 @@ class SyncManager(object):
 
         """
 
-        if selfips is None:
-            skip_members = []
-        else:
-            skip_members = [fixed_ip.ip_address for selfip in selfips for fixed_ip in selfip.fixed_ips]
+        skip_ips = [fixed_ip.ip_address for selfip in selfips for fixed_ip in selfip.fixed_ips]
         loadbalancers = self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
         if not loadbalancers:
             return False
-        decl = self._declaration_manager.get_declaration({network_id: loadbalancers}, skip_members)
 
+        decl = self._declaration_manager.get_declaration({network_id: loadbalancers}, skip_ips)
         if CONF.f5_agent.dry_run:
             decl.set_action('dry-run')
 
-        # No config syncing if we are in migration mode or specificly syncing one device
+        # No config syncing if we are in migration mode or specifically syncing one device
         if not CONF.f5_agent.migration and not device and CONF.f5_agent.sync_to_group:
             decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
@@ -208,7 +205,7 @@ class SyncManager(object):
         :param network_id: network id
         :return: True if success, else False
         """
-        decl = self._declaration_manager.get_declaration({network_id: []}, [])
+        decl = self._declaration_manager.get_declaration({network_id: []})
 
         if CONF.f5_agent.dry_run:
             decl.set_action('dry-run')
