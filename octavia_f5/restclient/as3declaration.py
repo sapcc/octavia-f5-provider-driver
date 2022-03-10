@@ -27,7 +27,7 @@ class AS3DeclarationManager(object):
         self._cert_manager = cert_manager.CertManagerWrapper()
         self._status_manager = status_manager
 
-    def get_declaration(self, tenants, skip_ips=[]):
+    def get_declaration(self, tenants, skip_ips):
         """ Returns complete AS3 declaration
 
         :param tenants: dict of network_id: loadbalancers, multiple tenants supported
