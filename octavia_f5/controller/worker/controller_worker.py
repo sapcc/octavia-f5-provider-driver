@@ -120,7 +120,7 @@ class ControllerWorker(object):
                     self.l2sync.remove_l2_flow(network_id, device)
                     self.network_driver.cleanup_selfips(selfips)
                 else:
-                    if all(lb.provisioning_status == lib_consts.PENDING_CREATE
+                    if all(lb.provisioning_status in [lib_consts.PENDING_CREATE, lib_consts.PENDING_DELETE]
                            for lb in loadbalancers):
                         # Network is new - ensure complete l2 flow
                         self.l2sync.ensure_l2_flow(selfips, network_id, device)
