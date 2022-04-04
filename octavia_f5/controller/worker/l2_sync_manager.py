@@ -48,6 +48,9 @@ class L2SyncManager(BaseTaskFlowEngine):
         self.executor = futures.ThreadPoolExecutor(max_workers=CONF.networking.max_workers)
 
     def initialize_bigips(self, bigip_urls: [str]):
+        if CONF.f5_agent.dry_run:
+            return []
+
         instances = []
         for bigip_url in bigip_urls:
             # Create iControlREST client for every bigip
@@ -166,10 +169,10 @@ class L2SyncManager(BaseTaskFlowEngine):
                 failed_bigips.append(bigip)
 
         # We raise error only if all pairs failed
-        if all(bigip in failed_bigips for bigip in self._bigips):
+        if self._bigips and all(bigip in failed_bigips for bigip in self._bigips):
             raise Exception(f"Failed ensure_l2_flow for all bigip devices of network_id={network_id}")
 
-        if all(vcmp in failed_bigips for vcmp in self._vcmps):
+        if self._vcmps and all(vcmp in failed_bigips for vcmp in self._vcmps):
             raise Exception(f"Failed ensure_l2_flow for all vcmp devices of network_id={network_id}")
 
     def remove_l2_flow(self, network_id: str, device=None):
