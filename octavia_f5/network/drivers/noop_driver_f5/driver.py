@@ -16,6 +16,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia.network.drivers.noop_driver import driver
+from octavia_f5.network import data_models
 
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
@@ -35,3 +36,12 @@ class NoopNetworkDriverF5(driver.NoopNetworkDriver):
 
     def get_segmentation_id(self, network_id, host=None):
         return 1234
+
+    def get_network(self, network_id, context=None):
+        return data_models.Network()
+
+    def ensure_selfips(self, load_balancers, agent=None, cleanup_orphans=False):
+        return []
+
+    def cleanup_selfips(self, selfips):
+        return

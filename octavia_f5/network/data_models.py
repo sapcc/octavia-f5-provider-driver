@@ -32,9 +32,6 @@ class Network(BaseDataModel):
                  router_external=None,
                  port_security_enabled=None,
                  segments=None):
-        if segments is None:
-            segments = []
-
         self.id = id
         self.name = name
         self.subnets = subnets
@@ -46,7 +43,7 @@ class Network(BaseDataModel):
         self.router_external = router_external
         self.mtu = mtu
         self.port_security_enabled = port_security_enabled
-        self.segments = segments
+        self.segments = segments or []
         self._network_driver = driver_utils.get_network_driver()
 
     def default_gateway_ip(self, subnet_id):
