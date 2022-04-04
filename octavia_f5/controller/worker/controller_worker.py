@@ -139,7 +139,7 @@ class ControllerWorker(object):
                 # Queue empty, pass
                 pass
             except (exceptions.RetryException, tenacity.RetryError) as e:
-                LOG.warning("Device is busy, retrying with next sync: %s", e)
+                LOG.warning("Worker run failed (device may be busy), retrying with next sync: %s", e)
                 time.sleep(15)
             except Exception as e:
                 LOG.exception(e)
