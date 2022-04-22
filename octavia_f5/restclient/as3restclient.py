@@ -12,8 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from urllib import parse
 import time
+from urllib import parse
 
 import futurist
 import prometheus_client as prometheus
@@ -60,7 +60,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
     def __init__(self, bigip_url, auth=None):
         self.task_watcher = futurist.ThreadPoolExecutor(max_workers=1)
         verify = CONF.f5_agent.bigip_verify
-        super(AS3RestClient, self).__init__(bigip_url, verify, auth)
+        super().__init__(bigip_url, verify, auth)
         if CONF.f5_agent.prometheus:
             self.hooks['response'].append(self.metric_response_hook)
         self.hooks['response'].append(self.error_response_hook)
@@ -136,7 +136,7 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         """
         LOG.info("ASync task '%s' being monitored...", task_id)
         while True:
-            task = super(AS3RestClient, self).get(path=AS3_TASKS_PATH.format(task_id))
+            task = super().get(path=AS3_TASKS_PATH.format(task_id))
             if task.ok:
                 results = task.json()['results']
 
@@ -158,22 +158,22 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
             params['async'] = 'true'
         if CONF.f5_agent.unsafe_mode:
             params['unsafe'] = 'true'
-        return super(AS3RestClient, self).post(url, json=payload.to_dict(), params=params)
+        return super().post(url, json=payload.to_dict(), params=params)
 
     @_metric_patch_exceptions.count_exceptions()
     @_metric_patch_duration.time()
     def patch(self, tenants, patch_body):
         url = self.get_url(AS3_DECLARE_PATH)
-        return super(AS3RestClient, self).patch(url, json=patch_body)
+        return super().patch(url, json=patch_body)
 
     @_metric_delete_exceptions.count_exceptions()
     @_metric_delete_duration.time()
-    def delete(self, tenants):
+    def delete(self, tenants: list):
         if not tenants:
             raise exceptions.DeleteAllTenantsException()
 
         url = '{}/{}'.format(self.get_url(AS3_DECLARE_PATH), ','.join(tenants))
-        return super(AS3RestClient, self).delete(url)
+        return super().delete(url)
 
     def info(self):
         info = self.get(self.get_url(AS3_INFO_PATH), timeout=3)
@@ -197,7 +197,7 @@ class AS3ExternalContainerRestClient(AS3RestClient):
 
     def __init__(self, bigip_url, as3_url, auth=None):
         self.as3_url = parse.urlsplit(as3_url, allow_fragments=False)
-        super(AS3ExternalContainerRestClient, self).__init__(bigip_url, auth)
+        super().__init__(bigip_url, auth)
 
     def get_url(self, url):
         """ Override host for AS3 declarations. """
@@ -209,7 +209,7 @@ class AS3ExternalContainerRestClient(AS3RestClient):
             return parse.urlunsplit(url_tuple)
 
         # derive regular bigip url
-        return super(AS3ExternalContainerRestClient, self).get_url(url)
+        return super().get_url(url)
 
     def post(self, tenants, payload):
         if isinstance(payload, AS3):
@@ -219,7 +219,7 @@ class AS3ExternalContainerRestClient(AS3RestClient):
             elif isinstance(self.auth, bigip_auth.BigIPBasicAuth):
                 payload.set_target_username(self.auth.username)
                 payload.set_target_passphrase(self.auth.password)
-        return super(AS3ExternalContainerRestClient, self).post(tenants, payload)
+        return super().post(tenants, payload)
 
     def patch(self, tenants, patch_body):
         # Patch is realized through post with action=patch

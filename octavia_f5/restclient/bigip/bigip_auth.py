@@ -30,7 +30,7 @@ class BigIPBasicAuth(HTTPBasicAuth):
     def __init__(self, url):
         self.url = url
         parse_result = parse.urlparse(url, allow_fragments=False)
-        super(BigIPBasicAuth, self).__init__(parse_result.username, parse.unquote(parse_result.password))
+        super().__init__(parse_result.username, parse.unquote(parse_result.password))
 
 
 class BigIPTokenAuth(AuthBase):

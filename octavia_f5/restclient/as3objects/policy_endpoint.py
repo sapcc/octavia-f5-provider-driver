@@ -70,7 +70,7 @@ def _get_condition(l7rule):
             "l7policy-id={}, l7rule-id={}, type={}".format(
                 l7rule.l7policy_id, l7rule.id, l7rule.compare_type))
 
-    args = dict()
+    args = {}
     if l7rule.invert:
         operand = COMPARE_TYPE_INVERT_MAP[l7rule.compare_type]
     else:
@@ -92,7 +92,7 @@ def _get_action(l7policy):
     if l7policy.action not in SUPPORTED_ACTION_TYPE:
         raise PolicyActionNotSupported()
 
-    args = dict()
+    args = {}
     if l7policy.action == constants.L7POLICY_ACTION_REDIRECT_TO_POOL:
         args['type'] = 'forward'
         pool_name = pool.get_name(l7policy.redirect_pool_id)
@@ -116,7 +116,7 @@ def get_endpoint_policy(l7policies):
     wrapper_name = ', '.join([l7policy.name for l7policy in l7policies if l7policy.name])
     wrapper_desc = ', '.join([l7policy.description for l7policy in l7policies if l7policy.description])
 
-    args = dict()
+    args = {}
     args['label'] = as3types.f5label(wrapper_name or wrapper_desc)
     args['remark'] = as3types.f5remark(wrapper_desc or wrapper_name)
     args['rules'] = [Endpoint_Policy_Rule(

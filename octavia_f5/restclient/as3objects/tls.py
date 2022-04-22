@@ -96,7 +96,7 @@ def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
     :param crl_file: reference to AS3 crl_file
     :return: TLS_Client
     """
-    service_args = dict()
+    service_args = {}
     if trust_ca:
         service_args['trustCA'] = Pointer(trust_ca)
         service_args['validateCertificate'] = True

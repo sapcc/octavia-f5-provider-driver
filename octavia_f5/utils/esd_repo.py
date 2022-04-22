@@ -46,7 +46,7 @@ class EsdJSONValidation(object):
     def read_json(self):
         for fileList in self.esdJSONFileList:
             try:
-                with open(fileList) as json_file:
+                with open(fileList, 'r', encoding='urf8') as json_file:
                     # Reading each file to a dictionary
                     file_json_dict = json.load(json_file)
                     # Combine all dictionaries to one
@@ -70,7 +70,7 @@ class EsdRepository(EsdJSONValidation):
     def __init__(self):
         self.esd_dict = {}
         self.validtags = []
-        super(EsdRepository, self).__init__(CONF.f5_agent.esd_dir)
+        super().__init__(CONF.f5_agent.esd_dir)
         self.process_esd()
 
     # this function will return intersection of known valid esd tags

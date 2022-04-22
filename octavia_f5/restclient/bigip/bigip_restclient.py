@@ -28,7 +28,7 @@ BIGIP_CM_PATH = '/mgmt/tm/cm'
 
 class BigIPRestClient(requests.Session):
     def __init__(self, bigip_url, verify=True, auth=None):
-        super(BigIPRestClient, self).__init__()
+        super().__init__()
         self.url = parse.urlparse(bigip_url, allow_fragments=False)
 
         # Remove any user/pw, since it's been already configured via auth
@@ -73,9 +73,9 @@ class BigIPRestClient(requests.Session):
         except requests.exceptions.RequestException:
             return self._active or False
 
-        self._active = any([device['name'] == self.hostname and
+        self._active = any(device['name'] == self.hostname and
                            device['failoverState'] == 'active'
-                           for device in r.json().get('items', [])])
+                           for device in r.json().get('items', []))
         return self._active
 
     def get(self, url=None, **kwargs):
@@ -84,7 +84,7 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).get(url, **kwargs)
+        return super().get(url, **kwargs)
 
     def post(self, url=None, **kwargs):
         """ Override get for baseurl compatbility
@@ -92,15 +92,15 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).post(url, **kwargs)
+        return super().post(url, **kwargs)
 
-    def delete(self, url=None, **kwargs):
-        """ Override get for baseurl compatbility
+    def delete(self, url: str = None, **kwargs):
+        """ Override get for baseurl compatibility
         """
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).delete(url, **kwargs)
+        return super().delete(url, **kwargs)
 
     def patch(self, url=None, **kwargs):
         """ Override get for baseurl compatbility
@@ -108,7 +108,7 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).patch(url, **kwargs)
+        return super().patch(url, **kwargs)
 
     def put(self, url=None, **kwargs):
         """ Override get for baseurl compatbility
@@ -116,7 +116,7 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).put(url, **kwargs)
+        return super().put(url, **kwargs)
 
     def config_sync(self, device_group):
         """ Performing a ConfigSync
@@ -128,4 +128,4 @@ class BigIPRestClient(requests.Session):
             'command': 'run',
             'utilCmdArgs': 'config-sync to-group {}'.format(device_group)
         }
-        return super(BigIPRestClient, self).post(self.get_url(BIGIP_CM_PATH), json=cmd)
+        return super().post(self.get_url(BIGIP_CM_PATH), json=cmd)

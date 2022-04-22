@@ -57,7 +57,7 @@ def get_pool(pool, loadbalancer_ips, status):
         'members': [],
     }
 
-    enable_priority_group = any([member.backup for member in pool.members])
+    enable_priority_group = any(member.backup for member in pool.members)
     for member in pool.members:
         if not utils.pending_delete(member):
             if member.ip_address in loadbalancer_ips:

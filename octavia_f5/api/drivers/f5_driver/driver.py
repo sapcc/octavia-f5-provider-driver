@@ -36,7 +36,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
     """
 
     def __init__(self):
-        super(F5ProviderDriver, self).__init__()
+        super().__init__()
 
     def _get_server(self, loadbalancer_id):
         """ Get scheduled host of the loadbalancer.

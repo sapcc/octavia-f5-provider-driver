@@ -56,7 +56,7 @@ def get_name(healthmonitor_id):
 
 
 def get_monitor(health_monitor, target_address=None, target_port=None):
-    args = dict()
+    args = {}
 
     # Standard Octavia monitor types
     if health_monitor.type == 'HTTP':

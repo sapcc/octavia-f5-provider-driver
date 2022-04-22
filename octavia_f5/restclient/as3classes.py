@@ -89,7 +89,7 @@ class AS3(BaseDescription):
         if action not in self.ACTIONS:
             raise as3exceptions.TypeNotSupportedException
 
-        super(AS3, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'AS3')
         setattr(self, 'logLevel', self.LOG_MAP.get(_log_level, 'warning'))
         setattr(self, 'trace', _log_level == logging.TRACE)
@@ -120,7 +120,7 @@ class AS3(BaseDescription):
 
 class ADC(BaseDescription):
     def __init__(self, schemaVersion='3.19.0', updateMode='selective', **kwargs):  # noqa
-        super(ADC, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'ADC')
 
         self.require('id')
@@ -132,7 +132,7 @@ class ADC(BaseDescription):
 
 class Tenant(BaseDescription):
     def __init__(self, **kwargs):
-        super(Tenant, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'Tenant')
 
     def add_application(self, name, application):
@@ -144,7 +144,7 @@ class Application(BaseDescription):
         if template not in constants.SUPPORTED_APPLICATION_TEMPLATES:
             raise as3exceptions.TypeNotSupportedException
 
-        super(Application, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'Application')
 
     def set_service_main(self, service):
@@ -174,25 +174,25 @@ class Service(BaseDescription):
         if _servicetype not in constants.SUPPORTED_SERVICES:
             raise as3exceptions.TypeNotSupportedException
 
-        super(Service, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', _servicetype)
 
 
 class ServiceAddress(BaseDescription):
     def __init__(self, **kwargs):
-        super(ServiceAddress, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'Service_Address')
 
 
 class Pool(BaseDescription):
     def __init__(self, **kwargs):
-        super(Pool, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'Pool')
 
 
 class Member(BaseDescription):
     def __init__(self, enable=True, **kwargs):
-        super(Member, self).__init__(locals())
+        super().__init__(locals())
 
         self.require('servicePort')
         self.require('serverAddresses')
@@ -200,13 +200,13 @@ class Member(BaseDescription):
 
 class Monitor(BaseDescription):
     def __init__(self, **kwargs):
-        super(Monitor, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'Monitor')
 
 
 class BigIP(BaseDescription):
     def __init__(self, bigip, _common=True):
-        super(BigIP, self).__init__(locals())
+        super().__init__(locals())
 
         self.require('bigip')
         if _common:
@@ -215,21 +215,21 @@ class BigIP(BaseDescription):
 
 class Service_Generic_profileTCP(BaseDescription):
     def __init__(self, ingress, egress):
-        super(Service_Generic_profileTCP, self).__init__(locals())
+        super().__init__(locals())
         self.require('ingress')
         self.require('egress')
 
 
 class IRule(BaseDescription):
     def __init__(self, iRule, **kwargs):
-        super(IRule, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'iRule')
         setattr(self, 'iRule', iRule)
 
 
 class Persist(BaseDescription):
     def __init__(self, **kwargs):
-        super(Persist, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'Persist')
 
 
@@ -237,7 +237,7 @@ class Endpoint_Policy(BaseDescription):
     STRATEGY = ['all-match', 'best-match', 'first-match', 'custom']
 
     def __init__(self, strategy, **kwargs):
-        super(Endpoint_Policy, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'Endpoint_Policy')
         if strategy not in self.STRATEGY:
             raise as3exceptions.TypeNotSupportedException
@@ -245,7 +245,7 @@ class Endpoint_Policy(BaseDescription):
 
 class Endpoint_Policy_Rule(BaseDescription):
     def __init__(self, **kwargs):
-        super(Endpoint_Policy_Rule, self).__init__(locals())
+        super().__init__(locals())
 
 
 class Policy_Condition(BaseDescription):
@@ -255,53 +255,53 @@ class Policy_Condition(BaseDescription):
         if type not in self.TYPE:
             raise as3exceptions.TypeNotSupportedException
 
-        super(Policy_Condition, self).__init__(locals())
+        super().__init__(locals())
 
 
 class Policy_Action(BaseDescription):
     def __init__(self, **kwargs):
-        super(Policy_Action, self).__init__(locals())
+        super().__init__(locals())
 
 
 class Policy_Compare_String(BaseDescription):
     def __init__(self, values, operand='equals', _case_sensitive=False):
-        super(Policy_Compare_String, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'caseSensitive', _case_sensitive)
 
 
 class Pointer(BaseDescription):
     def __init__(self, use):
-        super(Pointer, self).__init__(locals())
+        super().__init__(locals())
         self.require('use')
 
 
 class TLS_Server(BaseDescription):
     def __init__(self, **kwargs):
-        super(TLS_Server, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'TLS_Server')
 
 
 class TLS_Client(BaseDescription):
     def __init__(self, **kwargs):
-        super(TLS_Client, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'TLS_Client')
 
 
 class Certificate(BaseDescription):
     def __init__(self, **kwargs):
-        super(Certificate, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'Certificate')
         self.require('certificate')
 
 
 class CA_Bundle(BaseDescription):
     def __init__(self, **kwargs):
-        super(CA_Bundle, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'CA_Bundle')
         self.require('bundle')
 
 
 class HTTP_Profile(BaseDescription):
     def __init__(self, **kwargs):
-        super(HTTP_Profile, self).__init__(locals())
+        super().__init__(locals())
         setattr(self, 'class', 'HTTP_Profile')

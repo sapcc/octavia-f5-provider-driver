@@ -60,7 +60,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
 
     def __init__(self):
         LOG.info("Initializing Neutron Client")
-        super(NeutronClient, self).__init__()
+        super().__init__()
         self.scheduler = scheduler.Scheduler()
         self.amphora_repo = repositories.AmphoraRepository()
         self.physical_network = None
@@ -225,11 +225,11 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
                     neutron_client_exceptions.PortNotFoundClient):
                 LOG.debug('VIP port %s already deleted. Skipping.',
                           vip.port_id)
-            except Exception:
+            except Exception as e:
                 message = _('Error deleting VIP port_id {port_id} from '
                             'neutron').format(port_id=vip.port_id)
                 LOG.exception(message)
-                raise base.DeallocateVIPException(message)
+                raise base.DeallocateVIPException(message) from e
         elif port:
             LOG.warning("Port %s will not be deleted by Octavia as it was "
                         "not created by Octavia.", vip.port_id)
@@ -251,13 +251,13 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
         """
         try:
             network_dict = self.neutron_client.show_network(network_id)
-        except neutron_client_exceptions.NotFound:
+        except neutron_client_exceptions.NotFound as e:
             message = _(f"Network not found (network id: {network_id}).")
-            raise base.NetworkNotFound(message)
-        except Exception:
+            raise base.NetworkNotFound(message) from e
+        except Exception as e:
             message = _(f"Error retrieving network (network id: {network_id}.")
             LOG.exception(message)
-            raise base.NetworkException(message)
+            raise base.NetworkException(message) from e
         return f5_utils.convert_network_dict_to_model(network_dict)
 
     @MEMOIZE

@@ -41,7 +41,7 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
             host = CONF.host
 
         filters.update(server_group_id=host)
-        return super(LoadBalancerRepository, self).get_all(
+        return super().get_all(
             session, **filters)[0]
 
     def get_all_by_network(self, session, network_id, host=None, **filters):
@@ -65,6 +65,7 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
                 models.LoadBalancer.provisioning_status != consts.DELETED)
 
         return [model.to_data_model() for model in query.all()]
+
 
 class PoolRepository(repositories.PoolRepository):
     def get_pending_from_host(self, session, host=None):
@@ -138,7 +139,6 @@ class ListenerRepository(repositories.ListenerRepository):
 
 class AmphoraRepository(repositories.AmphoraRepository):
     def get_devices_for_host(self, session, host):
-
         query = session.query(self.model_class.cached_zone)
         # pylint: disable=singleton-comparison
         query = query.filter(self.model_class.compute_flavor == host,

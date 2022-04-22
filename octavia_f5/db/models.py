@@ -14,10 +14,10 @@
 # limitations under the License.
 
 import sqlalchemy as sa
-
 from sqlalchemy import orm
-from octavia_f5.common import data_models
+
 from octavia.db import base_models
+from octavia_f5.common import data_models
 
 
 class ESDAttributes(base_models.BASE, base_models.NameMixin):

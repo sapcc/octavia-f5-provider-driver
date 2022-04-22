@@ -102,7 +102,7 @@ class ControllerWorker(object):
         if CONF.f5_agent.availability_zone:
             self.register_in_availability_zone(CONF.f5_agent.availability_zone)
 
-        super(ControllerWorker, self).__init__()
+        super().__init__()
 
     def as3worker(self):
         """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""

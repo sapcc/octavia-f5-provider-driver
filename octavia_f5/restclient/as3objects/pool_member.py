@@ -36,7 +36,7 @@ def normalize_weight(weight):
 
 
 def get_member(member, enable_priority_group, with_monitors):
-    args = dict()
+    args = {}
     args['servicePort'] = member.protocol_port
     args['serverAddresses'] = [member.ip_address]
 
