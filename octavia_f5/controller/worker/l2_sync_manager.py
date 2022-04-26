@@ -13,6 +13,7 @@
 #  under the License.
 
 from concurrent import futures
+from itertools import chain
 
 import prometheus_client as prometheus
 import requests
@@ -159,10 +160,11 @@ class L2SyncManager(BaseTaskFlowEngine):
             fs[self.executor.submit(self._do_ensure_vcmp_l2_flow, store=store)] = vcmp
 
         failed_bigips = []
-        for f in futures.as_completed(fs, timeout=30):
+        done, not_done = futures.wait(fs, timeout=10)
+        for f in done | not_done:
             bigip = fs[f]
             try:
-                f.result()
+                f.result(0)
             except Exception as e:
                 self._metric_failed_futures.labels(bigip.hostname, 'ensure_l2_flow').inc()
                 LOG.error("Failed running ensure_l2_flow for host %s: %s", bigip.hostname, e)
@@ -210,14 +212,14 @@ class L2SyncManager(BaseTaskFlowEngine):
             store = {'bigip': vcmp, 'bigip_guest_names': guest_names, 'network': network}
             fs[self.executor.submit(self._do_remove_vcmp_l2_flow, store=store)] = vcmp
 
-        for f in futures.as_completed(fs, timeout=30):
+        done, not_done = futures.wait(fs, timeout=10)
+        for f in done | not_done:
             bigip = fs[f]
             try:
-                f.result()
+                f.result(0)
             except Exception as e:
                 self._metric_failed_futures.labels(bigip.hostname, 'remove_l2_flow').inc()
                 LOG.error("Failed running remove_l2_flow for host %s: %s", bigip.hostname, e)
-                raise e
 
     def sync_l2_selfips_flow(self, selfips: [network_models.Port], network_id: str, device=None):
         """ Runs the taskflows to sync selfips (add/remove) on all bigip devices in parallel
@@ -244,10 +246,11 @@ class L2SyncManager(BaseTaskFlowEngine):
                                     expected_selfips=selfips_for_host,
                                     store=store)] = bigip
 
-        for f in futures.as_completed(fs, timeout=30):
+        done, not_done = futures.wait(fs, timeout=10)
+        for f in done | not_done:
             bigip = fs[f]
             try:
-                f.result()
+                f.result(0)
             except Exception as e:
                 self._metric_failed_futures.labels(bigip.hostname, 'sync_l2_selfips_flow').inc()
                 LOG.error("Failed running sync_l2_selfips_flow for host %s: %s", bigip.hostname, e)
@@ -258,7 +261,8 @@ class L2SyncManager(BaseTaskFlowEngine):
         network_ids = set(lb.vip.network_id for lb in loadbalancers)
         networks = {net.id: net for net in
                     self.executor.map(self._network_driver.get_network, network_ids, timeout=60)}
-        selfip_ports = self._network_driver.ensure_selfips(loadbalancers, cleanup_orphans=True)
+        selfip_ports = list(chain.from_iterable(
+            self._network_driver.ensure_selfips(loadbalancers, cleanup_orphans=True)))
 
         LOG.info("Running l2 full-sync [#loadbalancers=%d, #networks=%d, #selfips=%d]",
                  len(loadbalancers), len(network_ids), len(selfip_ports))
@@ -346,9 +350,10 @@ class L2SyncManager(BaseTaskFlowEngine):
             fs.append(executor.submit(self.ensure_l2_flow, selfips=selfips, network_id=network.id))
 
         """ 6. Execute cleanup and full-sync and collect any errors """
-        for f in futures.as_completed(fs, timeout=240):
+        done, not_done = futures.wait(fs, timeout=240)
+        for f in done | not_done:
             try:
-                res = f.result()
+                res = f.result(0)
                 if isinstance(res, requests.Response):
                     with decorators.RaisesIControlRestError():
                         res.raise_for_status()

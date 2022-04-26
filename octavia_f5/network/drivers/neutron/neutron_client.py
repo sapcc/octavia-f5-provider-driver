@@ -11,11 +11,10 @@
 #  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #  License for the specific language governing permissions and limitations
 #  under the License.
-
-from urllib import parse
-
 import ipaddress
 import re
+from urllib import parse
+
 import requests.exceptions
 import tenacity
 from neutronclient.common import exceptions as neutron_client_exceptions
@@ -23,8 +22,13 @@ from octavia_lib.common import constants as lib_consts
 from oslo_cache import core as cache
 from oslo_config import cfg
 from oslo_log import log as logging
+from oslo_utils import excutils
+from taskflow import flow
+from taskflow.exceptions import WrappedFailure
+from taskflow.listeners import logging as tf_logging
+from taskflow.patterns import unordered_flow, linear_flow, graph_flow
 
-from octavia.common import data_models as octavia_models, exceptions
+from octavia.common import data_models as octavia_models, exceptions, base_taskflow
 from octavia.db import api as db_apis
 from octavia.i18n import _
 from octavia.network import base
@@ -32,8 +36,8 @@ from octavia.network import data_models as network_models
 from octavia.network.drivers.neutron import base as neutron_base
 from octavia.network.drivers.neutron import utils
 from octavia_f5.common import constants
+from octavia_f5.controller.worker.tasks import network_tasks
 from octavia_f5.db import repositories
-from octavia_f5.db import scheduler
 from octavia_f5.network.drivers.neutron import utils as f5_utils
 
 LOG = logging.getLogger(__name__)
@@ -48,7 +52,8 @@ MEMOIZE = cache.get_memoization_decorator(
 cache.configure_cache_region(CONF, cache_region)
 
 
-class NeutronClient(neutron_base.BaseNeutronDriver):
+class NeutronClient(neutron_base.BaseNeutronDriver,
+                    base_taskflow.BaseTaskFlowEngine):
     """ The networking-f5 octavia driver is a octavia-only version of the
         networking-f5 driver for neutron. Octavia worker will provision L2 Routes,
         Routedomains, Self-IPs and VLANs by it's own and update the corresponding
@@ -61,7 +66,9 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
     def __init__(self):
         LOG.info("Initializing Neutron Client")
         super(NeutronClient, self).__init__()
-        self.scheduler = scheduler.Scheduler()
+        base_taskflow.BaseTaskFlowEngine.__init__(self)
+        self.allocate_vip_flow = self.get_allocate_vip_flow()
+        self.deallocate_vip_flow = self.get_deallocate_vip_flow()
         self.amphora_repo = repositories.AmphoraRepository()
         self.physical_network = None
         self.physical_interface = None
@@ -92,7 +99,34 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
             list_of_dicts.append(fixed_ip.to_dict())
         return list_of_dicts
 
+    def get_allocate_vip_flow(self) -> flow.Flow:
+        # VIP ports needs to be allocated together with all depending resources
+        create_vip_port_task = network_tasks.CreateVIPPort(self)
+        create_selfips_task = network_tasks.CreateSelfIPs(self)
+        create_ports_subflow = unordered_flow.Flow('create-ports-flow')
+        create_ports_subflow.add(create_vip_port_task)
+        create_ports_subflow.add(create_selfips_task)
+        create_ports_subflow.add()
+
+        # linear tasks
+        get_candidate_task = network_tasks.GetCandidate(self)
+        all_selfips_task = network_tasks.AllSelfIPs(self)
+        update_aap_task = network_tasks.UpdateAAP(self)
+
+        allocate_vip_flow = linear_flow.Flow('allocate-vip-flow')
+        allocate_vip_flow.add(get_candidate_task, create_ports_subflow,
+                              all_selfips_task, update_aap_task)
+        return allocate_vip_flow
+
     def allocate_vip(self, load_balancer: octavia_models.LoadBalancer):
+        """Runs a task flow which creates (if needed) the VIP, SelfIPs
+        and updates the allowed_address_pairs, also correctly
+        handles revert conditions.
+
+        :param load_balancer: the octavia loadbalancer model
+        """
+
+        # Checks if a port was already provided and valid
         if load_balancer.vip.port_id:
             try:
                 port = self.get_port(load_balancer.vip.port_id)
@@ -135,104 +169,94 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
                     orig_msg=getattr(e, 'message', None),
                     orig_code=getattr(e, 'status_code', None), )
 
-        fixed_ip = {}
-        if load_balancer.vip.subnet_id:
-            fixed_ip['subnet_id'] = load_balancer.vip.subnet_id
-        if load_balancer.vip.ip_address:
-            fixed_ip['ip_address'] = load_balancer.vip.ip_address
 
-        # Make sure we are backward compatible with older neutron
-        if self._check_extension_enabled(PROJECT_ID_ALIAS):
-            project_id_key = 'project_id'
-        else:
-            project_id_key = 'tenant_id'
-
-        # select a candidate to schedule to
+        # Run the Flow
         try:
-            session = db_apis.get_session()
-            candidate = self.scheduler.get_candidates(session, load_balancer.availability_zone)[0]
-        except (ValueError, IndexError) as e:
-            message = _('Scheduling failed, no ready candidates found')
-            LOG.exception(message)
-            raise base.AllocateVIPException(
-                message,
-                orig_msg=getattr(e, 'message', None),
-                orig_code=getattr(e, 'status_code', None),
-            )
-        LOG.debug("Found candidates for new LB %s: %s", load_balancer.id, candidate)
+            engine = self._taskflow_load(
+                self.allocate_vip_flow, store={'load_balancer': load_balancer})
+            with tf_logging.DynamicLoggingListener(engine, log=LOG):
+                engine.run()
 
-        # It can be assumed that network_id exists
-        vip_port = {'port': {'name': 'loadbalancer-{}'.format(load_balancer.id),
-                             'network_id': load_balancer.vip.network_id,
-                             'admin_state_up': True,
-                             'device_id': load_balancer.id,
-                             'device_owner': constants.DEVICE_OWNER_LISTENER,
-                             'binding:host_id': candidate,
-                             project_id_key: load_balancer.project_id}}
+                selfips = engine.storage.fetch("selfips")
+                vip_port = engine.storage.fetch("vip_port")
+                LOG.debug("Successfully allocated SelfIPs %s for VIP %s",
+                          [selfip.id for selfip in selfips], vip_port.id)
 
-        if fixed_ip:
-            vip_port['port']['fixed_ips'] = [fixed_ip]
-        try:
-            new_port = self.neutron_client.create_port(vip_port)
-        except Exception as e:
-            message = _('Error creating neutron port for network '
-                        '{network_id}.').format(
-                network_id=load_balancer.vip.network_id)
-            LOG.exception(message)
-            raise base.AllocateVIPException(
-                message,
-                orig_msg=getattr(e, 'message', None),
-                orig_code=getattr(e, 'status_code', None),
-            )
+                return self._port_to_vip(vip_port, load_balancer)
+        except WrappedFailure as f:
+            # Unwrap Allocation error and re-raise
+            for e in f:
+                if isinstance(e, base.DeallocateVIPException):
+                    raise e
+            # Generic TaskFlow Error, log exception and raise generic Exception
+            LOG.exception(f)
+            raise base.AllocateVIPException()
 
-        try:
-            selfips = self.ensure_selfips([load_balancer], candidate)
-        except Exception as e:
-            message = _('Error creating selfips for network '
-                        '{network_id}: {err}.').format(
-                network_id=load_balancer.vip.network_id,
-                err=e
-            )
-            LOG.exception(message)
-            raise base.AllocateVIPException(
-                message,
-                orig_msg=getattr(e, 'message', None),
-                orig_code=getattr(e, 'status_code', None),
-            )
+    def get_deallocate_vip_flow(self) -> flow.Flow:
+        # VIP ports needs to be allocated together with all depending resources
 
-        # Convert to octavia objects
-        new_port = utils.convert_port_dict_to_model(new_port)
+        def _cleanup_selfips_decider(history):
+            return len(list(history.values())[0]) == 0
 
-        # Update allowed address pairs
-        self.update_aap(new_port, selfips)
-        LOG.debug(f"Ensured SelfIPs {[selfip.id for selfip in selfips]} for VIP {new_port.id}")
+        # SelfIP Cleanup if network is empty
+        get_all_loadbalancers_task = network_tasks.GetAllLoadBalancersForNetwork(self)
+        get_all_selfips_task = network_tasks.GetAllSelfIPsForNetwork(self)
+        cleanup_selfips_task = network_tasks.CleanupSelfIPs(self)
+        ensure_selfips_subflow = graph_flow.Flow('ensure-selfips-flow')
+        ensure_selfips_subflow.add(get_all_loadbalancers_task)
+        ensure_selfips_subflow.add(get_all_selfips_task)
+        ensure_selfips_subflow.add(cleanup_selfips_task)
 
-        return self._port_to_vip(new_port, load_balancer)
+        ensure_selfips_subflow.link(get_all_loadbalancers_task, get_all_selfips_task,
+                                    decider=_cleanup_selfips_decider)
+        ensure_selfips_subflow.link(get_all_selfips_task, cleanup_selfips_task)
+
+        # linear tasks
+        delete_vip_task = network_tasks.DeleteVIP(self)
+        deallocate_vip_flow = unordered_flow.Flow('deallocate-vip-flow')
+        deallocate_vip_flow.add(ensure_selfips_subflow,
+                                delete_vip_task)
+        return deallocate_vip_flow
 
     def deallocate_vip(self, vip):
         try:
-            port = self.get_port(vip.port_id)
-        except base.PortNotFound:
+            port = self.neutron_client.show_port(vip.port_id)
+            port = port.get('port', port)
+        except neutron_client_exceptions.PortNotFoundClient:
             LOG.warning("Can't deallocate VIP because the vip port {0} "
-                        "cannot be found in neutron. "
-                        "Continuing cleanup.".format(vip.port_id))
-            port = None
+                        "cannot be found in neutron.".format(vip.port_id))
+            return
 
-        if port and port.device_owner in [constants.DEVICE_OWNER_LISTENER, constants.DEVICE_OWNER_LEGACY]:
-            try:
-                self.neutron_client.delete_port(vip.port_id)
-            except (neutron_client_exceptions.NotFound,
-                    neutron_client_exceptions.PortNotFoundClient):
-                LOG.debug('VIP port %s already deleted. Skipping.',
-                          vip.port_id)
-            except Exception:
-                message = _('Error deleting VIP port_id {port_id} from '
-                            'neutron').format(port_id=vip.port_id)
-                LOG.exception(message)
-                raise base.DeallocateVIPException(message)
-        elif port:
+        if port['device_owner'] not in [constants.DEVICE_OWNER_LISTENER,
+                                        constants.DEVICE_OWNER_LEGACY]:
             LOG.warning("Port %s will not be deleted by Octavia as it was "
                         "not created by Octavia.", vip.port_id)
+            return
+
+        agent = port['binding:host_id']
+
+        # Run the Flow
+        try:
+            engine = self._taskflow_load(
+                self.deallocate_vip_flow, store={'agent': agent,
+                                                 'network_id': vip.network_id,
+                                                 'port_id': vip.port_id})
+            with tf_logging.DynamicLoggingListener(engine, log=LOG):
+                engine.run()
+                storage = engine.storage.fetch_all()
+                selfips = storage.get("selfips", [[]])[0]
+                LOG.debug("Successfully deallocated VIP %s, deleted SelfIPs: %s",
+                          vip.port_id, [selfip['id'] for selfip in selfips])
+        except exceptions.OctaviaException as e:
+            raise base.DeallocateVIPException(e)
+        except WrappedFailure as f:
+            # Unwrap Allocation error and re-raise
+            for e in f:
+                if isinstance(e, base.DeallocateVIPException):
+                    raise e
+            # Generic TaskFlow Error, log exception and raise generic Exception
+            LOG.exception(f)
+            raise base.DeallocateVIPException()
 
     @MEMOIZE
     def get_scheduled_host(self, port_id):
@@ -341,7 +365,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
         :param load_balancers: Octavia Load Balancers
         :param agent: Optional agent host, if null will be discovered from load_balancer db
         :param cleanup_orphans: Remove orphaned selfips (requires all load_balancers of this agent)
-        :return: Array of SelfIP Ports
+        :return: Tuple with Array of existing SelfIP Ports and Array of new SelfIP Ports
         """
 
         if not load_balancers:
@@ -386,6 +410,8 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
                     pass
                 selfips.remove(selfip)
 
+        new_selfips = []
+
         # create missing selfips
         project_id = load_balancers[0].project_id
         network_id = load_balancers[0].vip.network_id
@@ -397,11 +423,20 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
                 # Create SelfIP Port for device
                 try:
                     selfip_dict = self._make_selfip_dict(project_id, network_id, subnet_id, f5host, hosts_id[0])
-                    selfips.append(self.neutron_client.create_port(selfip_dict))
+                    new_selfips.append(self.neutron_client.create_port(selfip_dict).get('port', selfip_dict))
                 except neutron_client_exceptions.NetworkNotFoundClient:
                     pass
+                except neutron_client_exceptions.NeutronClientException:
+                    # Revert SelfIP creation if create_only
+                    with excutils.save_and_reraise_exception():
+                        for selfip in new_selfips:
+                            LOG.warning("ensure_selfips: Error while creating all SelfIPs for "
+                                        "subnet %s on agent %s, deleting Port %s",
+                                        subnet_id, hosts_id[0], selfip['id'])
+                            self.neutron_client.delete_port(selfip['id'])
 
-        return [utils.convert_port_dict_to_model(selfip) for selfip in selfips]
+        return ([utils.convert_port_dict_to_model(selfip) for selfip in selfips],
+                [utils.convert_port_dict_to_model(selfip) for selfip in new_selfips])
 
     def update_aap(self, vip: network_models.Port, selfips: [network_models.Port]):
         """ Tries to update a VIP ports allowed_address_pairs with SelfIPs ip addresses
@@ -434,11 +469,6 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
                     admin_state_up=True, qos_policy_id=None):
         pass
 
-    @tenacity.retry(
-        retry=tenacity.retry_if_exception_type(
-            (exceptions.NetworkServiceError)),
-        wait=tenacity.wait_incrementing(1, 1, 5),
-        stop=tenacity.stop_after_attempt(15))
     def delete_port(self, port_id):
         """delete a neutron port.
 
@@ -453,6 +483,55 @@ class NeutronClient(neutron_base.BaseNeutronDriver):
                       port_id)
         except Exception as e:
             raise exceptions.NetworkServiceError(net_error=str(e))
+
+    def create_vip(self, load_balancer: octavia_models.LoadBalancer,
+                   candidate: str) -> network_models.Port:
+        """Creates a VIP neutron port and returns the octavia port model
+
+        :param load_balancer: octavia load balancer
+        :param candidate: agent host to be scheduled to
+        :return: octavia port
+        """
+        fixed_ip = {}
+        if load_balancer.vip.subnet_id:
+            fixed_ip['subnet_id'] = load_balancer.vip.subnet_id
+        if load_balancer.vip.ip_address:
+            fixed_ip['ip_address'] = load_balancer.vip.ip_address
+
+        # Make sure we are backward compatible with older neutron
+        if self._check_extension_enabled(PROJECT_ID_ALIAS):
+            project_id_key = 'project_id'
+        else:
+            project_id_key = 'tenant_id'
+
+        # It can be assumed that network_id exists
+        vip_port = {'port': {'name': 'loadbalancer-{}'.format(load_balancer.id),
+                             'network_id': load_balancer.vip.network_id,
+                             'admin_state_up': True,
+                             'device_id': load_balancer.id,
+                             'device_owner': constants.DEVICE_OWNER_LISTENER,
+                             'binding:host_id': candidate,
+                             project_id_key: load_balancer.project_id}}
+
+        if fixed_ip:
+            vip_port['port']['fixed_ips'] = [fixed_ip]
+        try:
+            neutron_port = self.neutron_client.create_port(vip_port)
+            return utils.convert_port_dict_to_model(neutron_port)
+        except neutron_client_exceptions.NeutronClientException as e:
+            # Raise OverQuota errors back to user
+            raise base.AllocateVIPException(getattr(e, 'message', None),
+                orig_msg=getattr(e, 'message', None),
+                orig_code=getattr(e, 'status_code', None),
+            )
+        except Exception as e:
+            LOG.exception(e)
+            raise base.AllocateVIPException(
+                _('Error creating neutron vip port for network {network_id}'
+                  ).format(network_id=load_balancer.vip.network_id),
+                orig_msg=getattr(e, 'message', None),
+                orig_code=getattr(e, 'status_code', None),
+            )
 
     def plug_vip(self, load_balancer, vip):
         pass
