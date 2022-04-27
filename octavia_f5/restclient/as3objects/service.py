@@ -326,6 +326,10 @@ def get_service(listener, cert_manager, esd_repository):
     if CONF.f5_agent.snat_virtual:
         service_args['snat'] = 'self'
 
+    # Disable port translation for all-ports listeners
+    if listener.protocol_port == 0:
+        service_args['translateServerPort'] = False
+
     # create service object and fill in additional fields
     service = as3.Service(**service_args)
 
