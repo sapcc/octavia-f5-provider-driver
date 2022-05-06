@@ -48,7 +48,7 @@ class TestGetTenant(base.TestCase):
         as3 = tenant.get_tenant(
             segmentation_id=1234,
             loadbalancers=[mock_lb],
-            skip_ips=[skip_ip],
+            self_ips=[skip_ip],
             status_manager=mock_status_manager,
             cert_manager=None,
             esd_repo=None)

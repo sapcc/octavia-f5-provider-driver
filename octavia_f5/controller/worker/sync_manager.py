@@ -172,15 +172,15 @@ class SyncManager(object):
         """
 
         if selfips is None:
-            skip_ips = []
+            self_ips = []
         else:
-            skip_ips = [fixed_ip.ip_address for selfip in selfips for fixed_ip in selfip.fixed_ips]
+            self_ips = [fixed_ip.ip_address for selfip in selfips for fixed_ip in selfip.fixed_ips]
         loadbalancers = self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
         if not loadbalancers:
             return False
 
-        decl = self._declaration_manager.get_declaration({network_id: loadbalancers}, skip_ips)
+        decl = self._declaration_manager.get_declaration({network_id: loadbalancers}, self_ips)
         if CONF.f5_agent.dry_run:
             decl.set_action('dry-run')
 
