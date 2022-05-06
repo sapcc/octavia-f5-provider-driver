@@ -35,11 +35,11 @@ def get_name(pool_id):
     return "{}{}".format(f5_consts.PREFIX_POOL, pool_id)
 
 
-def get_pool(pool, loadbalancer_ips, status):
+def get_pool(pool, ips_to_skip, status):
     """Map Octavia Pool -> AS3 Pool object
 
     :param pool: octavia pool object
-    :param loadbalancer_ips: already used loadbalancer_ips
+    :param ips_to_skip: already used VIPs and SelfIPs
     :param status: status manager instance
     :return: AS3 pool
     """
@@ -60,7 +60,7 @@ def get_pool(pool, loadbalancer_ips, status):
     enable_priority_group = any([member.backup for member in pool.members])
     for member in pool.members:
         if not utils.pending_delete(member):
-            if member.ip_address in loadbalancer_ips:
+            if member.ip_address in ips_to_skip:
                 LOG.warning("The member address %s of member %s (pool %s, LB %s) is already in use by another load balancer.",
                             member.ip_address, member.id, member.pool.id, member.pool.load_balancer.id)
                 if status:

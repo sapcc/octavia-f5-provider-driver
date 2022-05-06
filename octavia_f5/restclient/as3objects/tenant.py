@@ -34,7 +34,7 @@ def get_name(network_id):
                          network_id.replace('-', '_'))
 
 
-def get_tenant(segmentation_id, loadbalancers, status_manager, cert_manager, esd_repo):
+def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_manager, esd_repo):
 
     project_id = None
     if loadbalancers:
@@ -47,9 +47,9 @@ def get_tenant(segmentation_id, loadbalancers, status_manager, cert_manager, esd
 
     tenant = as3.Tenant(**tenant_dict)
 
-    # Skip members that re-use load balancer vips
-    loadbalancer_ips = [load_balancer.vip.ip_address for load_balancer in loadbalancers
-                        if not driver_utils.pending_delete(load_balancer)]
+    # Skip members with the same IP as a VIP or SelfIP
+    ips_to_skip = [load_balancer.vip.ip_address for load_balancer in loadbalancers
+                        if not driver_utils.pending_delete(load_balancer)] + self_ips
 
     for loadbalancer in loadbalancers:
         # Skip load balancer in (pending) deletion
@@ -78,7 +78,7 @@ def get_tenant(segmentation_id, loadbalancers, status_manager, cert_manager, esd
         # Attach pools
         for pool in loadbalancer.pools:
             if not driver_utils.pending_delete(pool):
-                app.add_entities(m_pool.get_pool(pool, loadbalancer_ips, status_manager))
+                app.add_entities(m_pool.get_pool(pool, ips_to_skip, status_manager))
 
         # Attach newly created application
         tenant.add_application(m_app.get_name(loadbalancer.id), app)
