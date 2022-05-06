@@ -27,11 +27,11 @@ class AS3DeclarationManager(object):
         self._cert_manager = cert_manager.CertManagerWrapper()
         self._status_manager = status_manager
 
-    def get_declaration(self, tenants, skip_members):
+    def get_declaration(self, tenants, self_ips):
         """ Returns complete AS3 declaration
 
         :param tenants: dict of network_id: loadbalancers, multiple tenants supported
-        :param skip_members: list of ip-addresses to remove from declaration (and print error)
+        :param self_ips: list of SelfIPs. They are removed from the declaration and an error is printed.
         :param status: status manager instance (optional) for certifcate error callback
 
         :return: complete AS3 declaration
@@ -55,7 +55,7 @@ class AS3DeclarationManager(object):
 
             # get Tenant
             name = m_tenant.get_name(network_id)
-            tenant = m_tenant.get_tenant(segmentation_id, loadbalancers, skip_members,
+            tenant = m_tenant.get_tenant(segmentation_id, loadbalancers, self_ips,
                                          self._status_manager, self._cert_manager, self._esd_repo)
             adc.set_tenant(name, tenant)
 

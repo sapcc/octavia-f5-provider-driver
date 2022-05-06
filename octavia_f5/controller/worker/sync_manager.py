@@ -172,19 +172,19 @@ class SyncManager(object):
         """
 
         if selfips is None:
-            skip_members = []
+            self_ips = []
         else:
-            skip_members = [fixed_ip.ip_address for selfip in selfips for fixed_ip in selfip.fixed_ips]
+            self_ips = [fixed_ip.ip_address for selfip in selfips for fixed_ip in selfip.fixed_ips]
         loadbalancers = self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
         if not loadbalancers:
             return False
-        decl = self._declaration_manager.get_declaration({network_id: loadbalancers}, skip_members)
 
+        decl = self._declaration_manager.get_declaration({network_id: loadbalancers}, self_ips)
         if CONF.f5_agent.dry_run:
             decl.set_action('dry-run')
 
-        # No config syncing if we are in migration mode or specificly syncing one device
+        # No config syncing if we are in migration mode or specifically syncing one device
         if not CONF.f5_agent.migration and not device and CONF.f5_agent.sync_to_group:
             decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
 
