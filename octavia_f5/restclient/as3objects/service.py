@@ -221,7 +221,7 @@ def get_service(listener, cert_manager, esd_repository):
 
         if service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
             # Add APP_COOKIE / HTTP_COOKIE persistence only in HTTP profiles
-            if persistence.type == 'APP_COOKIE' and persistence.cookie_name:
+            if persistence.type == lib_consts.SESSION_PERSISTENCE_APP_COOKIE and persistence.cookie_name:
                 # generate iRule for cookie_name
                 escaped_cookie = persistence.cookie_name
                 escaped_cookie.replace("\"", "")
