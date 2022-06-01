@@ -323,7 +323,9 @@ def get_service(listener, cert_manager, esd_repository):
             service_args['profileUDP'] = as3.BigIP(CONF.f5_agent.profile_udp)
 
     # Use the virtual-server address as SNAT address
-    if CONF.f5_agent.snat_virtual:
+    if f5_const.LISTENER_TAG_NO_SNAT in listener.tags:
+        service_args['snat'] = 'none'
+    elif CONF.f5_agent.snat_virtual:
         service_args['snat'] = 'self'
 
     # create service object and fill in additional fields
