@@ -16,6 +16,7 @@
 import json
 import threading
 import time
+from itertools import chain
 from queue import Empty
 
 import prometheus_client as prometheus
@@ -113,7 +114,8 @@ class ControllerWorker(object):
                 loadbalancers = self._get_all_loadbalancer(network_id)
                 LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
                           self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
-                selfips = self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=True)
+                selfips = list(chain.from_iterable(
+                    self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=True)))
                 if all(lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers):
                     self.sync.tenant_delete(network_id, device).raise_for_status()
                     # Cleanup l2 configuration and remove selfip ports

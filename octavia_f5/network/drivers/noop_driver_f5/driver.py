@@ -41,7 +41,10 @@ class NoopNetworkDriverF5(driver.NoopNetworkDriver):
         return data_models.Network()
 
     def ensure_selfips(self, load_balancers, agent=None, cleanup_orphans=False):
-        return []
+        return ([], [])
 
     def cleanup_selfips(self, selfips):
         return
+
+    def create_vip(self, load_balancer, candidate):
+        return self.driver.create_port(load_balancer.vip.network_id)
