@@ -30,3 +30,14 @@ Instead, otherwise unused tables are used in a specific way:
 # F5-specific configuration options
 There are lots of F5-specific configuration options. They can be found in `octavia_f5/common/config.py`.
 - If `agent_scheduler` in the `[networking]` section of the configuration is set to `loadbalancer`, new load balancers are scheduled to the device with the least load balancers. This is the default. If it is set to `listener`, new load balancers are scheduled to the device with the least listeners.
+
+# Listener type to AS3 service class mapping
+Mapping happens in `octavia_f5/restclient/as3objects/service.py`.
+| Openstack listener type | AS3 service class |
+|-|-|
+| TCP | Service_L4 |
+| UDP | Service_UDP |
+| HTTP | Service_HTTP |
+| HTTPS | Service_L4 |
+| PROXY | Service_TCP |
+| TERMINATED_HTTPS | Service_HTTPS |
