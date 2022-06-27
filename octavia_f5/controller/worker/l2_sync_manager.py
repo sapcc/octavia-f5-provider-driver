@@ -82,28 +82,28 @@ class L2SyncManager(BaseTaskFlowEngine):
             bigip.update_status()
 
     def _do_ensure_l2_flow(self, selfips: [network_models.Port], store: dict):
-        e = self._taskflow_load(self._f5flows.ensure_l2(selfips), store=store)
+        e = self.taskflow_load(self._f5flows.ensure_l2(selfips), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
     def _do_ensure_vcmp_l2_flow(self, store: dict):
-        e = self._taskflow_load(self._f5flows.ensure_vcmp_l2(), store=store)
+        e = self.taskflow_load(self._f5flows.ensure_vcmp_l2(), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
     def _do_remove_l2_flow(self, store: dict):
-        e = self._taskflow_load(self._f5flows.get_selfips_from_device_for_vlan(), store=store)
+        e = self.taskflow_load(self._f5flows.get_selfips_from_device_for_vlan(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
         selfips = e.storage.get('all-selfips')
 
-        e = self._taskflow_load(self._f5flows.remove_l2(selfips), store=store)
+        e = self.taskflow_load(self._f5flows.remove_l2(selfips), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
     def _do_sync_l2_selfips_flow(self, expected_selfips: [network_models.Port], store: dict):
-        e = self._taskflow_load(self._f5flows.get_selfips_from_device_for_vlan(), store=store)
+        e = self.taskflow_load(self._f5flows.get_selfips_from_device_for_vlan(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
@@ -117,12 +117,12 @@ class L2SyncManager(BaseTaskFlowEngine):
                   store['bigip'].hostname, store['network'].id, {'add': [p.id for p in selfips['add']],
                                                                  'remove': [p.id for p in selfips['remove']]})
 
-        e = self._taskflow_load(self._f5flows.sync_l2_selfips(selfips), store=store)
+        e = self.taskflow_load(self._f5flows.sync_l2_selfips(selfips), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
     def _do_remove_vcmp_l2_flow(self, store: dict):
-        e = self._taskflow_load(self._f5flows.remove_vcmp_l2(), store=store)
+        e = self.taskflow_load(self._f5flows.remove_vcmp_l2(), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 

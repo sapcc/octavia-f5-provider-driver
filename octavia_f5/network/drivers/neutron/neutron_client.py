@@ -172,7 +172,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
 
         # Run the Flow
         try:
-            engine = self._taskflow_load(
+            engine = self.taskflow_load(
                 self.allocate_vip_flow, store={'load_balancer': load_balancer})
             with tf_logging.DynamicLoggingListener(engine, log=LOG):
                 engine.run()
@@ -237,7 +237,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
 
         # Run the Flow
         try:
-            engine = self._taskflow_load(
+            engine = self.taskflow_load(
                 self.deallocate_vip_flow, store={'agent': agent,
                                                  'network_id': vip.network_id,
                                                  'port_id': vip.port_id})
