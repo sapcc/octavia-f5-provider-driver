@@ -8,13 +8,16 @@ on:
     branches: [ stable/yoga-m3 ]
   pull_request:
 
+env:
+  UPPER_CONSTRAINTS: "https://raw.githubusercontent.com/sapcc/requirements/stable/yoga/upper-constraints.txt"
+
 jobs:
   build:
 
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: [3.6]
+        python-version: [3.8]
 
     steps:
     - uses: actions/checkout@v2
@@ -25,8 +28,9 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pbr oslotest "octavia<7.0.0" -c https://raw.githubusercontent.com/sapcc/requirements/stable/yoga/upper-constraints.txt
-        pip install -e . -c https://raw.githubusercontent.com/sapcc/requirements/stable/yoga/upper-constraints.txt
+        pip install pbr oslotest -c $UPPER_CONSTRAINTS
+        pip install -e git+https://github.com/sapcc/octavia.git@stable/yoga-m3#egg=octavia -c $UPPER_CONSTRAINTS
+        pip install -e . -c $UPPER_CONSTRAINTS
     - name: Lint with flake8
       run: |
         pip install flake8
