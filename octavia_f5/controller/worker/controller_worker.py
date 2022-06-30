@@ -172,7 +172,7 @@ class ControllerWorker(object):
                 # Ignore as3 errors
                 pass
 
-    @periodics.periodic(240, run_immediately=True)
+    @periodics.periodic(240)
     def full_sync_reappearing_devices(self):
         session = db_apis.get_session(autocommit=False)
 
