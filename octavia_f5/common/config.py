@@ -212,6 +212,9 @@ f5_networking_opts = [
                 default=True,
                 help=_("Sync routes only to active bigip device, this option"
                        "is useful if automatic full-sync is activated.")),
+    cfg.IntOpt('l2_timeout',
+               default=120,
+               help=_("L2 Task timeout value.")),
 ]
 
 f5_status_manager_opts = [

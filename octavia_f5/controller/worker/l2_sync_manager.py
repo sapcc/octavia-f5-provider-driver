@@ -160,7 +160,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             fs[self.executor.submit(self._do_ensure_vcmp_l2_flow, store=store)] = vcmp
 
         failed_bigips = []
-        done, not_done = futures.wait(fs, timeout=10)
+        done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
         for f in done | not_done:
             bigip = fs[f]
             try:
@@ -212,7 +212,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             store = {'bigip': vcmp, 'bigip_guest_names': guest_names, 'network': network}
             fs[self.executor.submit(self._do_remove_vcmp_l2_flow, store=store)] = vcmp
 
-        done, not_done = futures.wait(fs, timeout=10)
+        done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
         for f in done | not_done:
             bigip = fs[f]
             try:
@@ -246,7 +246,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                                     expected_selfips=selfips_for_host,
                                     store=store)] = bigip
 
-        done, not_done = futures.wait(fs, timeout=10)
+        done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
         for f in done | not_done:
             bigip = fs[f]
             try:
@@ -350,7 +350,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             fs.append(executor.submit(self.ensure_l2_flow, selfips=selfips, network_id=network.id))
 
         """ 6. Execute cleanup and full-sync and collect any errors """
-        done, not_done = futures.wait(fs, timeout=240)
+        done, not_done = futures.wait(fs, timeout=10*CONF.networking.l2_timeout)
         for f in done | not_done:
             try:
                 res = f.result(0)
