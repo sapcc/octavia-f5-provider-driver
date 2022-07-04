@@ -134,6 +134,8 @@ class StatusManager(object):
 
         if isinstance(obj, data_models.LoadBalancer) and provisioning_status == lib_consts.ACTIVE:
             status_obj[lib_consts.OPERATING_STATUS] = lib_consts.ONLINE
+        if isinstance(obj, data_models.Listener) and provisioning_status == lib_consts.ACTIVE:
+            status_obj[lib_consts.OPERATING_STATUS] = lib_consts.ONLINE
         if isinstance(obj, data_models.HealthMonitor) and provisioning_status == lib_consts.ACTIVE:
             status_obj[lib_consts.OPERATING_STATUS] = lib_consts.ONLINE
         if isinstance(obj, data_models.L7Policy) and provisioning_status == lib_consts.ACTIVE:
