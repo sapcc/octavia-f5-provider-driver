@@ -284,6 +284,8 @@ class ControllerWorker(object):
             'in_use_pool': None,
             'in_use_health_monitor': None,
             'in_use_member': None,
+            'in_use_l7policy': None,
+            'in_use_l7rule': None,
         }
 
         try:
