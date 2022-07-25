@@ -228,8 +228,8 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         client.cast({}, 'update_l7rule', **payload)
 
     def create_vip_port(self, loadbalancer_id, project_id, vip_dictionary):
-        # Let Octavia create the port
-        raise exceptions.NotImplementedError()
+        raise exceptions.NotImplementedError(
+            operator_fault_string="F5 provider not creating VIP port. It will be created by Octavia API.")
 
     def get_supported_flavor_metadata(self):
         """Returns the valid flavor metadata keys and descriptions.
