@@ -24,7 +24,6 @@ from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
 from oslo_utils import excutils
-from stevedore import driver as stevedore_driver
 
 from octavia.common import constants as o_const
 from octavia.common import rpc
