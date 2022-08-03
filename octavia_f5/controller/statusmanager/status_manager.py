@@ -304,7 +304,8 @@ class StatusManager(object):
                 member_id = member['description']
                 base_path = memberstats['selfLink'][:memberstats['selfLink'].find('/stats')]
                 member_path = '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))
-                # this weirdness is to alleviate some race condition
+                # TODO: This weirdness is to alleviate some race condition(s).
+                #  I don't know which one. See 99496ec74ab79e39bc206620a67fd64a1093d227
                 if member_path in memberstats['entries']:
                     statobj = memberstats['entries'][member_path]
                 elif member_path.replace('%', '%25') in memberstats['entries']:
@@ -398,7 +399,10 @@ class StatusManager(object):
         """
         with DatabaseLockSession() as session:
             filters = {'load_balancer_id': None, 'cached_zone': None, 'compute_flavor': CONF.host,}
+            errmsg = "Failed removing orphaned amphora entries of LBs"
             try:
                 self.amp_repo.delete(session, **filters)
-            except sqlalchemy.exc.InvalidRequestError:
+            except sqlalchemy.exc.NoResultFound:
                 pass
+            except sqlalchemy.exc.InvalidRequestError as e:
+                LOG.info(f"{errmsg}: Invalid request: {e}")
