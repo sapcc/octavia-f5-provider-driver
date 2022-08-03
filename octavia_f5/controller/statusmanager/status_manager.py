@@ -24,13 +24,13 @@ from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
 from oslo_utils import excutils
-from stevedore import driver as stevedore_driver
 
 from octavia.common import constants as o_const
 from octavia.common import rpc
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
+from octavia_f5.controller.statusmanager.legacy_healthmanager.health_drivers import update_db
 from octavia_f5.restclient.bigip import bigip_restclient, bigip_auth
 
 CONF = cfg.CONF
@@ -62,25 +62,6 @@ class DatabaseLockSession(object):
                 with excutils.save_and_reraise_exception():
                     self._lock_session.rollback()
 
-
-def update_health(obj):
-    handler = stevedore_driver.DriverManager(
-        namespace='octavia.amphora.health_update_drivers',
-        name=CONF.health_manager.health_update_driver,
-        invoke_on_load=True
-    ).driver
-    handler.update_health(obj, '127.0.0.1')
-
-
-def update_stats(obj):
-    handler = stevedore_driver.DriverManager(
-        namespace='octavia.amphora.stats_update_drivers',
-        name=CONF.health_manager.stats_update_driver,
-        invoke_on_load=True
-    ).driver
-    handler.update_stats(obj, '127.0.0.1')
-
-
 class StatusManager(object):
     def __init__(self):
         LOG.info('Health Manager starting.')
@@ -89,6 +70,8 @@ class StatusManager(object):
         self.listener_repo = repo.ListenerRepository()
         self.amp_health_repo = repo.AmphoraHealthRepository()
         self.lb_repo = repo.LoadBalancerRepository()
+        self.db_health_updater = update_db.UpdateHealthDb
+        self.db_stats_updater = update_db.UpdateStatsDb
         self.health_executor = futurist.ThreadPoolExecutor(
             max_workers=CONF.health_manager.health_update_threads)
         self.stats_executor = futurist.ThreadPoolExecutor(
@@ -323,8 +306,8 @@ class StatusManager(object):
 
         for msg in amphora_messages.values():
             msg['recv_time'] = time.time()
-            self.health_executor.submit(update_health, msg)
-            self.stats_executor.submit(update_stats, msg)
+            self.health_executor.submit(self.db_health_updater.update_health, msg)
+            self.stats_executor.submit(self.db_stats_updater.update_stats, msg)
 
     def update_listener_count(self, num_listeners):
         """ updates listener count of bigip device (vrrp_priority column in amphora table)
