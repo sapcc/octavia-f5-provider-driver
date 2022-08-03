@@ -233,6 +233,13 @@ class StatusManager(object):
             self._last_cleanup_check = time.time()
             self.cleanup()
 
+        # update listener count
+        vipstats = self.bigip.get(path=F5_PATH_VIRTUAL_STATS).json()
+        if 'entries' not in vipstats:
+            self.update_listener_count(0)
+            return
+        self.update_listener_count(len(vipstats['entries'].keys()))
+
         def _get_lb_msg(lb_id):
             """Retrieve health info for a specific load balancer, inserting it,
             if not already present."""
@@ -246,13 +253,6 @@ class StatusManager(object):
                 }
             return amphora_messages[lb_id]
 
-        # update listener count
-        vipstats = self.bigip.get(path=F5_PATH_VIRTUAL_STATS).json()
-        if 'entries' not in vipstats:
-            self.update_listener_count(0)
-            return
-
-        self.update_listener_count(len(vipstats['entries'].keys()))
         # get listener stats
         for selfurl, statobj in vipstats['entries'].items():
             stats = statobj['nestedStats']['entries']
@@ -298,28 +298,31 @@ class StatusManager(object):
             members = self.bigip.get(path=F5_PATH_POOL_MEMBERS.format(sub_path)).json()
             memberstats = self.bigip.get(path=F5_PATH_POOL_MEMBER_STATS.format(sub_path)).json()
             for member in members.get('items', []):
-                if 'description' in member:
-                    statobj = None
-                    member_id = member['description']
-                    base_path = memberstats['selfLink'][:memberstats['selfLink'].find('/stats')]
-                    member_path = '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))
-                    if member_path in memberstats['entries']:
-                        statobj = memberstats['entries'][member_path]
-                    elif member_path.replace('%', '%25') in memberstats['entries']:
-                        statobj = memberstats['entries'][member_path.replace('%', '%25')]
+                if not 'description' in member:
+                    continue
+                statobj = None
+                member_id = member['description']
+                base_path = memberstats['selfLink'][:memberstats['selfLink'].find('/stats')]
+                member_path = '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))
+                # this weirdness is to alleviate some race condition
+                if member_path in memberstats['entries']:
+                    statobj = memberstats['entries'][member_path]
+                elif member_path.replace('%', '%25') in memberstats['entries']:
+                    statobj = memberstats['entries'][member_path.replace('%', '%25')]
 
-                    if statobj:
-                        stats = statobj['nestedStats']['entries']
-                        status = constants.NO_CHECK
-                        if stats['status.enabledState'].get('description') == 'disabled':
-                            status = constants.DRAIN
-                        elif stats['monitorStatus'].get('description') == 'checking':
-                            status = constants.MAINT
-                        elif stats['monitorStatus'].get('description') == 'down':
-                            status = constants.DOWN
-                        elif stats['monitorStatus'].get('description') == 'up':
-                            status = constants.UP
-                        msg['pools'][pool_id]['members'][member_id] = status
+                if not statobj:
+                    continue
+                stats = statobj['nestedStats']['entries']
+                status = constants.NO_CHECK
+                if stats['status.enabledState'].get('description') == 'disabled':
+                    status = constants.DRAIN
+                elif stats['monitorStatus'].get('description') == 'checking':
+                    status = constants.MAINT
+                elif stats['monitorStatus'].get('description') == 'down':
+                    status = constants.DOWN
+                elif stats['monitorStatus'].get('description') == 'up':
+                    status = constants.UP
+                msg['pools'][pool_id]['members'][member_id] = status
 
         for msg in amphora_messages.values():
             msg['recv_time'] = time.time()
