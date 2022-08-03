@@ -36,10 +36,10 @@ from octavia_f5.restclient.bigip import bigip_restclient, bigip_auth
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
-F5_VIRTUAL_STATS = '/mgmt/tm/ltm/virtual/stats'
-F5_POOL_STATS = '/mgmt/tm/ltm/pool/stats'
-F5_POOL_MEMBERS = '/mgmt/tm/ltm/pool/{}/members'
-F5_POOL_MEMBER_STATS = '/mgmt/tm/ltm/pool/{}/members/stats'
+F5_PATH_VIRTUAL_STATS = '/mgmt/tm/ltm/virtual/stats'
+F5_PATH_POOL_STATS = '/mgmt/tm/ltm/pool/stats'
+F5_PATH_POOL_MEMBERS = '/mgmt/tm/ltm/pool/{}/members'
+F5_PATH_POOL_MEMBER_STATS = '/mgmt/tm/ltm/pool/{}/members/stats'
 
 
 class DatabaseLockSession(object):
@@ -82,6 +82,7 @@ class StatusManager(object):
             max_workers=CONF.health_manager.health_update_threads)
         self.stats_executor = futurist.ThreadPoolExecutor(
             max_workers=CONF.health_manager.stats_update_threads)
+
         self.bigips = list(self.initialize_bigips())
         # Cache reachability of every bigip
         self.bigip_status = {bigip.hostname: False
@@ -192,42 +193,49 @@ class StatusManager(object):
             timeout = CONF.status_manager.failover_timeout
 
             # Try reaching device
-            available = True
+            deviceAvailable = True
             try:
                 requests.get(bigip.scheme + '://' + bigip.hostname, timeout=timeout, verify=False)
                 LOG.info('Found device with URL {}'.format(bigip.hostname))
             except requests.exceptions.Timeout:
                 LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
                          timeout, bigip.hostname))
-                available = False
+                deviceAvailable = False
 
-            if self.bigip_status[bigip.hostname] != available:
+            if self.bigip_status[bigip.hostname] != deviceAvailable:
                 # Update database entry
-                self.bigip_status[bigip.hostname] = available
+                self.bigip_status[bigip.hostname] = deviceAvailable
                 self.update_availability()
 
     @_metric_heartbeat_exceptions.count_exceptions()
     @_metric_heartbeat_duration.time()
     def heartbeat(self):
-        """Sends heartbeat and status information to healthmanager api. The format is specified in
-        octavia.amphorae.drivers.health.heartbeat_udp.UDPStatusGetter.dorecv.
-        Scrapes Virtual, Pool and Pool Member statistics and status.
-        Also updates listener_count for amphora database via update_listener_count() function. This is needed for
-        scheduling decisions.
+        """Retrieve status information from F5, scrape virtual server, pool,
+        pool member statistics and status, and send it on to the healthmanager
+        api. The format is specified in
+        octavia.amphorae.drivers.health.heartbeat_udp.UDPStatusGetter.dorecv
+
+        Also, update listener_count for amphora database via
+        update_listener_count() function. This is needed for scheduling
+        decisions.
         """
         amphora_messages = {}
 
+        # check device status and whether a failover happened
         self._metric_heartbeat.inc()
         if time.time() - self._last_failover_check >= CONF.status_manager.failover_check_interval:
             self._last_failover_check = time.time()
             self.availability_check()
             self.failover_check()
 
+        # clean up old DB entries
         if time.time() - self._last_cleanup_check >= CONF.status_manager.cleanup_check_interval:
             self._last_cleanup_check = time.time()
             self.cleanup()
 
         def _get_lb_msg(lb_id):
+            """Retrieve health info for a specific load balancer, inserting it,
+            if not already present."""
             if lb_id not in amphora_messages:
                 amphora_messages[lb_id] = {
                     'id': lb_id,
@@ -239,12 +247,13 @@ class StatusManager(object):
             return amphora_messages[lb_id]
 
         # update listener count
-        vipstats = self.bigip.get(path=F5_VIRTUAL_STATS).json()
+        vipstats = self.bigip.get(path=F5_PATH_VIRTUAL_STATS).json()
         if 'entries' not in vipstats:
             self.update_listener_count(0)
             return
 
         self.update_listener_count(len(vipstats['entries'].keys()))
+        # get listener stats
         for selfurl, statobj in vipstats['entries'].items():
             stats = statobj['nestedStats']['entries']
 
@@ -267,7 +276,8 @@ class StatusManager(object):
                 }
             }
 
-        poolstats = self.bigip.get(path=F5_POOL_STATS).json()
+        # get pool and member stats
+        poolstats = self.bigip.get(path=F5_PATH_POOL_STATS).json()
         for selfurl, statobj in poolstats.get('entries', {}).items():
             stats = statobj['nestedStats']['entries']
 
@@ -283,9 +293,10 @@ class StatusManager(object):
                 'members': {}
             }
 
+            # get member stats
             sub_path = stats['tmName'].get('description').replace('/', '~')
-            members = self.bigip.get(path=F5_POOL_MEMBERS.format(sub_path)).json()
-            memberstats = self.bigip.get(path=F5_POOL_MEMBER_STATS.format(sub_path)).json()
+            members = self.bigip.get(path=F5_PATH_POOL_MEMBERS.format(sub_path)).json()
+            memberstats = self.bigip.get(path=F5_PATH_POOL_MEMBER_STATS.format(sub_path)).json()
             for member in members.get('items', []):
                 if 'description' in member:
                     statobj = None
