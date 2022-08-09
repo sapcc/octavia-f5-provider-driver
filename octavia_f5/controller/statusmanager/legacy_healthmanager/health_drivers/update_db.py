@@ -24,6 +24,7 @@ from stevedore import driver as stevedore_driver
 
 from octavia.common import constants
 from octavia.common import stats
+from octavia.common.data_models import ListenerStatistics
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.controller.statusmanager.legacy_healthmanager.health_drivers import update_base
@@ -163,7 +164,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
         if db_lb:
             expected_listener_count = 0
             if ('PENDING' in db_lb['provisioning_status'] or
-               not db_lb['enabled']):
+                    not db_lb['enabled']):
                 ignore_listener_count = True
             else:
                 for key, listener in db_lb.get('listeners', {}).items():
@@ -274,7 +275,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
 
             if listener_id not in listeners:
                 if (db_listener[constants.ENABLED] and
-                    db_lb[constants.PROVISIONING_STATUS] ==
+                        db_lb[constants.PROVISIONING_STATUS] ==
                         constants.ACTIVE):
                     listener_status = constants.ERROR
                 else:
@@ -395,9 +396,9 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
             lb_status = constants.ERROR
         else:
             LOG.warning(('Pool %(pool)s reported status of '
-                        '%(status)s'),
+                         '%(status)s'),
                         {'pool': pool_id,
-                            'status': pool.get('status')})
+                         'status': pool.get('status')})
 
         # Deal with the members that are reporting from
         # the Amphora
@@ -443,7 +444,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                     LOG.warning('Member %(mem)s reported '
                                 'status of %(status)s',
                                 {'mem': member_id,
-                                    'status': status})
+                                 'status': status})
 
             try:
                 if (member_status is not None and
@@ -484,37 +485,11 @@ class UpdateStatsDb(update_base.StatsUpdateBase, stats.StatsMixin):
                           '%s', health_message['id'], srcaddr)
 
     def _update_stats(self, health_message, srcaddr):
-        """This function is to update the db with listener stats
+        """Update listener statistics
 
         :param health_message: The health message containing the listener stats
         :type map: string
         :returns: null
-
-        Example V1 message::
-
-            health = {
-                "id": self.FAKE_UUID_1,
-                "listeners": {
-                    "listener-id-1": {
-                        "status": constants.OPEN,
-                        "stats": {
-                            "ereq":0,
-                            "conns": 0,
-                            "totconns": 0,
-                            "rx": 0,
-                            "tx": 0,
-                        },
-                        "pools": {
-                            "pool-id-1": {
-                                "status": constants.UP,
-                                "members": {"member-id-1": constants.ONLINE}
-                            }
-                        }
-                    }
-                }
-            }
-
-        Example V2 message::
 
             {"id": "<amphora_id>",
              "seq": 67,
@@ -547,14 +522,16 @@ class UpdateStatsDb(update_base.StatsUpdateBase, stats.StatsMixin):
         amphora_id = health_message['id']
         listeners = health_message['listeners']
         for listener_id, listener in listeners.items():
-
-            stats = listener.get('stats')
-            stats = {'bytes_in': stats['rx'], 'bytes_out': stats['tx'],
-                     'active_connections': stats['conns'],
-                     'total_connections': stats['totconns'],
-                     'request_errors': stats['ereq']}
-            LOG.debug("Updating listener stats in db and sending event.")
+            listener_stats = listener.get('stats')
+            stats_args = {'bytes_in': listener_stats['rx'], 'bytes_out': listener_stats['tx'],
+                          'active_connections': listener_stats['conns'],
+                          'total_connections': listener_stats['totconns'],
+                          'request_errors': listener_stats['ereq']}
+            stats_obj = ListenerStatistics(
+                listener_id=listener_id,
+                amphora_id=amphora_id,
+                **stats_args
+            )
             LOG.debug("Listener %s / Amphora %s stats: %s",
-                      listener_id, amphora_id, stats)
-            self.listener_stats_repo.replace(
-                session, listener_id, amphora_id, **stats)
+                      listener_id, amphora_id, stats_args)
+            self.listener_stats_repo.replace(session, stats_obj)
