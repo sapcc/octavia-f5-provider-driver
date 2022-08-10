@@ -48,6 +48,7 @@ class TestControllerWorker(base.TestCase):
         super(TestControllerWorker, self).setUp()
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         conf.config(group="f5_agent", prometheus=False)
+        conf.config(group="controller_worker", network_driver='network_noop_driver_f5')
 
     @mock.patch('octavia.db.repositories.AvailabilityZoneRepository')
     @mock.patch('octavia.db.repositories.AvailabilityZoneProfileRepository')
