@@ -44,6 +44,7 @@ F5_PATH_POOL_MEMBER_STATS = '/mgmt/tm/ltm/pool/{}/members/stats'
 
 class DatabaseLockSession(object):
     """Provides a database session and rolls it back if an exception occured before exiting with-statement."""
+
     def __enter__(self):
         self._lock_session = db_api.get_session(autocommit=False)
         return self._lock_session
@@ -62,17 +63,20 @@ class DatabaseLockSession(object):
                 with excutils.save_and_reraise_exception():
                     self._lock_session.rollback()
 
+
 def update_health(msg):
     LOG.info("Updating health")
     update_db.UpdateHealthDb().update_health(msg, '127.0.0.1')
+
 
 def update_stats(msg):
     LOG.info("Updating stats")
     update_db.UpdateStatsDb().update_stats(msg, '127.0.0.1')
 
+
 class StatusManager(object):
     def __init__(self):
-        LOG.info('Health Manager starting.')
+        LOG.info("Status manager initializing")
         self.seq = 0
         self.amp_repo = repo.AmphoraRepository()
         self.listener_repo = repo.ListenerRepository()
@@ -85,8 +89,7 @@ class StatusManager(object):
 
         self.bigips = list(self.initialize_bigips())
         # Cache reachability of every bigip
-        self.bigip_status = {bigip.hostname: False
-                             for bigip in self.bigips}
+        self.bigip_status = {bigip.hostname: False for bigip in self.bigips}
         self._active_bigip = None
         self._last_failover_check = 0
         self._last_cleanup_check = 0
@@ -102,6 +105,8 @@ class StatusManager(object):
             prometheus_port = CONF.f5_agent.prometheus_port
             LOG.info('Starting Prometheus HTTP server on port {}'.format(prometheus_port))
             prometheus.start_http_server(prometheus_port)
+
+        LOG.info('Status manager initialized')
 
     _metric_heartbeat = prometheus.metrics.Counter(
         'octavia_status_heartbeat', 'The amount of heartbeats sent')
@@ -121,7 +126,7 @@ class StatusManager(object):
             else:
                 auth = bigip_auth.BigIPBasicAuth(bigip_url)
 
-            yield(
+            yield (
                 bigip_restclient.BigIPRestClient(
                     bigip_url=bigip_url,
                     auth=auth,
@@ -163,7 +168,7 @@ class StatusManager(object):
         :rtype: AS3RestClient
         """
         if not self._active_bigip:
-            # Always set one bigip even none of them are active
+            # Always set one bigip even when none of them are marked as active
             self._active_bigip = self.bigips[0]
             for b in self.bigips:
                 if b.is_active:
@@ -193,18 +198,18 @@ class StatusManager(object):
             timeout = CONF.status_manager.failover_timeout
 
             # Try reaching device
-            deviceAvailable = True
+            device_available = True
             try:
                 requests.get(bigip.scheme + '://' + bigip.hostname, timeout=timeout, verify=False)
                 LOG.info('Found device with URL {}'.format(bigip.hostname))
             except requests.exceptions.Timeout:
                 LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
-                         timeout, bigip.hostname))
-                deviceAvailable = False
+                    timeout, bigip.hostname))
+                device_available = False
 
-            if self.bigip_status[bigip.hostname] != deviceAvailable:
+            if self.bigip_status[bigip.hostname] != device_available:
                 # Update database entry
-                self.bigip_status[bigip.hostname] = deviceAvailable
+                self.bigip_status[bigip.hostname] = device_available
                 self.update_availability()
 
     @_metric_heartbeat_exceptions.count_exceptions()
@@ -233,12 +238,12 @@ class StatusManager(object):
             self._last_cleanup_check = time.time()
             self.cleanup()
 
-        # update listener count
-        vipstats = self.bigip.get(path=F5_PATH_VIRTUAL_STATS).json()
-        if 'entries' not in vipstats:
+        # update listener count on BigIP amphoras
+        vip_stats = self.bigip.get(path=F5_PATH_VIRTUAL_STATS).json()
+        if 'entries' not in vip_stats:
             self.update_listener_count(0)
             return
-        self.update_listener_count(len(vipstats['entries'].keys()))
+        self.update_listener_count(len(vip_stats['entries'].keys()))
 
         def _get_lb_msg(lb_id):
             """Retrieve health info for a specific load balancer, inserting it,
@@ -254,7 +259,7 @@ class StatusManager(object):
             return amphora_messages[lb_id]
 
         # get listener stats
-        for selfurl, statobj in vipstats['entries'].items():
+        for selfurl, statobj in vip_stats['entries'].items():
             stats = statobj['nestedStats']['entries']
 
             listener_id = self._listener_from_path(stats['tmName'].get('description'))
@@ -355,7 +360,7 @@ class StatusManager(object):
                     vrrp_priority=num_listeners)
 
     def update_availability(self):
-        """ updates availability status of bigip device (status column in amphora table).
+        """Update availability status of BigIP device (status column in amphora table).
         The values for 'status' are used as follows:
         - 'READY': Device is online, everything is ok.
         - 'ALLOCATED': Device is offline.
@@ -398,7 +403,7 @@ class StatusManager(object):
         See controller_worker.ensure_amphora_exists for details.
         """
         with DatabaseLockSession() as session:
-            filters = {'load_balancer_id': None, 'cached_zone': None, 'compute_flavor': CONF.host,}
+            filters = {'load_balancer_id': None, 'cached_zone': None, 'compute_flavor': CONF.host}
             errmsg = "Failed removing orphaned amphora entries of LBs"
             try:
                 self.amp_repo.delete(session, **filters)
