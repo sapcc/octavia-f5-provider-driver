@@ -226,6 +226,19 @@ class StatusManager(object):
         """
         amphora_messages = {}
 
+        def _get_lb_msg(lb_id):
+            """Retrieve health info for a specific load balancer, inserting it,
+            if not already present."""
+            if lb_id not in amphora_messages:
+                amphora_messages[lb_id] = {
+                    'id': lb_id,
+                    'seq': 0,
+                    'listeners': {},
+                    'pools': {},
+                    'ver': 2
+                }
+            return amphora_messages[lb_id]
+
         # check device status and whether a failover happened
         self._metric_heartbeat.inc()
         if time.time() - self._last_failover_check >= CONF.status_manager.failover_check_interval:
@@ -244,19 +257,6 @@ class StatusManager(object):
             self.update_listener_count(0)
             return
         self.update_listener_count(len(vip_stats['entries'].keys()))
-
-        def _get_lb_msg(lb_id):
-            """Retrieve health info for a specific load balancer, inserting it,
-            if not already present."""
-            if lb_id not in amphora_messages:
-                amphora_messages[lb_id] = {
-                    'id': lb_id,
-                    'seq': 0,
-                    'listeners': {},
-                    'pools': {},
-                    'ver': 2
-                }
-            return amphora_messages[lb_id]
 
         # get listener stats
         for self_url, stat_obj in vip_stats['entries'].items():
