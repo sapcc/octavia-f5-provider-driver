@@ -259,8 +259,8 @@ class StatusManager(object):
             return amphora_messages[lb_id]
 
         # get listener stats
-        for selfurl, statobj in vip_stats['entries'].items():
-            stats = statobj['nestedStats']['entries']
+        for self_url, stat_obj in vip_stats['entries'].items():
+            stats = stat_obj['nestedStats']['entries']
 
             listener_id = self._listener_from_path(stats['tmName'].get('description'))
             loadbalancer_id = self._loadbalancer_from_path(stats['tmName'].get('description'))
@@ -282,9 +282,9 @@ class StatusManager(object):
             }
 
         # get pool and member stats
-        poolstats = self.bigip.get(path=F5_PATH_POOL_STATS).json()
-        for selfurl, statobj in poolstats.get('entries', {}).items():
-            stats = statobj['nestedStats']['entries']
+        pool_stats = self.bigip.get(path=F5_PATH_POOL_STATS).json()
+        for self_url, pool_stats_entry in pool_stats.get('entries', {}).items():
+            stats = pool_stats_entry['nestedStats']['entries']
 
             pool_id = self._pool_from_path(stats['tmName'].get('description'))
             loadbalancer_id = self._loadbalancer_from_path(stats['tmName'].get('description'))
@@ -301,24 +301,22 @@ class StatusManager(object):
             # get member stats
             sub_path = stats['tmName'].get('description').replace('/', '~')
             members = self.bigip.get(path=F5_PATH_POOL_MEMBERS.format(sub_path)).json()
-            memberstats = self.bigip.get(path=F5_PATH_POOL_MEMBER_STATS.format(sub_path)).json()
+            member_stats = self.bigip.get(path=F5_PATH_POOL_MEMBER_STATS.format(sub_path)).json()
             for member in members.get('items', []):
-                if not 'description' in member:
+                if 'description' not in member:
                     continue
-                statobj = None
                 member_id = member['description']
-                base_path = memberstats['selfLink'][:memberstats['selfLink'].find('/stats')]
-                member_path = '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))
-                # TODO: This weirdness is to alleviate some race condition(s).
-                #  I don't know which one. See 99496ec74ab79e39bc206620a67fd64a1093d227
-                if member_path in memberstats['entries']:
-                    statobj = memberstats['entries'][member_path]
-                elif member_path.replace('%', '%25') in memberstats['entries']:
-                    statobj = memberstats['entries'][member_path.replace('%', '%25')]
 
-                if not statobj:
+                base_path = member_stats['selfLink'][:member_stats['selfLink'].find('/stats')]
+                member_path = '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))
+                stat_obj = None
+                # member path might have URL encoded percent signs
+                stat_obj = member_stats['entries'].get(member_path) or \
+                           member_stats['entries'].get(member_path.replace('%', '%25'))
+                if not stat_obj:
                     continue
-                stats = statobj['nestedStats']['entries']
+
+                stats = stat_obj['nestedStats']['entries']
                 status = constants.NO_CHECK
                 if stats['status.enabledState'].get('description') == 'disabled':
                     status = constants.DRAIN
