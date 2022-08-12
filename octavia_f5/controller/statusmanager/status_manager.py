@@ -328,6 +328,7 @@ class StatusManager(object):
                     status = constants.UP
                 msg['pools'][pool_id]['members'][member_id] = status
 
+        # update status according to collected stats
         for msg in amphora_messages.values():
             msg['recv_time'] = time.time()
             self.health_executor.submit(update_health, msg)
@@ -402,10 +403,7 @@ class StatusManager(object):
         """
         with DatabaseLockSession() as session:
             filters = {'load_balancer_id': None, 'cached_zone': None, 'compute_flavor': CONF.host}
-            errmsg = "Failed removing orphaned amphora entries of LBs"
             try:
                 self.amp_repo.delete(session, **filters)
-            except sqlalchemy.exc.NoResultFound:
-                pass
             except sqlalchemy.exc.InvalidRequestError as e:
-                LOG.info(f"{errmsg}: Invalid request: {e}")
+                LOG.info(f"Failed removing orphaned amphora entries of LBs: {e}")
