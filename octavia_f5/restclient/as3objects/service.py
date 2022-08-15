@@ -119,6 +119,7 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['virtualAddresses'] = [virtual_address]
 
     # Determine service type
+    # TCP
     if listener.protocol == lib_consts.PROTOCOL_TCP:
         service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
     # UDP
@@ -130,12 +131,6 @@ def get_service(listener, cert_manager, esd_repository):
     # HTTPS (non-terminated, forward TCP traffic)
     elif listener.protocol == lib_consts.PROTOCOL_HTTPS:
         service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
-    # Proxy
-    elif listener.protocol == lib_consts.PROTOCOL_PROXY:
-        service_args['_servicetype'] = f5_const.SERVICE_TCP
-        name, irule = m_irule.get_proxy_irule()
-        service_args['iRules'].append(name)
-        entities.append((name, irule))
     # Terminated HTTPS
     elif listener.protocol == lib_consts.PROTOCOL_TERMINATED_HTTPS:
         service_args['_servicetype'] = f5_const.SERVICE_HTTPS
@@ -159,7 +154,14 @@ def get_service(listener, cert_manager, esd_repository):
             m_tls.get_tls_server([cert['id'] for cert in certificates], listener, auth_name)
         ))
         entities.extend([(cert['id'], cert['as3']) for cert in certificates])
+    # Proxy
+    elif listener.protocol == lib_consts.PROTOCOL_PROXY:
+        service_args['_servicetype'] = f5_const.SERVICE_TCP
+        name, irule = m_irule.get_proxy_irule()
+        service_args['iRules'].append(name)
+        entities.append((name, irule))
 
+    # maximum number of connections
     if listener.connection_limit > 0:
         service_args['maxConnections'] = listener.connection_limit
 
@@ -212,7 +214,7 @@ def get_service(listener, cert_manager, esd_repository):
                 )
             ))
 
-    # Insert header irules
+    # Insert header iRules
     if service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
         # HTTP profiles only
         for name, irule in m_irule.get_header_irules(listener.insert_headers):
