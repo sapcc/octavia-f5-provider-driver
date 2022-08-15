@@ -12,6 +12,11 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+
+# This file has been moved from octavia/controller/healthmanager/health_drivers/update_db.py, which was removed in
+# Victoria. See https://github.com/sapcc/octavia-f5-provider-driver/pull/171
+
+import abc
 import datetime
 import time
 import timeit
@@ -27,13 +32,12 @@ from octavia.common import stats
 from octavia.common.data_models import ListenerStatistics
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
-from octavia_f5.controller.statusmanager.legacy_healthmanager.health_drivers import update_base
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
 
-class UpdateHealthDb(update_base.HealthUpdateBase):
+class UpdateHealthDb:
     def __init__(self):
         super(UpdateHealthDb, self).__init__()
         # first setup repo for amphora, listener,member(nodes),pool repo
@@ -58,6 +62,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                 new_op_status = constants.ONLINE
             message.update({constants.OPERATING_STATUS: new_op_status})
 
+    @abc.abstractmethod
     def update_health(self, health, srcaddr):
         # The executor will eat any exceptions from the update_health code
         # so we need to wrap it and log the unhandled exception
@@ -157,10 +162,8 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
         session = db_api.get_session()
 
         # We need to see if all of the listeners are reporting in
-        db_lb = self.amphora_repo.get_lb_for_health_update(session,
-                                                           health['id'])
+        db_lb = self.amphora_repo.get_lb_for_health_update(session, health['id'])
         ignore_listener_count = False
-
         if db_lb:
             expected_listener_count = 0
             if ('PENDING' in db_lb['provisioning_status'] or
@@ -468,12 +471,13 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
         return lb_status
 
 
-class UpdateStatsDb(update_base.StatsUpdateBase, stats.StatsMixin):
+class UpdateStatsDb(stats.StatsMixin):
 
     def __init__(self):
         super(UpdateStatsDb, self).__init__()
         self.repo_listener = repo.ListenerRepository()
 
+    @abc.abstractmethod
     def update_stats(self, health_message, srcaddr):
         # The executor will eat any exceptions from the update_stats code
         # so we need to wrap it and log the unhandled exception

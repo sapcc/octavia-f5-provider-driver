@@ -30,7 +30,7 @@ from octavia.common import rpc
 from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
-from octavia_f5.controller.statusmanager.legacy_healthmanager.health_drivers import update_db
+from octavia_f5.controller.statusmanager import update_db
 from octavia_f5.restclient.bigip import bigip_restclient, bigip_auth
 
 CONF = cfg.CONF
@@ -328,7 +328,7 @@ class StatusManager(object):
                     status = constants.UP
                 msg['pools'][pool_id]['members'][member_id] = status
 
-        # update status according to collected stats
+        # update status in DB according to collected stats
         for msg in amphora_messages.values():
             msg['recv_time'] = time.time()
             self.health_executor.submit(update_health, msg)
