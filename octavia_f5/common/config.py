@@ -66,6 +66,9 @@ f5_agent_opts = [
     cfg.StrOpt('profile_http', default=None,
                help=_("Path to default HTTP profile"
                       "(e.g. custom_http)")),
+    cfg.StrOpt('profile_http2', default=None,
+               help=_("Path to default HTTP2 profile"
+                      "(e.g. custom_http2)")),
     cfg.StrOpt('profile_http_compression', default=None,
                help=_("Path to default http compression profile"
                       " profile (e.g. custom_http_compression)")),
