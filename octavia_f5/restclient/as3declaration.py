@@ -32,7 +32,6 @@ class AS3DeclarationManager(object):
 
         :param tenants: dict of network_id: loadbalancers, multiple tenants supported
         :param self_ips: list of SelfIPs. They are removed from the declaration and an error is printed.
-        :param status: status manager instance (optional) for certifcate error callback
 
         :return: complete AS3 declaration
         """

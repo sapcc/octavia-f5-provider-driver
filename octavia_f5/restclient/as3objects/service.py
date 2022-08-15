@@ -90,6 +90,7 @@ def get_service(listener, cert_manager, esd_repository):
 
     :param listener: Octavia listener
     :param cert_manager: cert_manager wrapper instance
+    :param esd_repository: ESD repository object with function get_esd
     :return: AS3 Service + additional AS3 application objects
     """
 
