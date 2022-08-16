@@ -149,9 +149,13 @@ def get_service(listener, cert_manager, esd_repository):
             except exceptions.CertificateRetrievalException as e:
                 LOG.error("Error fetching certificate: %s", e)
 
+        # TLS renegotiation has to be turned off for HTTP2, in order to be compliant.
+        allow_renegotiation = not hasattr(listener, 'alpn_protocols')
+
         entities.append((
             m_tls.get_listener_name(listener.id),
-            m_tls.get_tls_server([cert['id'] for cert in certificates], listener, auth_name)
+            m_tls.get_tls_server([cert['id'] for cert in certificates], listener, auth_name,
+                                 allow_renegotiation)
         ))
         entities.extend([(cert['id'], cert['as3']) for cert in certificates])
     # Proxy
