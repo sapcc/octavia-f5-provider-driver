@@ -147,7 +147,7 @@ class ControllerWorker(object):
                 LOG.exception(e)
                 # restart
 
-    @periodics.periodic(86400, run_immediately=True)
+    @periodics.periodic(86400, run_immediately=CONF.f5_agent.sync_immediately)
     def cleanup_orphaned_tenants(self):
         LOG.info("Running (24h) tenant cleanup")
         session = db_apis.get_session(autocommit=False)
@@ -172,7 +172,7 @@ class ControllerWorker(object):
                 # Ignore as3 errors
                 pass
 
-    @periodics.periodic(240, run_immediately=True)
+    @periodics.periodic(240, run_immediately=CONF.f5_agent.sync_immediately)
     def full_sync_reappearing_devices(self):
         session = db_apis.get_session(autocommit=False)
 
@@ -199,7 +199,7 @@ class ControllerWorker(object):
             self._amphora_repo.update(session, device.id, status=lib_consts.AMPHORA_READY)
             session.commit()
 
-    @periodics.periodic(24*60*60, run_immediately=True)
+    @periodics.periodic(24*60*60, run_immediately=CONF.f5_agent.sync_immediately)
     def full_sync_l2(self):
         session = db_apis.get_session()
 
@@ -208,7 +208,7 @@ class ControllerWorker(object):
             session, show_deleted=False)
         self.l2sync.full_sync(loadbalancers)
 
-    @periodics.periodic(120, run_immediately=True)
+    @periodics.periodic(120, run_immediately=CONF.f5_agent.sync_immediately)
     def pending_sync(self):
         """
         Reconciliation loop that
