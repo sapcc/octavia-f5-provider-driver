@@ -109,6 +109,15 @@ def get_service(listener, cert_manager, esd_repository):
         'label': label
     }
 
+    def is_http2(listener):
+        """Check whether a listener counts as HTTP2.
+
+        It would suffice to count a listener with alpn_protocols set to anything as HTTP2(-capable), because the
+        HTTP2 profile acts like normal HTTP when HTTP2 isn't explicitely requested via ALPN. However,
+        having a listener be able to speak HTTP2 without it being declared that way is unexpected behavior.
+        """
+        return hasattr(listener, 'alpn_protocols') and lib_consts.ALPN_PROTOCOL_HTTP_2 in listener.alpn_protocols
+
     # Custom virtual address settings
     if CONF.f5_agent.service_address_icmp_echo:
         service_address = as3.ServiceAddress(virtualAddress=virtual_address,
@@ -150,7 +159,7 @@ def get_service(listener, cert_manager, esd_repository):
                 LOG.error("Error fetching certificate: %s", e)
 
         # TLS renegotiation has to be turned off for HTTP2, in order to be compliant.
-        allow_renegotiation = not hasattr(listener, 'alpn_protocols')
+        allow_renegotiation = not is_http2(listener)
 
         entities.append((
             m_tls.get_listener_name(listener.id),
@@ -323,10 +332,7 @@ def get_service(listener, cert_manager, esd_repository):
     if CONF.f5_agent.profile_http and service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
         if 'profileHTTP' not in service_args:
             service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http)
-    if CONF.f5_agent.profile_http2 and service_args['_servicetype'] in f5_const.SERVICE_HTTPS \
-            and listener.alpn_protocols:
-        # We don't need to check whether listener.alpn_protocols contains HTTP2, because
-        # if it doesn't, the HTTP2 profile will simply behave like the normal HTTP profile.
+    if CONF.f5_agent.profile_http2 and service_args['_servicetype'] in f5_const.SERVICE_HTTPS and is_http2(listener):
         if 'profileHTTP' not in service_args:
             service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http2)
     if CONF.f5_agent.profile_l4 and service_args['_servicetype'] == f5_const.SERVICE_L4:
