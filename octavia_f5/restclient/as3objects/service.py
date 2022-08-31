@@ -163,17 +163,19 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['maxConnections'] = listener.connection_limit
 
     # Add default pool
+    default_pool = None
     if listener.default_pool_id:
-        pool = listener.default_pool
-        if pool.provisioning_status != lib_consts.PENDING_DELETE:
-            default_pool = m_pool.get_name(listener.default_pool_id)
-            service_args['pool'] = default_pool
+        default_pool = listener.default_pool
 
-            # only consider Proxy pool, everything else is determined by listener type
-            if pool.protocol == lib_consts.PROTOCOL_PROXY:
-                name, irule = m_irule.get_proxy_irule()
-                service_args['iRules'].append(name)
-                entities.append((name, irule))
+    if default_pool is not None and default_pool.provisioning_status != lib_consts.PENDING_DELETE:
+        pool = m_pool.get_name(listener.default_pool_id)
+        service_args['pool'] = pool
+
+        # only consider Proxy pool, everything else is determined by listener type
+        if pool.protocol == lib_consts.PROTOCOL_PROXY:
+            name, irule = m_irule.get_proxy_irule()
+            service_args['iRules'].append(name)
+            entities.append((name, irule))
 
         # Pool member certificate handling (TLS backends)
         if pool.tls_enabled and listener.protocol in \
