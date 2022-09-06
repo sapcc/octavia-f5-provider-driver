@@ -168,41 +168,41 @@ def get_service(listener, cert_manager, esd_repository):
         default_pool = listener.default_pool
 
     if default_pool is not None and default_pool.provisioning_status != lib_consts.PENDING_DELETE:
-        pool = m_pool.get_name(listener.default_pool_id)
-        service_args['pool'] = pool
+        pool_name = m_pool.get_name(listener.default_pool_id)
+        service_args['pool'] = pool_name
 
         # only consider Proxy pool, everything else is determined by listener type
-        if pool.protocol == lib_consts.PROTOCOL_PROXY:
+        if default_pool.protocol == lib_consts.PROTOCOL_PROXY:
             name, irule = m_irule.get_proxy_irule()
             service_args['iRules'].append(name)
             entities.append((name, irule))
 
         # Pool member certificate handling (TLS backends)
-        if pool.tls_enabled and listener.protocol in \
+        if default_pool.tls_enabled and listener.protocol in \
                 [lib_consts.PROTOCOL_PROXY, lib_consts.PROTOCOL_HTTP, lib_consts.PROTOCOL_TERMINATED_HTTPS]:
             client_cert = None
             trust_ca = None
             crl_file = None
 
-            service_args['clientTLS'] = m_tls.get_pool_name(pool.id)
-            certificates = cert_manager.get_certificates(pool)
+            service_args['clientTLS'] = m_tls.get_pool_name(default_pool.id)
+            certificates = cert_manager.get_certificates(default_pool)
             if len(certificates) == 1:
                 cert = certificates.pop()
                 entities.append((cert['id'], cert['as3']))
                 client_cert = cert['id']
 
-            if pool.ca_tls_certificate_id:
+            if default_pool.ca_tls_certificate_id:
                 trust_ca, secret = cert_manager.load_secret(
-                    project_id, pool.ca_tls_certificate_id)
+                    project_id, default_pool.ca_tls_certificate_id)
                 entities.append((trust_ca, m_cert.get_ca_bundle(
                     secret, trust_ca, trust_ca)))
 
-            if pool.crl_container_id:
+            if default_pool.crl_container_id:
                 # TODO: CRL currently not supported
                 pass
 
             entities.append((
-                m_tls.get_pool_name(pool.id),
+                m_tls.get_pool_name(default_pool.id),
                 m_tls.get_tls_client(
                     trust_ca=trust_ca,
                     client_cert=client_cert,
