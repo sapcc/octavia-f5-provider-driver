@@ -85,9 +85,10 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
     return TLS_Server(**service_args)
 
 
-def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
+def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
     """ returns AS3 TLS_Client
 
+    :param pool: The pool for which to create the TLS client
     :param trust_ca: reference to AS3 trust_ca obj
     :param client_cert: reference to AS3 client_cert
     :param crl_file: reference to AS3 crl_file
@@ -113,13 +114,12 @@ def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
         service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_client.insert_empty_fragments
     if CONF.f5_tls_client.single_use_dh is not None:
         service_args['singleUseDhEnabled'] = CONF.f5_tls_client.single_use_dh
-    if CONF.f5_tls_client.tls_1_0 is not None:
-        service_args['tls1_0Enabled'] = CONF.f5_tls_client.tls_1_0
-    if CONF.f5_tls_client.tls_1_1 is not None:
-        service_args['tls1_1Enabled'] = CONF.f5_tls_client.tls_1_1
-    if CONF.f5_tls_client.tls_1_2 is not None:
-        service_args['tls1_2Enabled'] = CONF.f5_tls_client.tls_1_2
-    if CONF.f5_tls_client.tls_1_3 is not None:
-        service_args['tls1_3Enabled'] = CONF.f5_tls_client.tls_1_3
+
+    # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
+    service_args['tls1_0Enabled'] = constants.TLS_1_0 in pool.tls_versions
+    # Note: tls_1_1 is only supported in tmos version 14.0+
+    service_args['tls1_1Enabled'] = constants.TLS_1_1 in pool.tls_versions
+    service_args['tls1_2Enabled'] = constants.TLS_1_2 in pool.tls_versions
+    service_args['tls1_3Enabled'] = constants.TLS_1_3 in pool.tls_versions
 
     return TLS_Client(**service_args)
