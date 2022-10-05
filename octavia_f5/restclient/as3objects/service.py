@@ -145,8 +145,9 @@ def get_service(listener, cert_manager, esd_repository):
         # Certificate Handling
         auth_name = None
         certificates = cert_manager.get_certificates(listener)
+
+        # Client Side Certificates
         if listener.client_ca_tls_certificate_id and listener.client_authentication != 'NONE':
-            # Client Side Certificates
             try:
                 auth_name, secret = cert_manager.load_secret(project_id, listener.client_ca_tls_certificate_id)
                 entities.append((auth_name, m_cert.get_ca_bundle(secret, auth_name, auth_name)))

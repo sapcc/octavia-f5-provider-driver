@@ -70,18 +70,17 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
         service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_server.insert_empty_fragments
     if CONF.f5_tls_server.single_use_dh is not None:
         service_args['singleUseDhEnabled'] = CONF.f5_tls_server.single_use_dh
-    if CONF.f5_tls_server.tls_1_0 is not None:
-        service_args['tls1_0Enabled'] = CONF.f5_tls_server.tls_1_0
-    if CONF.f5_tls_server.tls_1_1 is not None:
-        service_args['tls1_1Enabled'] = CONF.f5_tls_server.tls_1_1
-    if CONF.f5_tls_server.tls_1_2 is not None:
-        service_args['tls1_2Enabled'] = CONF.f5_tls_server.tls_1_2
-    if CONF.f5_tls_server.tls_1_3 is not None:
-        service_args['tls1_3Enabled'] = CONF.f5_tls_server.tls_1_3
     if CONF.f5_tls_server.cache_certificate is not None:
         service_args['cacheCertificateEnabled'] = CONF.f5_tls_server.cache_certificate
     if CONF.f5_tls_server.stapler_ocsp is not None:
         service_args['staplerOCSPEnabled'] = CONF.f5_tls_server.stapler_ocsp
+
+    # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
+    service_args['tls1_0Enabled'] = constants.TLS_1_0 in listener.tls_versions
+    # Note: tls_1_1 is only supported in tmos version 14.0+
+    service_args['tls1_1Enabled'] = constants.TLS_1_1 in listener.tls_versions
+    service_args['tls1_2Enabled'] = constants.TLS_1_2 in listener.tls_versions
+    service_args['tls1_3Enabled'] = constants.TLS_1_3 in listener.tls_versions
 
     return TLS_Server(**service_args)
 
