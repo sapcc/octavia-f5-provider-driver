@@ -20,6 +20,8 @@ from oslo_log import log as logging
 from octavia.api.drivers.amphora_driver.v1 import driver
 from octavia.common import constants as consts
 from octavia.db import api as db_apis
+
+from octavia_f5.api.drivers.f5_driver import arbiter
 from octavia_f5.utils import driver_utils
 
 CONF = cfg.CONF
@@ -27,7 +29,9 @@ CONF.import_group('oslo_messaging', 'octavia.common.config')
 LOG = logging.getLogger(__name__)
 
 
-class F5ProviderDriver(driver.AmphoraProviderDriver):
+class F5ProviderDriver(driver.AmphoraProviderDriver,
+                       arbiter.MigrationArbiter,
+                       arbiter.RescheduleMixin):
     """Octavia plugin for the F5 driver.
 
     Callbacks need to be overwritten for setting the _server_ attribute
@@ -80,14 +84,18 @@ class F5ProviderDriver(driver.AmphoraProviderDriver):
         client.cast({}, 'failover_load_balancer', **payload)
 
     def loadbalancer_migrate(self, loadbalancer_id, target_host):
-        payload = {consts.LOAD_BALANCER_ID: loadbalancer_id, 'target_host': target_host}
-        client = self.client.prepare(server=self._get_server(loadbalancer_id))
-        client.cast({}, 'migrate_load_balancer', **payload)
+        store = {consts.LOADBALANCER_ID: loadbalancer_id, "candidate": target_host}
+        self.run_flow(self.get_reschedule_flow, store=store)
 
-    def loadbalancers_migrate(self, source_host, target_host):
-        payload = {'source_host': source_host, 'target_host': target_host}
-        client = self.client.prepare(server=source_host) # note that the user can inject arbitrary server names
-        client.cast({}, 'migrate_load_balancers', **payload)
+    def loadbalancer_add(self, loadbalancer_id, target_host):
+        payload = {consts.LOAD_BALANCER_ID: loadbalancer_id}
+        client = self.client.prepare(server=target_host)
+        client.call({}, 'add_loadbalancer', **payload)
+
+    def loadbalancer_remove(self, loadbalancer_id, target_host):
+        payload = {consts.LOAD_BALANCER_ID: loadbalancer_id}
+        client = self.client.prepare(server=target_host)
+        client.call({}, 'remove_loadbalancer', **payload)
 
     def loadbalancer_update(self, old_loadbalancer, new_loadbalancer):
         lb_id = new_loadbalancer.loadbalancer_id

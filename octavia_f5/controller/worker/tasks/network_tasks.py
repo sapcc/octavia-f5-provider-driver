@@ -69,6 +69,30 @@ class AllSelfIPs(BaseNetworkTask):
         return existing_selfips + new_selfips
 
 
+class CreateSelfIP(BaseNetworkTask):
+    default_provides = "port"
+    def execute(self, loadbalancer: dict,
+                candidate: str) -> network_models.Port:
+        return self.network_driver.create_selfip(loadbalancer, f5host="todo", agent=candidate)
+
+    def revert(self, result: network_models.Port,
+               *args, **kwargs):
+        """Handle a failure to create selfip port."""
+
+        if isinstance(result, failure.Failure):
+            LOG.error("CreateSelfIP: Unable to create selfips")
+            return
+        LOG.warning("Reverting: deleting selfip port %s", result.name)
+        self.network_driver.delete_port(result.id)
+
+
+class WaitForNewSelfIPs(BaseNetworkTask):
+    def execute(self, new_selfips: [network_models.Port]):
+        # Wait for port to be active
+        for port in new_selfips:
+            self.network_driver.is_port_active(port.id)
+
+
 class CreateSelfIPs(BaseNetworkTask):
     default_provides = ('existing_selfips', 'new_selfips')
 
@@ -125,10 +149,26 @@ class CreateVIPPort(BaseNetworkTask):
         self.network_driver.delete_port(result.id)
 
 
+class GetVIPFromLoadBalancer(BaseNetworkTask):
+    default_provides = 'vip_port'
+
+    def execute(self, load_balancer: data_models.LoadBalancer) -> network_models.Port:
+        return self.network_driver.get_port(load_balancer.vip.port_id)
+
+
 class UpdateAAP(BaseNetworkTask):
-    def execute(self, vip_port: dict, selfips: [network_models.Port]):
+    def execute(self, vip_port: network_models.Port, selfips: [network_models.Port]):
         # Update allowed address pairs
         self.network_driver.update_aap(vip_port, selfips)
+
+
+class UpdateVIP(BaseNetworkTask):
+    def execute(self, vip_port: network_models.Port, candidate: str):
+        # Update allowed address pairs
+        self.network_driver.update_vip(vip_port, candidate)
+
+    def revert(self, vip_port: network_models.Port, removal_host: str, **kwargs):
+        self.network_driver.update_vip(vip_port, removal_host)
 
 
 class DeleteVIP(BaseNetworkTask):
@@ -166,3 +206,7 @@ class CleanupSelfIPs(BaseNetworkTask):
         if not load_balancers:
             for selfip in selfips:
                 self.network_driver.delete_port(selfip['id'])
+
+class InvalidateCache(BaseNetworkTask):
+    def execute(self, *args, **kwargs):
+        self.network_driver.invalidate_cache()

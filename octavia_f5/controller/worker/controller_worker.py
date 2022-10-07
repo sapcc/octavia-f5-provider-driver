@@ -23,6 +23,7 @@ import prometheus_client as prometheus
 import tenacity
 from futurist import periodics
 from octavia_lib.common import constants as lib_consts
+from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_db import api as oslo_db_api
 from oslo_log import log as logging
@@ -106,37 +107,40 @@ class ControllerWorker(object):
         super(ControllerWorker, self).__init__()
 
     def as3worker(self):
+        @lockutils.synchronized("f5sync", fair=True)
+        def f5sync(*args):
+            self._metric_as3worker_queue.labels(octavia_host=CONF.host).set(self.queue.qsize())
+            network_id, device = self.queue.get()
+            loadbalancers = self._get_all_loadbalancer(network_id)
+            LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
+                      self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
+            selfips = list(chain.from_iterable(
+                self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=True)))
+            if all(lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers):
+                self.sync.tenant_delete(network_id, device).raise_for_status()
+                # Cleanup l2 configuration and remove selfip ports
+                self.l2sync.remove_l2_flow(network_id, device)
+                self.network_driver.cleanup_selfips(selfips)
+            else:
+                if all(lb.provisioning_status in [lib_consts.PENDING_CREATE, lib_consts.PENDING_DELETE]
+                       for lb in loadbalancers):
+                    # Network is new - ensure complete l2 flow
+                    self.l2sync.ensure_l2_flow(selfips, network_id, device)
+                elif any(lb.provisioning_status in [lib_consts.PENDING_CREATE, lib_consts.PENDING_DELETE]
+                         for lb in loadbalancers):
+                    # Network already exists, just ensure correct selfips
+                    self.l2sync.sync_l2_selfips_flow(selfips, network_id, device)
+                self.sync.tenant_update(network_id, device, selfips).raise_for_status()
+
+            # update status of just-synced LBs
+            self.status.update_status(loadbalancers)
+            for lb in loadbalancers:
+                self._reset_in_use_quota(lb.project_id)
+
         """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
         while True:
             try:
-                self._metric_as3worker_queue.labels(octavia_host=CONF.host).set(self.queue.qsize())
-                network_id, device = self.queue.get()
-                loadbalancers = self._get_all_loadbalancer(network_id)
-                LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
-                          self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
-                selfips = list(chain.from_iterable(
-                    self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=True)))
-                if all(lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers):
-                    self.sync.tenant_delete(network_id, device).raise_for_status()
-                    # Cleanup l2 configuration and remove selfip ports
-                    self.l2sync.remove_l2_flow(network_id, device)
-                    self.network_driver.cleanup_selfips(selfips)
-                else:
-                    if all(lb.provisioning_status in [lib_consts.PENDING_CREATE, lib_consts.PENDING_DELETE]
-                           for lb in loadbalancers):
-                        # Network is new - ensure complete l2 flow
-                        self.l2sync.ensure_l2_flow(selfips, network_id, device)
-                    elif any(lb.provisioning_status in [lib_consts.PENDING_CREATE, lib_consts.PENDING_DELETE]
-                             for lb in loadbalancers):
-                        # Network already exists, just ensure correct selfips
-                        self.l2sync.sync_l2_selfips_flow(selfips, network_id, device)
-                    self.sync.tenant_update(network_id, device, selfips).raise_for_status()
-
-                # update status of just-synced LBs
-                self.status.update_status(loadbalancers)
-                for lb in loadbalancers:
-                    self._reset_in_use_quota(lb.project_id)
-
+                f5sync()
             except Empty:
                 # Queue empty, pass
                 pass
@@ -582,11 +586,67 @@ class ControllerWorker(object):
     def failover_loadbalancer(self, load_balancer_id):
         pass
 
-    def migrate_loadbalancer(self, load_balancer_id, target_host):
-        pass
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
+        wait=tenacity.wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    @lockutils.synchronized("f5sync", fair=True)
+    def add_loadbalancer(self, load_balancer_id):
+        # forcing a loadbalancer sync even if it's not currently scheduled
+        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
+        if not lb:
+            LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
+                        '60 seconds.', 'loadbalancer', load_balancer_id)
+            raise db_exceptions.NoResultFound
 
-    def migrate_loadbalancers(self, source_host, target_host):
-        pass
+        network_id = lb.vip.network_id
+        LOG.debug("add_loadbalancer: force adding loadbalancer '%s' for tenant '%s'",
+                  load_balancer_id, network_id)
+
+        loadbalancers = self._get_all_loadbalancer(network_id)
+        if load_balancer_id not in [_lb.id for _lb in loadbalancers]:
+            loadbalancers.append(lb)
+
+        selfips = list(chain.from_iterable(
+            self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=False)))
+        self.l2sync.ensure_l2_flow(selfips, network_id)
+        self.sync.tenant_update(network_id, selfips=selfips, loadbalancers=loadbalancers).raise_for_status()
+        self.network_driver.invalidate_cache()
+        return True
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
+        wait=tenacity.wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    @lockutils.synchronized("f5sync", fair=True)
+    def remove_loadbalancer(self, load_balancer_id):
+        # forcing a loadbalancer sync even if it's not currently scheduled
+        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
+        if not lb:
+            LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
+                        '60 seconds.', 'loadbalancer', load_balancer_id)
+            raise db_exceptions.NoResultFound
+
+        network_id = lb.vip.network_id
+        LOG.debug("remove_loadbalancer: force removing loadbalancer '%s' for tenant '%s'",
+                  load_balancer_id, network_id)
+
+        loadbalancers = self._get_all_loadbalancer(network_id)
+        loadbalancers = [_lb for _lb in loadbalancers if _lb.id != load_balancer_id]
+
+        selfips = list(chain.from_iterable(
+            self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=False)))
+        if loadbalancers:
+            self.l2sync.ensure_l2_flow(selfips, network_id)
+            self.sync.tenant_update(network_id, selfips=selfips, loadbalancers=loadbalancers).raise_for_status()
+        else:
+            self.sync.tenant_delete(network_id).raise_for_status()
+            self.l2sync.remove_l2_flow(network_id)
+            self.network_driver.cleanup_selfips(selfips)
+        self.network_driver.invalidate_cache()
+        return True
 
     def amphora_cert_rotation(self, amphora_id):
         pass
