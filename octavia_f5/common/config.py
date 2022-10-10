@@ -126,8 +126,6 @@ f5_agent_opts = [
 ]
 
 f5_tls_shared = {
-    cfg.StrOpt('default_ciphers', default=None, deprecated_for_removal=True,
-               help=_("Use Cipher String for ciphers used in TLS profiles")),
     cfg.BoolOpt('forward_proxy_bypass', default=None,
                 help=_("Enables or disables (default) SSL forward proxy bypass.")),
     cfg.BoolOpt('forward_proxy', default=None,
