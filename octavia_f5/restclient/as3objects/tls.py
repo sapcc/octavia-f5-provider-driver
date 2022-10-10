@@ -12,10 +12,10 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 
 from octavia_f5.common import constants
-from octavia_lib.common import constants as lib_consts
 from octavia_f5.restclient.as3classes import TLS_Server, TLS_Client, Pointer
 
 CONF = cfg.CONF
