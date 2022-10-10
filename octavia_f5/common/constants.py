@@ -57,11 +57,6 @@ SERVICE_HTTP_TYPES = (SERVICE_HTTP, SERVICE_HTTPS)
 # special listener tags
 LISTENER_TAG_NO_SNAT = 'ccloud_special_l4_deactivate_snat'
 
-TLS_1_0 = 'TLSv1'
-TLS_1_1 = 'TLSv1.1'
-TLS_1_2 = 'TLSv1.2'
-TLS_1_3 = 'TLSv1.3'
-
 ROLE_MASTER = 'MASTER'
 ROLE_BACKUP = 'BACKUP'
 

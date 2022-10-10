@@ -15,6 +15,7 @@
 from oslo_config import cfg
 
 from octavia_f5.common import constants
+from octavia_lib.common import constants as lib_consts
 from octavia_f5.restclient.as3classes import TLS_Server, TLS_Client, Pointer
 
 CONF = cfg.CONF
@@ -76,11 +77,11 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
         service_args['staplerOCSPEnabled'] = CONF.f5_tls_server.stapler_ocsp
 
     # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
-    service_args['tls1_0Enabled'] = constants.TLS_1_0 in listener.tls_versions
+    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in listener.tls_versions
     # Note: tls_1_1 is only supported in tmos version 14.0+
-    service_args['tls1_1Enabled'] = constants.TLS_1_1 in listener.tls_versions
-    service_args['tls1_2Enabled'] = constants.TLS_1_2 in listener.tls_versions
-    service_args['tls1_3Enabled'] = constants.TLS_1_3 in listener.tls_versions
+    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in listener.tls_versions
+    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in listener.tls_versions
+    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in listener.tls_versions
 
     return TLS_Server(**service_args)
 
@@ -116,10 +117,10 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
         service_args['singleUseDhEnabled'] = CONF.f5_tls_client.single_use_dh
 
     # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
-    service_args['tls1_0Enabled'] = constants.TLS_1_0 in pool.tls_versions
+    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in pool.tls_versions
     # Note: tls_1_1 is only supported in tmos version 14.0+
-    service_args['tls1_1Enabled'] = constants.TLS_1_1 in pool.tls_versions
-    service_args['tls1_2Enabled'] = constants.TLS_1_2 in pool.tls_versions
-    service_args['tls1_3Enabled'] = constants.TLS_1_3 in pool.tls_versions
+    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in pool.tls_versions
+    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in pool.tls_versions
+    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in pool.tls_versions
 
     return TLS_Client(**service_args)
