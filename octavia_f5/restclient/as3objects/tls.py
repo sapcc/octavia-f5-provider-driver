@@ -96,7 +96,9 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
     :param crl_file: reference to AS3 crl_file
     :return: TLS_Client
     """
-    service_args = dict()
+
+    service_args = {'ciphers': pool.tls_ciphers}
+
     if trust_ca:
         service_args['trustCA'] = Pointer(trust_ca)
         service_args['validateCertificate'] = True
@@ -104,9 +106,6 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
         service_args['clientCertificate'] = client_cert
     if crl_file:
         service_args['crlFile'] = crl_file
-
-    if CONF.f5_tls_client.default_ciphers:
-        service_args['ciphers'] = CONF.f5_tls_client.default_ciphers
 
     if CONF.f5_tls_client.forward_proxy_bypass is not None:
         service_args['forwardProxyBypassEnabled'] = CONF.f5_tls_client.forward_proxy_bypass
