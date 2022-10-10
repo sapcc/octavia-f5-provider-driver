@@ -91,5 +91,5 @@ class MigrationArbiter(RescheduleMixin):
         reschedule_flow = linear_flow.Flow('reschedule-flow')
         reschedule_flow.add(get_loadbalancer_task, get_old_agent_task, create_selfips_task,
                             wait_for_selfip_task, add_remove_loadbalancer_flow,
-                            update_database_flow, update_vip_sub_flow)
+                            update_database_flow)
         return reschedule_flow
