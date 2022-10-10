@@ -108,9 +108,8 @@ class ControllerWorker(object):
 
     def as3worker(self):
         @lockutils.synchronized("f5sync", fair=True)
-        def f5sync(*args):
+        def f5sync(network_id, device, *args):
             self._metric_as3worker_queue.labels(octavia_host=CONF.host).set(self.queue.qsize())
-            network_id, device = self.queue.get()
             loadbalancers = self._get_all_loadbalancer(network_id)
             LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
                       self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
@@ -140,7 +139,8 @@ class ControllerWorker(object):
         """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
         while True:
             try:
-                f5sync()
+                network_id, device = self.queue.get()
+                f5sync(network_id, device)
             except Empty:
                 # Queue empty, pass
                 pass
