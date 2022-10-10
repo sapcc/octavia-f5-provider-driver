@@ -77,6 +77,7 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
         service_args['staplerOCSPEnabled'] = CONF.f5_tls_server.stapler_ocsp
 
     # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
+    service_args['ssl3Enabled'] = lib_consts.SSL_VERSION_3 in listener.tls_versions
     service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in listener.tls_versions
     # Note: tls_1_1 is only supported in tmos version 14.0+
     service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in listener.tls_versions
@@ -117,6 +118,7 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
         service_args['singleUseDhEnabled'] = CONF.f5_tls_client.single_use_dh
 
     # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
+    service_args['ssl3Enabled'] = lib_consts.SSL_VERSION_3 in pool.tls_versions
     service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in pool.tls_versions
     # Note: tls_1_1 is only supported in tmos version 14.0+
     service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in pool.tls_versions
