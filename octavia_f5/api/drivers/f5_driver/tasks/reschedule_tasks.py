@@ -92,8 +92,6 @@ class RewriteAmphoraEntry(RescheduleTasks):
         LOG.debug("RewriteAmphoraEntry %s: Changing host '%s' to '%s'.",
                   load_balancer.id, load_balancer.server_group_id, candidate)
         self._amphora_repo.update(db_apis.get_session(), load_balancer.id, compute_flavor=candidate)
-        self._loadbalancer_repo.update(db_apis.get_session(), load_balancer.id, server_group_id=candidate,
-                                       provisioning_status=constants.PENDING_CREATE)
 
     def revert(self, result, load_balancer: models.LoadBalancer, candidate: str, removal_host: str, **kwargs):
         """Handle a failure to force adding a loadbalancer."""

@@ -80,14 +80,16 @@ class MigrationArbiter(RescheduleMixin):
         add_remove_loadbalancer_flow = unordered_flow.Flow('add-remove-lb-flow')
         add_remove_loadbalancer_flow.add(add_loadbalancer_task, remove_loadbalancer_task)
 
-        update_database_flow = unordered_flow.Flow("database-update-flow")
-        update_database_flow.add(rewrite_loadbalancer_task, rewrite_amphora_task, invalidate_cache_task)
+        update_vip_sub_flow = linear_flow.Flow("update-vip-sub-flow")
+        update_vip_sub_flow.add(get_vip_port_task, update_vip_task, all_selfips_task, update_aap_task)
 
-        update_vip_flow = linear_flow.Flow("update-vip-flow")
-        update_vip_flow.add(get_vip_port_task, update_vip_task, all_selfips_task, update_aap_task)
+        # update loadbalancer, amphora and vip and invalidate cache can be run parallelized
+        update_database_flow = unordered_flow.Flow("database-update-flow")
+        update_database_flow.add(rewrite_loadbalancer_task, rewrite_amphora_task, update_vip_sub_flow,
+                                 invalidate_cache_task)
 
         reschedule_flow = linear_flow.Flow('reschedule-flow')
         reschedule_flow.add(get_loadbalancer_task, get_old_agent_task, create_selfips_task,
                             wait_for_selfip_task, add_remove_loadbalancer_flow,
-                            update_database_flow, update_vip_flow)
+                            update_database_flow, update_vip_sub_flow)
         return reschedule_flow
