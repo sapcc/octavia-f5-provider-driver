@@ -126,8 +126,6 @@ f5_agent_opts = [
 ]
 
 f5_tls_shared = {
-    cfg.StrOpt('default_ciphers', default=None, deprecated_for_removal=True,
-               help=_("Use Cipher String for ciphers used in TLS profiles")),
     cfg.BoolOpt('forward_proxy_bypass', default=None,
                 help=_("Enables or disables (default) SSL forward proxy bypass.")),
     cfg.BoolOpt('forward_proxy', default=None,
@@ -144,15 +142,6 @@ f5_tls_shared = {
                        "it is not strictly necessary to generate a new DH key during each "
                        "handshake, but F5 Networks recommends it. Enable the Single DH Use "
                        "option whenever temporary or ephemeral DH parameters are used.")),
-    cfg.BoolOpt('tls_1_0', default=None,
-                help=_("Allow TLS 1.0 Ciphers.")),
-    cfg.BoolOpt('tls_1_1', default=None,
-                help=_("Allow TLS 1.1 Ciphers.")),
-    cfg.BoolOpt('tls_1_2', default=None,
-                help=_("Allow TLS 1.2 Ciphers.")),
-    cfg.BoolOpt('tls_1_3', default=None,
-                help=_("Allow TLS 1.3 Ciphers. Note: tls_1_1 is only supported in tmos "
-                       "version 14.0+.")),
 }
 
 f5_tls_server_opts = {

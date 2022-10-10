@@ -145,8 +145,9 @@ def get_service(listener, cert_manager, esd_repository):
         # Certificate Handling
         auth_name = None
         certificates = cert_manager.get_certificates(listener)
+
+        # Client Side Certificates
         if listener.client_ca_tls_certificate_id and listener.client_authentication != 'NONE':
-            # Client Side Certificates
             try:
                 auth_name, secret = cert_manager.load_secret(project_id, listener.client_ca_tls_certificate_id)
                 entities.append((auth_name, m_cert.get_ca_bundle(secret, auth_name, auth_name)))
@@ -162,7 +163,7 @@ def get_service(listener, cert_manager, esd_repository):
     if listener.connection_limit > 0:
         service_args['maxConnections'] = listener.connection_limit
 
-    # Add default pool
+    # Link default pool
     default_pool = None
     if listener.default_pool_id:
         default_pool = listener.default_pool
@@ -171,7 +172,7 @@ def get_service(listener, cert_manager, esd_repository):
         pool_name = m_pool.get_name(listener.default_pool_id)
         service_args['pool'] = pool_name
 
-        # only consider Proxy pool, everything else is determined by listener type
+        # Add iRules only to Proxy Protocol pool, everything else is determined by listener type
         if default_pool.protocol == lib_consts.PROTOCOL_PROXY:
             name, irule = m_irule.get_proxy_irule()
             service_args['iRules'].append(name)
@@ -204,6 +205,7 @@ def get_service(listener, cert_manager, esd_repository):
             entities.append((
                 m_tls.get_pool_name(default_pool.id),
                 m_tls.get_tls_client(
+                    default_pool,
                     trust_ca=trust_ca,
                     client_cert=client_cert,
                     crl_file=crl_file

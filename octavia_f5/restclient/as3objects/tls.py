@@ -12,6 +12,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 
 from octavia_f5.common import constants
@@ -70,31 +71,34 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
         service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_server.insert_empty_fragments
     if CONF.f5_tls_server.single_use_dh is not None:
         service_args['singleUseDhEnabled'] = CONF.f5_tls_server.single_use_dh
-    if CONF.f5_tls_server.tls_1_0 is not None:
-        service_args['tls1_0Enabled'] = CONF.f5_tls_server.tls_1_0
-    if CONF.f5_tls_server.tls_1_1 is not None:
-        service_args['tls1_1Enabled'] = CONF.f5_tls_server.tls_1_1
-    if CONF.f5_tls_server.tls_1_2 is not None:
-        service_args['tls1_2Enabled'] = CONF.f5_tls_server.tls_1_2
-    if CONF.f5_tls_server.tls_1_3 is not None:
-        service_args['tls1_3Enabled'] = CONF.f5_tls_server.tls_1_3
     if CONF.f5_tls_server.cache_certificate is not None:
         service_args['cacheCertificateEnabled'] = CONF.f5_tls_server.cache_certificate
     if CONF.f5_tls_server.stapler_ocsp is not None:
         service_args['staplerOCSPEnabled'] = CONF.f5_tls_server.stapler_ocsp
 
+    # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
+    service_args['ssl3Enabled'] = lib_consts.SSL_VERSION_3 in listener.tls_versions
+    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in listener.tls_versions
+    # Note: tls_1_1 is only supported in tmos version 14.0+
+    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in listener.tls_versions
+    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in listener.tls_versions
+    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in listener.tls_versions
+
     return TLS_Server(**service_args)
 
 
-def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
+def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
     """ returns AS3 TLS_Client
 
+    :param pool: The pool for which to create the TLS client
     :param trust_ca: reference to AS3 trust_ca obj
     :param client_cert: reference to AS3 client_cert
     :param crl_file: reference to AS3 crl_file
     :return: TLS_Client
     """
-    service_args = dict()
+
+    service_args = {'ciphers': pool.tls_ciphers}
+
     if trust_ca:
         service_args['trustCA'] = Pointer(trust_ca)
         service_args['validateCertificate'] = True
@@ -102,9 +106,6 @@ def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
         service_args['clientCertificate'] = client_cert
     if crl_file:
         service_args['crlFile'] = crl_file
-
-    if CONF.f5_tls_client.default_ciphers:
-        service_args['ciphers'] = CONF.f5_tls_client.default_ciphers
 
     if CONF.f5_tls_client.forward_proxy_bypass is not None:
         service_args['forwardProxyBypassEnabled'] = CONF.f5_tls_client.forward_proxy_bypass
@@ -114,13 +115,13 @@ def get_tls_client(trust_ca=None, client_cert=None, crl_file=None):
         service_args['insertEmptyFragmentsEnabled'] = CONF.f5_tls_client.insert_empty_fragments
     if CONF.f5_tls_client.single_use_dh is not None:
         service_args['singleUseDhEnabled'] = CONF.f5_tls_client.single_use_dh
-    if CONF.f5_tls_client.tls_1_0 is not None:
-        service_args['tls1_0Enabled'] = CONF.f5_tls_client.tls_1_0
-    if CONF.f5_tls_client.tls_1_1 is not None:
-        service_args['tls1_1Enabled'] = CONF.f5_tls_client.tls_1_1
-    if CONF.f5_tls_client.tls_1_2 is not None:
-        service_args['tls1_2Enabled'] = CONF.f5_tls_client.tls_1_2
-    if CONF.f5_tls_client.tls_1_3 is not None:
-        service_args['tls1_3Enabled'] = CONF.f5_tls_client.tls_1_3
+
+    # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
+    service_args['ssl3Enabled'] = lib_consts.SSL_VERSION_3 in pool.tls_versions
+    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in pool.tls_versions
+    # Note: tls_1_1 is only supported in tmos version 14.0+
+    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in pool.tls_versions
+    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in pool.tls_versions
+    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in pool.tls_versions
 
     return TLS_Client(**service_args)
