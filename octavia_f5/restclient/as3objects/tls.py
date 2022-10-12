@@ -55,7 +55,8 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
 
     service_args = {
         'certificates': [{'certificate': cert_id} for cert_id in set(certificate_ids)],
-        'ciphers': listener.tls_ciphers
+        # LBs created before Ussuri may have TLS-enabled listeners with no tls_ciphers specified
+        'ciphers': listener.tls_ciphers or CONF.api_settings.default_listener_ciphers
     }
 
     if authentication_ca:
@@ -76,13 +77,15 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
     if CONF.f5_tls_server.stapler_ocsp is not None:
         service_args['staplerOCSPEnabled'] = CONF.f5_tls_server.stapler_ocsp
 
+    # LBs created before Ussuri may have TLS-enabled listeners with no tls_versions specified
+    tls_versions = listener.tls_versions or CONF.api_settings.default_listener_tls_versions
+
     # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
-    service_args['ssl3Enabled'] = lib_consts.SSL_VERSION_3 in listener.tls_versions
-    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in listener.tls_versions
+    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in tls_versions
     # Note: tls_1_1 is only supported in tmos version 14.0+
-    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in listener.tls_versions
-    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in listener.tls_versions
-    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in listener.tls_versions
+    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
+    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in tls_versions
+    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in tls_versions
 
     return TLS_Server(**service_args)
 
@@ -97,7 +100,10 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
     :return: TLS_Client
     """
 
-    service_args = {'ciphers': pool.tls_ciphers}
+    service_args = {
+        # LBs created before Ussuri may have TLS-enabled pools with no tls_ciphers specified
+        'ciphers': pool.tls_ciphers or CONF.api_settings.default_pool_ciphers
+    }
 
     if trust_ca:
         service_args['trustCA'] = Pointer(trust_ca)
@@ -116,12 +122,14 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
     if CONF.f5_tls_client.single_use_dh is not None:
         service_args['singleUseDhEnabled'] = CONF.f5_tls_client.single_use_dh
 
+    # LBs created before Ussuri may have TLS-enabled pools with no tls_versions specified
+    tls_versions = pool.tls_versions or CONF.api_settings.default_pool_tls_versions
+
     # Set TLS version. Allowlisting/blocklisting/setting default versions all happens in the API.
-    service_args['ssl3Enabled'] = lib_consts.SSL_VERSION_3 in pool.tls_versions
-    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in pool.tls_versions
+    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in tls_versions
     # Note: tls_1_1 is only supported in tmos version 14.0+
-    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in pool.tls_versions
-    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in pool.tls_versions
-    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in pool.tls_versions
+    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
+    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in tls_versions
+    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in tls_versions
 
     return TLS_Client(**service_args)
