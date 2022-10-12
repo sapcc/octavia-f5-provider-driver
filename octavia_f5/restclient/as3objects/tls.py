@@ -55,7 +55,8 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
 
     service_args = {
         'certificates': [{'certificate': cert_id} for cert_id in set(certificate_ids)],
-        'ciphers': listener.tls_ciphers
+        # LBs created before Ussuri may have TLS-enabled listeners with no tls_ciphers specified
+        'ciphers': listener.tls_ciphers or CONF.api_settings.default_listener_ciphers
     }
 
     if authentication_ca:
@@ -99,7 +100,10 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
     :return: TLS_Client
     """
 
-    service_args = {'ciphers': pool.tls_ciphers}
+    service_args = {
+        # LBs created before Ussuri may have TLS-enabled pools with no tls_ciphers specified
+        'ciphers': pool.tls_ciphers or CONF.api_settings.default_pool_ciphers
+    }
 
     if trust_ca:
         service_args['trustCA'] = Pointer(trust_ca)
