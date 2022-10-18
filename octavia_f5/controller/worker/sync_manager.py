@@ -161,13 +161,14 @@ class SyncManager(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS)
     )
-    def tenant_update(self, network_id, device=None, selfips=None):
+    def tenant_update(self, network_id, device=None, selfips=None, loadbalancers=None):
         """ Synchronous call to update F5s with all loadbalancers of a tenant (network_id).
 
            :param network_id: the as3 tenant
            :param device: hostname of the bigip device, if none use active device
            :param selfips: list of selfips related to this tenant
-           :return: True if success, else False
+           :param loadbalancers: list of loadbalancers to be synced (only for manual sync)
+           :return: requests.Response
 
         """
 
@@ -175,10 +176,12 @@ class SyncManager(object):
             self_ips = []
         else:
             self_ips = [fixed_ip.ip_address for selfip in selfips for fixed_ip in selfip.fixed_ips]
-        loadbalancers = self._loadbalancer_repo.get_all_by_network(
-            db_apis.get_session(), network_id=network_id, show_deleted=False)
+
         if not loadbalancers:
-            return False
+            loadbalancers = self._loadbalancer_repo.get_all_by_network(
+                db_apis.get_session(), network_id=network_id, show_deleted=False)
+        if not loadbalancers:
+            raise exceptions.AS3Exception("No loadbalancers specified for tenant_update")
 
         decl = self._declaration_manager.get_declaration({network_id: loadbalancers}, self_ips)
         if CONF.f5_agent.dry_run:

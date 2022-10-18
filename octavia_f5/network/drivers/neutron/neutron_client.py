@@ -356,6 +356,23 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
              requests.exceptions.ConnectionError)),
         wait=tenacity.wait_incrementing(1, 1, 5),
         stop=tenacity.stop_after_attempt(15))
+    def create_selfip(self, load_balancer: dict, f5host, agent):
+        project_id = load_balancer[lib_consts.PROJECT_ID]
+        network_id = load_balancer[lib_consts.VIP_NETWORK_ID]
+        subnet_id = load_balancer[lib_consts.VIP_SUBNET_ID]
+
+        selfip_dict = self._make_selfip_dict(project_id, network_id, subnet_id, f5host, agent)
+        selfip = self.neutron_client.create_port(selfip_dict).get('port', selfip_dict)
+        return utils.convert_port_dict_to_model(selfip)
+
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(
+            (neutron_client_exceptions.Conflict,
+             neutron_client_exceptions.InternalServerError,
+             neutron_client_exceptions.ServiceUnavailable,
+             requests.exceptions.ConnectionError)),
+        wait=tenacity.wait_incrementing(1, 1, 5),
+        stop=tenacity.stop_after_attempt(15))
     def ensure_selfips(self, load_balancers: [octavia_models.LoadBalancer],
                        agent: str = None,
                        cleanup_orphans: bool = False) -> [network_models.Port]:
@@ -459,6 +476,14 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             self.neutron_client.update_port(vip.id, aap)
         except Exception as e:
             LOG.warning("Failed updating VIPs allowed_address_pairs %s: %s", vip.id, e)
+
+    def update_vip(self, vip: network_models.Port, candidate: str):
+        host_binding = {
+            'port': {
+                'binding:host_id': candidate
+            }
+        }
+        self.neutron_client.update_port(vip.id, host_binding)
 
     def cleanup_selfips(self, selfips: [network_models.Port]):
         for port in selfips:
@@ -571,3 +596,16 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
 
     def set_port_admin_state_up(self, port_id, state):
         pass
+
+    @tenacity.retry(
+        wait=tenacity.wait_incrementing(1, 5, 60),
+        stop=tenacity.stop_after_attempt(10))
+    def is_port_active(self, port_id):
+        port = self.get_port(port_id)
+        if port.status == "ACTIVE":
+            return True
+
+        raise Exception()
+
+    def invalidate_cache(self, hard=True):
+        cache_region.invalidate(hard=hard)
