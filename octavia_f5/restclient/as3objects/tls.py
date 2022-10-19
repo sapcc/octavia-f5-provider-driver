@@ -12,13 +12,16 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from octavia.common import validate
 from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
+from oslo_log import log as logging
 
 from octavia_f5.common import constants
 from octavia_f5.restclient.as3classes import TLS_Server, TLS_Client, Pointer
 
 CONF = cfg.CONF
+LOG = logging.getLogger(__name__)
 
 
 def get_listener_name(listener_id):
@@ -39,12 +42,39 @@ def get_pool_name(pool_id):
     return "{}{}".format(constants.PREFIX_TLS_POOL, pool_id)
 
 
+def filter_cipher_suites(cipher_suites, object_print_name, object_id):
+    """Filter out cipher suites according to blocklist and allowlist.
+
+    This is necessary, because there can be invalid cipher suites if e.g. a
+    previously allowed cipher suite was added to the blocklist recently and
+    listeners/pools using the cipher suite already existed.
+
+    :param cipher_suites: String containing colon-separated list of cipher suites.
+    :param object_print_name: A printable representation of the object to be logged, e.g. "Listener" or "Pool".
+    :param object_id: ID of the object the cipher suites belong to. This is used for logging, so it should be a string.
+    :return String containing colon-separated list of non-blocked/allowed cipher suites.
+    """
+
+    blocked_cipher_suites = validate.check_cipher_prohibit_list(cipher_suites)
+    disallowed_cipher_suites = validate.check_cipher_allow_list(cipher_suites)
+    rejected_cipher_suites = list(set(blocked_cipher_suites + disallowed_cipher_suites))
+
+    cipher_suites_list = cipher_suites.split(':')
+    if rejected_cipher_suites:
+        LOG.error("{} object with ID {} has invalid cipher suites which won't be provisioned: {}"
+                  .format(object_print_name, object_id, ', '.join(rejected_cipher_suites)))
+        for c in rejected_cipher_suites:
+            cipher_suites_list.remove(c)
+
+    return ':'.join(cipher_suites_list)
+
+
 def get_tls_server(certificate_ids, listener, authentication_ca=None):
     """ returns AS3 TLS_Server
 
     :param certificate_ids: reference ids to AS3 certificate objs
+    :param listener: Listener object
     :param authentication_ca: reference id to AS3 auth-ca obj
-    :param authentication_mode: reference id to AS3 auth-mode
     :return: TLS_Server
     """
     mode_map = {
@@ -53,10 +83,11 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
         'MANDATORY': 'require'
     }
 
+    # LBs created before Ussuri may have TLS-enabled listeners with no tls_ciphers specified
+    ciphers = listener.tls_ciphers or CONF.api_settings.default_listener_ciphers
     service_args = {
         'certificates': [{'certificate': cert_id} for cert_id in set(certificate_ids)],
-        # LBs created before Ussuri may have TLS-enabled listeners with no tls_ciphers specified
-        'ciphers': listener.tls_ciphers or CONF.api_settings.default_listener_ciphers
+        'ciphers': filter_cipher_suites(ciphers, "Listener", listener.id)
     }
 
     if authentication_ca:
@@ -99,9 +130,10 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
     :return: TLS_Client
     """
 
+    # LBs created before Ussuri may have TLS-enabled pools with no tls_ciphers specified
+    ciphers = pool.tls_ciphers or CONF.api_settings.default_listener_ciphers
     service_args = {
-        # LBs created before Ussuri may have TLS-enabled pools with no tls_ciphers specified
-        'ciphers': pool.tls_ciphers or CONF.api_settings.default_pool_ciphers
+        'ciphers': filter_cipher_suites(ciphers, "Pool", pool.id)
     }
 
     if trust_ca:
