@@ -112,6 +112,7 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
     tls_versions = listener.tls_versions or CONF.api_settings.default_listener_tls_versions
 
     # Set TLS version
+    service_args['ssl3Enabled'] = lib_consts.SSL_VERSION_3 in tls_versions
     service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in tls_versions
     # Note: tls_1_1 is only supported in tmos version 14.0+
     service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
@@ -157,6 +158,7 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
     tls_versions = pool.tls_versions or CONF.api_settings.default_pool_tls_versions
 
     # Set TLS version
+    service_args['ssl3Enabled'] = lib_consts.SSL_VERSION_3 in tls_versions
     service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in tls_versions
     # Note: tls_1_1 is only supported in tmos version 14.0+
     service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
