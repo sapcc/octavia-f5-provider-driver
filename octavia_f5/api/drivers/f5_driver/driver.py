@@ -83,7 +83,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         client = self.client.prepare(server=self._get_server(loadbalancer_id))
         client.cast({}, 'failover_load_balancer', **payload)
 
-    def loadbalancer_migrate(self, loadbalancer_id, target_host):
+    def loadbalancer_reschedule(self, loadbalancer_id, target_host):
         store = {consts.LOADBALANCER_ID: loadbalancer_id, "candidate": target_host}
         self.run_flow(self.get_reschedule_flow, store=store)
 
