@@ -23,9 +23,17 @@ This provider driver uses Octavias mariadb database to store some data, but does
 Instead, otherwise unused tables are used in a specific way:
 - The **amphora** table is used in two ways:
   - For each load balancer an amphora entry is created. This is done to prevent problems with Octavias health manager, which makes assumptions about amphora entries.
-  - For each F5 device that is managed by a provider driver worker a special entry is created in the `amphora` table. Here, `load_balancer_id` will always be null, `compute_flavor` contains the name of the managed F5 device, `cached_zone` its hostname, and `vrrp_priority` the amount of listeners on that device.
-	`status` is set to `ALLOCATED` if the device is offline (no entry in device status response), `READY` if it is online, or `BOOTING` if it was offline and is now back online. In the latter case the device receives a full sync and the status is set to `READY`.
-    If `vrrp_interface` is set to 'disabled' for a given F5 amphora entry, the [scheduler](./octavia_f5/db/scheduler.py#L53) will not take that device into account when scheduling new load balancers.
+  - For each F5 device that is managed by a provider driver worker a special entry is created in the `amphora` table.
+    - `compute_flavor` holds the name of the managed F5 device
+    - `cached_zone` holds the hostname
+    - `load_balancer_id` will always be null
+    - `role` (must contain one of the values defined in the `amphora_roles` table) holds information about whether the device is in active status (`MASTER`) or standby status (`BACKUP`)
+    - `status` (must contain one of the values defined in the `provisioning_status` table) holds device state.
+      - `ALLOCATED` means the the device is offline (no entry in device status response)
+      - `READY` means the device is online
+      - `BOOTING` if it was offline and is now back online. In this case the device receives a full sync and the status is set to `READY`.
+    - If `vrrp_interface` is set to 'disabled' for a given F5 amphora entry, the [scheduler](./octavia_f5/db/scheduler.py#L53) will not take that device into account when scheduling new load balancers.
+    - `vrrp_priority` holds the amount of listeners on that device
 
 # F5-specific configuration options
 There are lots of F5-specific configuration options. They can be found in `octavia_f5/common/config.py`.
