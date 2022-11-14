@@ -22,7 +22,7 @@ The worker uses the driver-agent API, but it hooks more deeply into Octavia (sim
 This provider driver uses Octavias mariadb database to store some data, but doesn't define any new tables.
 Instead, otherwise unused tables are used in a specific way:
 - The **amphora** table is used in two ways:
-  - For each load balancer an amphora entry is created. This is done to prevent problems with Octavias health manager, which makes assumptions about amphora entries.
+  - For each load balancer an amphora entry is created. This is done [to prevent problems with Octavias health manager](./octavia_f5/controller/worker/controller_worker.py#L249-L251), which makes assumptions about amphora entries.
     - `compute_flavor` holds the name of the device the load balancer is scheduled to. This can be used to query the device via `openstack loadbalancer amphora show $LB_ID`.
   - For each F5 device that is managed by a provider driver worker a special entry is created in the `amphora` table.
     - `compute_flavor` holds the name of the managed F5 device
