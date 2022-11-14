@@ -14,15 +14,15 @@
 
 import abc
 
+from octavia.common import base_taskflow
 from oslo_config import cfg
 from oslo_log import log as logging
 from taskflow import flow
 from taskflow.listeners import logging as tf_logging
 from taskflow.patterns import linear_flow, unordered_flow
 
-from octavia.common import base_taskflow
-from octavia_f5.controller.worker.tasks import network_tasks
 from octavia_f5.api.drivers.f5_driver.tasks import reschedule_tasks
+from octavia_f5.controller.worker.tasks import network_tasks
 from octavia_f5.utils import driver_utils
 
 CONF = cfg.CONF
@@ -83,13 +83,22 @@ class MigrationArbiter(RescheduleMixin):
         update_vip_sub_flow = linear_flow.Flow("update-vip-sub-flow")
         update_vip_sub_flow.add(get_vip_port_task, update_vip_task, all_selfips_task, update_aap_task)
 
-        # update loadbalancer, amphora and vip and invalidate cache can be run parallelized
+        # update load balancer, amphora and vip and invalidate cache can be run parallelized
         update_database_flow = unordered_flow.Flow("database-update-flow")
         update_database_flow.add(rewrite_loadbalancer_task, rewrite_amphora_task, update_vip_sub_flow,
                                  invalidate_cache_task)
 
+        # We want to hold a lock between adding/removing the load balancer and updating the database, so that the
+        # load balancer won't be seen as an orphan (because it's on the wrong worker according to the DB) and cleaned
+        # up by the worker loop and cleaned up.
+        loadbalancer_lock_task = reschedule_tasks.LockLoadBalancer()
+        loadbalancer_release_task = reschedule_tasks.ReleaseLoadBalancer()
+
+        switchover_load_balancer_flow = linear_flow.Flow('switchover-flow')
+        switchover_load_balancer_flow.add(loadbalancer_lock_task, add_remove_loadbalancer_flow,
+                                          update_database_flow, loadbalancer_release_task)
+
         reschedule_flow = linear_flow.Flow('reschedule-flow')
         reschedule_flow.add(get_loadbalancer_task, get_old_agent_task, create_selfips_task,
-                            wait_for_selfip_task, add_remove_loadbalancer_flow,
-                            update_database_flow)
+                            wait_for_selfip_task, switchover_load_balancer_flow)
         return reschedule_flow

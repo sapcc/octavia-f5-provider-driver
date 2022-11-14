@@ -60,6 +60,8 @@ LISTENER_TAG_NO_SNAT = 'ccloud_special_l4_deactivate_snat'
 ROLE_MASTER = 'MASTER'
 ROLE_BACKUP = 'BACKUP'
 
+RESCHEDULING_LOCK_STRING = 'RESCHEDULING'
+
 SEGMENT = 'segment'
 VIF_TYPE = 'f5'
 ESD = 'esd'
