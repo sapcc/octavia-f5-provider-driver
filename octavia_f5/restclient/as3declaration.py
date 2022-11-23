@@ -14,10 +14,14 @@
 
 import uuid
 
+from oslo_config import cfg
+
 from octavia_f5.restclient.as3classes import ADC
 from octavia_f5.restclient.as3objects import as3 as m_as3
 from octavia_f5.restclient.as3objects import tenant as m_tenant
 from octavia_f5.utils import driver_utils, cert_manager, esd_repo
+
+CONF = cfg.CONF
 
 
 class AS3DeclarationManager(object):
@@ -49,8 +53,7 @@ class AS3DeclarationManager(object):
             # Fetch segmentation id
             segmentation_id = None
             if loadbalancers:
-                host = loadbalancers[0].server_group_id or loadbalancers[0].amphorae[0].compute_flavor
-                segmentation_id = self._network_driver.get_segmentation_id(network_id, host)
+                segmentation_id = self._network_driver.get_segmentation_id(network_id, CONF.host)
 
             # get Tenant
             name = m_tenant.get_name(network_id)
