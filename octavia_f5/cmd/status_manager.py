@@ -26,6 +26,7 @@ from oslo_reports import guru_meditation_report as gmr
 from octavia import version
 from octavia.common import rpc
 from octavia_f5.common import config
+from octavia_f5.common import backdoor
 from octavia_f5.controller.statusmanager import status_manager
 
 CONF = cfg.CONF
@@ -78,6 +79,8 @@ def main():
     hm_status_thread.daemon = True
     LOG.info("Status Manager process starts")
     hm_status_thread.start()
+
+    backdoor.install_backdoor()
 
     def hm_exit(*args, **kwargs):
         status_check.stop()
