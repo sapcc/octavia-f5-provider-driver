@@ -13,6 +13,10 @@
 # under the License.
 
 
+from octavia.common import exceptions as api_exceptions
+from octavia.common.exceptions import _
+
+
 class AS3Exception(Exception):
     pass
 
@@ -61,3 +65,8 @@ class DeleteAllTenantsException(Exception):
     def __init__(self):
         super(DeleteAllTenantsException).__init__()
         self.message = 'Delete called without tenant, would wipe all AS3 Declaration, ignoring.'
+
+
+class ReschedulingTargetHostException(api_exceptions.InvalidOption):
+    msg = _("%(host)s is not a valid target host. Make sure it exists and differs from the current host the LB is on.")
+    code = 400

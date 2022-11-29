@@ -22,6 +22,7 @@ from taskflow.types import failure
 from octavia.common import constants
 from octavia.common import data_models as models
 from octavia.db import api as db_apis
+from octavia_f5.utils import exceptions
 from octavia_f5.db import repositories as repo
 
 LOG = logging.getLogger(__name__)
@@ -30,6 +31,7 @@ CONF = cfg.CONF
 
 class RescheduleTasks(task.Task, metaclass=ABCMeta):
     """Base task to load drivers common to the tasks."""
+
     def __init__(self, **kwargs):
         self.rpc = kwargs.pop("rpc", None)
         super(RescheduleTasks, self).__init__(**kwargs)
@@ -121,3 +123,19 @@ class RewriteLoadBalancerEntry(RescheduleTasks):
         LOG.warning("RewriteLoadBalancerEntry: Reverting host change of loadbalancer %s from '%s' to '%s'",
                     load_balancer.id, candidate, removal_host)
         self._loadbalancer_repo.update(db_apis.get_session(), load_balancer.id, server_group_id=removal_host)
+
+
+class SanityCheck(RescheduleTasks):
+    def execute(self, loadbalancer_id: str, candidate: str):
+        """Check the rescheduling parameters for sanity."""
+
+        # Check that target host exists.
+        # Else the LB would get deleted, but not recreated anywhere.
+        if not self._amphora_repo.get_devices_for_host(candidate):
+            raise exceptions.ReschedulingTargetHostException(host=candidate)
+
+        # Check that the target host is different from where the LB is right now.
+        # Else the LB would get created and deleted on the same device, resulting in it being deleted.
+        lb_host = self._loadbalancer_repo.get(db_apis.get_session(), id=loadbalancer_id).server_group_id
+        if lb_host == candidate:
+            raise exceptions.ReschedulingTargetHostException(host=candidate)
