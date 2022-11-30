@@ -137,11 +137,11 @@ class ListenerRepository(repositories.ListenerRepository):
 
 
 class AmphoraRepository(repositories.AmphoraRepository):
-    def get_devices_for_host(self, session, host):
+    def get_devices(self, session, host=None):
 
         query = session.query(self.model_class.cached_zone)
-        # pylint: disable=singleton-comparison
-        query = query.filter(self.model_class.compute_flavor == host,
-                             self.model_class.cached_zone is not None)
+        query = query.filter(self.model_class.cached_zone is not None)
+        if host:
+            query = query.filter(self.model_class.compute_flavor == host)
 
         return [model[0] for model in query.all()]

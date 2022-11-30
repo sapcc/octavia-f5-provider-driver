@@ -25,32 +25,47 @@ CONF = cfg.CONF
 
 
 class TestAmphoraRepository(base.OctaviaDBTestBase):
-    FAKE_DEVICE_AMPHORA_ID_1 = uuidutils.generate_uuid()
+    FAKE_DEVICE_AMPHORA_ID_1a = uuidutils.generate_uuid()
+    FAKE_DEVICE_AMPHORA_ID_1b = uuidutils.generate_uuid()
     FAKE_DEVICE_AMPHORA_ID_2 = uuidutils.generate_uuid()
-    FAKE_DEVICE_HOSTNAME_1 = "fake.device.pair.hostname1"
+    FAKE_DEVICE_HOSTNAME_1a = "fake.device.pair.hostname1a"
+    FAKE_DEVICE_HOSTNAME_1b = "fake.device.pair.hostname1b"
     FAKE_DEVICE_HOSTNAME_2 = "fake.device.pair.hostname2"
-    FAKE_DEVICE_PAIR = "fake.device.pair"
+    FAKE_DEVICE_PAIR_1 = "fake.device.pair1"
+    FAKE_DEVICE_PAIR_2 = "fake.device.pair2"
 
     def setUp(self):
         super(TestAmphoraRepository, self).setUp()
         self.amp_repo = repos.AmphoraRepository()
+
         # two device amphoras belonging to the same pair
-        self.device_amphora_1 = self.amp_repo.create(
-            self.session, id=self.FAKE_DEVICE_AMPHORA_ID_1,
-            role=constants.ROLE_MASTER, vrrp_interface=None,
-            status=constants.ACTIVE, compute_flavor=self.FAKE_DEVICE_PAIR,
-            vrrp_priority=1, cached_zone=self.FAKE_DEVICE_HOSTNAME_1
-        )
-        self.device_amphora_2 = self.amp_repo.create(
-            self.session, id=self.FAKE_DEVICE_AMPHORA_ID_2,
-            role=constants.ROLE_MASTER, vrrp_interface=None,
-            status=constants.ACTIVE, compute_flavor=self.FAKE_DEVICE_PAIR,
-            vrrp_priority=100, cached_zone=self.FAKE_DEVICE_HOSTNAME_2
-        )
+        def add_device_amphora(**overwrite_kwargs):
+            kwargs = {'id': uuidutils.generate_uuid(), 'role': constants.ROLE_MASTER, 'vrrp_interface': None,
+                      'status': constants.ACTIVE, 'compute_flavor': 'compute_flavor_' + uuidutils.generate_uuid(),
+                      'vrrp_priority': 1, 'cached_zone': 'cached_zone_' + uuidutils.generate_uuid()}
+            kwargs.update(overwrite_kwargs)
+            return self.amp_repo.create(self.session, **kwargs)
+        self.device_amphora_1a = add_device_amphora(
+            id=self.FAKE_DEVICE_AMPHORA_ID_1a, compute_flavor=self.FAKE_DEVICE_PAIR_1,
+            cached_zone=self.FAKE_DEVICE_HOSTNAME_1a)
+        self.device_amphora_1b = add_device_amphora(
+            id=self.FAKE_DEVICE_AMPHORA_ID_1b, compute_flavor=self.FAKE_DEVICE_PAIR_1, vrrp_priority=100,
+            cached_zone=self.FAKE_DEVICE_HOSTNAME_1b)
+        self.device_amphora_2 = add_device_amphora(
+            id=self.FAKE_DEVICE_AMPHORA_ID_2, compute_flavor=self.FAKE_DEVICE_PAIR_2,
+            cached_zone=self.FAKE_DEVICE_HOSTNAME_2)
         self.conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
 
+    def test_get_devices(self):
+        devices = self.amp_repo.get_devices(self.session)
+        for hostname in [self.FAKE_DEVICE_HOSTNAME_1a, self.FAKE_DEVICE_HOSTNAME_1b, self.FAKE_DEVICE_HOSTNAME_2]:
+            self.assertIn(hostname, devices, message='Device {} not found in device list from pair: {}'
+                          .format(hostname, devices))
+        self.assertEqual(len(devices), 3, message='Not the right amount of devices: {}'.format(len(devices)))
+
     def test_get_devices_for_host(self):
-        devices = self.amp_repo.get_devices_for_host(self.session, self.FAKE_DEVICE_PAIR)
-        self.assertEqual(len(devices), 2)
-        self.assertIn(self.FAKE_DEVICE_HOSTNAME_1, devices)
-        self.assertIn(self.FAKE_DEVICE_HOSTNAME_2, devices)
+        devices = self.amp_repo.get_devices(self.session, host=self.FAKE_DEVICE_PAIR_1)
+        for hostname in [self.FAKE_DEVICE_HOSTNAME_1a, self.FAKE_DEVICE_HOSTNAME_1b]:
+            self.assertIn(hostname, devices, message='Device {} not found in device list from pair: {}'
+                          .format(hostname, devices))
+        self.assertEqual(len(devices), 2, message='Not the right amount of devices: {}'.format(len(devices)))

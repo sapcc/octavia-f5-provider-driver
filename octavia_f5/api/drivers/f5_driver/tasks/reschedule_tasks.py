@@ -131,7 +131,7 @@ class SanityCheck(RescheduleTasks):
 
         # Check that target host exists.
         # Else the LB would get deleted, but not recreated anywhere.
-        if not self._amphora_repo.get_devices_for_host(db_apis.get_session(), candidate):
+        if not self._amphora_repo.get_devices(db_apis.get_session(), host=candidate):
             raise exceptions.ReschedulingTargetHostException(host=candidate)
 
         # Check that the target host is different from where the LB is right now.
