@@ -36,6 +36,8 @@ class TestScheduler(base.OctaviaDBTestBase):
     FAKE_DEVICE_AMPHORA_ID_2 = uuidutils.generate_uuid()
     FAKE_DEVICE_PAIR_1 = "fake.device.pair1"
     FAKE_DEVICE_PAIR_2 = "fake.device.pair2"
+    FAKE_DEVICE_PAIR_1_HOSTNAME = "fake.device.pair1.hostname"
+    FAKE_DEVICE_PAIR_2_HOSTNAME = "fake.device.pair2.hostname"
 
     def setUp(self):
         super(TestScheduler, self).setUp()
@@ -44,13 +46,13 @@ class TestScheduler(base.OctaviaDBTestBase):
             self.session, id=self.FAKE_DEVICE_AMPHORA_ID_1,
             role=constants.ROLE_MASTER, vrrp_interface=None,
             status=constants.ACTIVE, compute_flavor=self.FAKE_DEVICE_PAIR_1,
-            vrrp_priority=1
+            vrrp_priority=1, cached_zone=self.FAKE_DEVICE_PAIR_1_HOSTNAME
         )
         self.device_amphora_2 = self.repos.amphora.create(
             self.session, id=self.FAKE_DEVICE_AMPHORA_ID_2,
             role=constants.ROLE_MASTER, vrrp_interface=None,
             status=constants.ACTIVE, compute_flavor=self.FAKE_DEVICE_PAIR_2,
-            vrrp_priority=100
+            vrrp_priority=100, cached_zone=self.FAKE_DEVICE_PAIR_2_HOSTNAME
         )
         self.scheduler = scheduler.Scheduler()
         self.conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
