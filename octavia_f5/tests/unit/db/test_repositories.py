@@ -36,25 +36,28 @@ class TestAmphoraRepository(base.OctaviaDBTestBase):
 
     def setUp(self):
         super(TestAmphoraRepository, self).setUp()
+        self.conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         self.amp_repo = repos.AmphoraRepository()
 
-        # two device amphoras belonging to the same pair
         def add_device_amphora(**overwrite_kwargs):
             kwargs = {'id': uuidutils.generate_uuid(), 'role': constants.ROLE_MASTER, 'vrrp_interface': None,
                       'status': constants.ACTIVE, 'compute_flavor': 'compute_flavor_' + uuidutils.generate_uuid(),
                       'vrrp_priority': 1, 'cached_zone': 'cached_zone_' + uuidutils.generate_uuid()}
             kwargs.update(overwrite_kwargs)
             return self.amp_repo.create(self.session, **kwargs)
+
+        # two device amphoras belonging to the same pair
         self.device_amphora_1a = add_device_amphora(
             id=self.FAKE_DEVICE_AMPHORA_ID_1a, compute_flavor=self.FAKE_DEVICE_PAIR_1,
             cached_zone=self.FAKE_DEVICE_HOSTNAME_1a)
         self.device_amphora_1b = add_device_amphora(
             id=self.FAKE_DEVICE_AMPHORA_ID_1b, compute_flavor=self.FAKE_DEVICE_PAIR_1, vrrp_priority=100,
             cached_zone=self.FAKE_DEVICE_HOSTNAME_1b)
+
+        # one device amphora belonging to another pair
         self.device_amphora_2 = add_device_amphora(
             id=self.FAKE_DEVICE_AMPHORA_ID_2, compute_flavor=self.FAKE_DEVICE_PAIR_2,
             cached_zone=self.FAKE_DEVICE_HOSTNAME_2)
-        self.conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
 
     def test_get_devices(self):
         devices = self.amp_repo.get_devices(self.session)

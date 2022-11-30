@@ -15,12 +15,12 @@
 from unittest import mock
 
 from octavia.common import constants
+from octavia.db import repositories as repo
+from octavia.tests.functional.db import base
 from oslo_config import cfg
 from oslo_config import fixture as oslo_fixture
 from oslo_utils import uuidutils
 
-from octavia.db import repositories as repo
-from octavia.tests.functional.db import base
 from octavia_f5.common import config, constants as f5_const  # noqa
 from octavia_f5.controller.worker import controller_worker
 from octavia_f5.db import scheduler

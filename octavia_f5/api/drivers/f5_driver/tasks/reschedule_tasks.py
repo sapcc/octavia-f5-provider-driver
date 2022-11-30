@@ -14,16 +14,16 @@
 
 from abc import ABCMeta
 
+from octavia.common import data_models as models
+from octavia.common import exceptions as api_exceptions
+from octavia.db import api as db_apis
 from oslo_config import cfg
 from oslo_log import log as logging
 from taskflow import task
 from taskflow.types import failure
 
-from octavia.common import constants
-from octavia.common import data_models as models
-from octavia.db import api as db_apis
-from octavia_f5.utils import exceptions
 from octavia_f5.db import repositories as repo
+from octavia_f5.utils import exceptions
 
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
@@ -129,6 +129,12 @@ class SanityCheck(RescheduleTasks):
     def execute(self, loadbalancer_id: str, candidate: str):
         """Check the rescheduling parameters for sanity."""
 
+        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=loadbalancer_id)
+
+        # Check that load balancer exists
+        if not lb:
+            raise api_exceptions.NotFound(resource='Load Balancer', id=loadbalancer_id)
+
         # Check that target host exists.
         # Else the LB would get deleted, but not recreated anywhere.
         if not self._amphora_repo.get_devices(db_apis.get_session(), host=candidate):
@@ -136,6 +142,6 @@ class SanityCheck(RescheduleTasks):
 
         # Check that the target host is different from where the LB is right now.
         # Else the LB would get created and deleted on the same device, resulting in it being deleted.
-        lb_host = self._loadbalancer_repo.get(db_apis.get_session(), id=loadbalancer_id).server_group_id
+        lb_host = lb.server_group_id
         if lb_host == candidate:
             raise exceptions.ReschedulingTargetHostException(host=candidate)
