@@ -104,7 +104,6 @@ class TestScheduler(base.OctaviaDBTestBase):
         for lb in lbs:
             self.repos.load_balancer.delete(self.session, id=lb.id)
 
-
     @mock.patch('octavia_f5.controller.worker.status_manager.StatusManager')
     @mock.patch('octavia_f5.controller.worker.sync_manager.SyncManager')
     def test_get_candidate_by_az(self, mock_sync_manager, mock_status_manager):
@@ -127,10 +126,10 @@ class TestScheduler(base.OctaviaDBTestBase):
         self.assertEqual([self.FAKE_DEVICE_PAIR_2], candidates,
                          "Candidates should only include non-AZ device pairs")
 
-    def _create_lb(self, id, host=FAKE_DEVICE_PAIR_1,
+    def _create_lb(self, lb_id, host=FAKE_DEVICE_PAIR_1,
                    provisioning_status=constants.ACTIVE):
         return self.repos.load_balancer.create(
-            self.session, id=id, project_id=self.FAKE_PROJ_ID,
+            self.session, id=lb_id, project_id=self.FAKE_PROJ_ID,
             name="lb_name", description="lb_description",
             provisioning_status=provisioning_status,
             operating_status=constants.ONLINE,

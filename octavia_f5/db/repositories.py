@@ -142,6 +142,6 @@ class AmphoraRepository(repositories.AmphoraRepository):
         query = session.query(self.model_class.cached_zone)
         # pylint: disable=singleton-comparison
         query = query.filter(self.model_class.compute_flavor == host,
-                             self.model_class.cached_zone != None)
+                             self.model_class.cached_zone is not None)
 
         return [model[0] for model in query.all()]
