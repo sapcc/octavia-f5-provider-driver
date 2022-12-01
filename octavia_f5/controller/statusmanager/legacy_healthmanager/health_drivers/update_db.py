@@ -58,7 +58,8 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                 new_op_status = constants.ONLINE
             message.update({constants.OPERATING_STATUS: new_op_status})
 
-    def update_health(self, health, srcaddr):
+    def update_health(self, health, srcaddr='127.0.0.1'):
+        LOG.info("Updating health")
         # The executor will eat any exceptions from the update_health code
         # so we need to wrap it and log the unhandled exception
         start_time = timeit.default_timer()
@@ -474,7 +475,8 @@ class UpdateStatsDb(update_base.StatsUpdateBase, stats.StatsMixin):
         super(UpdateStatsDb, self).__init__()
         self.repo_listener = repo.ListenerRepository()
 
-    def update_stats(self, health_message, srcaddr):
+    def update_stats(self, health_message, srcaddr='127.0.0.1'):
+        LOG.info("Updating stats")
         # The executor will eat any exceptions from the update_stats code
         # so we need to wrap it and log the unhandled exception
         try:

@@ -62,13 +62,6 @@ class DatabaseLockSession(object):
                 with excutils.save_and_reraise_exception():
                     self._lock_session.rollback()
 
-def update_health(msg):
-    LOG.info("Updating health")
-    update_db.UpdateHealthDb().update_health(msg, '127.0.0.1')
-
-def update_stats(msg):
-    LOG.info("Updating stats")
-    update_db.UpdateStatsDb().update_stats(msg, '127.0.0.1')
 
 class StatusManager(object):
     def __init__(self):
@@ -82,6 +75,8 @@ class StatusManager(object):
             max_workers=CONF.status_manager.health_update_threads)
         self.stats_executor = futurist.ThreadPoolExecutor(
             max_workers=CONF.status_manager.stats_update_threads)
+        self.health_updater = update_db.UpdateHealthDb()
+        self.stats_updater = update_db.UpdateStatsDb()
         self.bigips = list(self.initialize_bigips())
         # Cache reachability of every bigip
         self.bigip_status = {bigip.hostname: False
@@ -312,8 +307,8 @@ class StatusManager(object):
 
         for msg in amphora_messages.values():
             msg['recv_time'] = time.time()
-            self.health_executor.submit(update_health, msg)
-            self.stats_executor.submit(update_stats, msg)
+            self.health_executor.submit(self.health_updater.update_health, msg)
+            self.stats_executor.submit(self.stats_updater.update_stats, msg)
 
     def update_listener_count(self, num_listeners):
         """ updates listener count of bigip device (vrrp_priority column in amphora table)
