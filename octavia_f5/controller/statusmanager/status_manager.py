@@ -79,9 +79,9 @@ class StatusManager(object):
         self.amp_health_repo = repo.AmphoraHealthRepository()
         self.lb_repo = repo.LoadBalancerRepository()
         self.health_executor = futurist.ThreadPoolExecutor(
-            max_workers=CONF.health_manager.health_update_threads)
+            max_workers=CONF.status_manager.health_update_threads)
         self.stats_executor = futurist.ThreadPoolExecutor(
-            max_workers=CONF.health_manager.stats_update_threads)
+            max_workers=CONF.status_manager.stats_update_threads)
         self.bigips = list(self.initialize_bigips())
         # Cache reachability of every bigip
         self.bigip_status = {bigip.hostname: False
