@@ -221,6 +221,12 @@ f5_status_manager_opts = [
     cfg.IntOpt('failover_timeout',
                default=5,
                help=_("Time in seconds before a device is marked as offline.")),
+    cfg.IntOpt('health_update_threads',
+               default=10,
+               help=_('Number of threads for processing health update.')),
+    cfg.IntOpt('stats_update_threads',
+               default=10,
+               help=_('Number of threads for processing stats update.')),
 ]
 
 f5_util_opts = [
