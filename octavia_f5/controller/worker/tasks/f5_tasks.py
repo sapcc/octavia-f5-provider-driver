@@ -20,6 +20,7 @@ from taskflow import task
 
 from octavia.network import data_models as network_models
 from octavia_f5.network import data_models as f5_network_models
+from octavia_f5.restclient.as3objects import tenant
 from octavia_f5.restclient.bigip import bigip_restclient
 from octavia_f5.utils import driver_utils, decorators
 
@@ -225,7 +226,7 @@ class GetAllSelfIPsForVLAN(task.Task):
                 and item['name'].startswith('port-')]
 
 
-class EnsureRoute(task.Task):
+class EnsureDefaultRoute(task.Task):
     default_provides = 'device_route'
 
     """ Task to create or update Route if needed """
@@ -270,6 +271,61 @@ class EnsureRoute(task.Task):
 
         # No Changes needed
         return device_route
+
+
+class SyncStaticRoutes(task.Task):
+    """ Task to create or cleanup static routes """
+
+    @decorators.RaisesIControlRestError()
+    def execute(self, bigip: bigip_restclient.BigIPRestClient,
+                selfips: [network_models.Port],
+                network: f5_network_models.Network):
+
+        def subnet_in_selfips(subnet, selfips):
+            for selfip in selfips:
+                for fixed_ip in selfip.fixed_ips:
+                    if fixed_ip.subnet_id == subnet:
+                        return True
+            return False
+
+        if CONF.networking.route_on_active and not bigip.is_active:
+            # Skip passive device if route_on_active is enabled
+            return None
+
+        network_driver = driver_utils.get_network_driver()
+
+        static_route_subnets = [subnet for subnet in network.subnets
+                                if not subnet_in_selfips(subnet, selfips)]
+
+        # Fetch existing routes in the partition
+        device_response = bigip.get(
+            path=f"/mgmt/tm/net/route?$filter=partition+eq+{tenant.get_name(network.id)}")
+        device_routes = device_response.json()
+
+        # Remove vanished subnet routes
+        for device_route in device_routes['items']:
+            # Skip already provisioned subnets
+            if device_route['name'] not in [f"subnet-{subnet}" for subnet in static_route_subnets]:
+                res = bigip.delete(path=device_route['path'])
+                res.raise_for_status()
+            else:
+                # provisioned already - remove from missing list
+                static_route_subnets.remove(device_route['name'][7:])
+
+        # Add missing subnet routes
+        for static_route_subnet in static_route_subnets:
+            # Add a static route
+            subnet = IPNetwork(network_driver.get_subnet(static_route_subnet).cidr)
+
+            name = f"subnet-{static_route_subnet}"
+            vlan = f"/Common/vlan-{network.vlan_id}"
+            net = f"{subnet.ip}%{network.vlan_id}/{subnet.prefixlen}"
+            route = {'name': name, 'tmInterface': vlan, 'network': net,
+                     'partition': tenant.get_name(network.id)}
+
+            res = bigip.post(path='/mgmt/tm/net/route', json=route)
+            res.raise_for_status()
+            return res.json()
 
 
 """ Cleanup Tasks """
