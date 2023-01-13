@@ -118,7 +118,9 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
     # (specified by the timeout API parameter) before setting a member to offline, we use max_retries_down together
     # with delay to calculate the timeout that we provision to the BigIP.
     args["interval"] = health_monitor.delay
-    # max_retries_down is called fall_threshold in the database
+    # This timeout must not be confused with the 'timeout' API parameter, which we ignore, because it denotes the
+    # timeout of one probe, while the timeout AS3 parameter denotes the overall timeout over all probes!
+    # The max_retries_down API parameter is called fall_threshold in the database
     timeout = int(health_monitor.fall_threshold) * int(health_monitor.delay) + 1
 
     # respect BigIP LTM maximum health monitor timeout of 900 seconds
