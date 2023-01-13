@@ -112,8 +112,15 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
         args['send'] = send
         args['receive'] = _get_recv_text(health_monitor)
 
+    # BigIP does not have a semantic equivalent to the max_retries_down API parameter; The only available parameters
+    # are interval (corresponding to 'delay' in the Octavia API) and timeout, both measured in seconds. So instead of
+    # having an amount of probes (specified by max_retries_down) fail and each timing out after a number of seconds
+    # (specified by the timeout API parameter) before setting a member to offline, we use max_retries_down together
+    # with delay to calculate the timeout that we provision to the BigIP.
     args["interval"] = health_monitor.delay
+    # max_retries_down is called fall_threshold in the database
     timeout = int(health_monitor.fall_threshold) * int(health_monitor.delay) + 1
+
     # respect BigIP LTM maximum health monitor timeout of 900 seconds
     args["timeout"] = min(timeout, 900)
     if target_address:
