@@ -123,7 +123,8 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
     # The max_retries_down API parameter is called fall_threshold in the database
     timeout = int(health_monitor.fall_threshold) * int(health_monitor.delay) + 1
 
-    # respect BigIP LTM maximum health monitor timeout of 900 seconds
+    # BigIP LTM (TMOS v15.1.3) maximum health monitor timeout seems to be 86400 seconds, at least on the GUI, but that
+    # value is undocumented, so we're staying on the safe side with a lower value, until customer demand is present.
     args["timeout"] = min(timeout, 900)
     if target_address:
         args["targetAddress"] = target_address
