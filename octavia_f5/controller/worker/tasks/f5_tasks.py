@@ -301,7 +301,7 @@ class SyncStaticRoutes(task.Task):
         device_response = bigip.get(
             path=f"/mgmt/tm/net/route?$filter=partition+eq+{tenant.get_name(network.id)}")
         device_response = device_response.json()
-        device_routes = device_response['items']
+        device_routes = device_response.get('items', [])
 
         # Remove superfluous subnet routes, provision only missing subnet routes
         for device_route in device_routes:
