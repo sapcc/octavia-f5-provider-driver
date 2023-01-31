@@ -236,8 +236,8 @@ class EnsureDefaultRoute(task.Task):
                 subnet_id: str,
                 network: f5_network_models.Network):
 
-        if CONF.networking.route_on_active and not bigip.is_active:
-            # Skip passive device if route_on_active is enabled
+        # Skip passive device if route_only_on_active is enabled
+        if CONF.networking.route_only_on_active and not bigip.is_active:
             return None
 
         name = f"vlan-{network.vlan_id}"
@@ -281,36 +281,37 @@ class SyncStaticRoutes(task.Task):
                 selfips: [network_models.Port],
                 network: f5_network_models.Network):
 
+        # Skip passive device if route_only_on_active is enabled
+        if CONF.networking.route_only_on_active and not bigip.is_active:
+            return None
+
         def subnet_in_selfips(subnet, selfips):
+            """Check whether a SelfIP exists for the subnet."""
             for selfip in selfips:
                 for fixed_ip in selfip.fixed_ips:
                     if fixed_ip.subnet_id == subnet:
                         return True
             return False
 
-        if CONF.networking.route_on_active and not bigip.is_active:
-            # Skip passive device if route_on_active is enabled
-            return None
-
         network_driver = driver_utils.get_network_driver()
-
         static_route_subnets = [subnet for subnet in network.subnets
                                 if not subnet_in_selfips(subnet, selfips)]
 
         # Fetch existing routes in the partition
         device_response = bigip.get(
             path=f"/mgmt/tm/net/route?$filter=partition+eq+{tenant.get_name(network.id)}")
-        device_routes = device_response.json()
+        device_response = device_response.json()
+        device_routes = device_response.get('items', [])
 
-        # Remove vanished subnet routes
-        for device_route in device_routes['items']:
-            # Skip already provisioned subnets
-            if device_route['name'] not in [f"subnet-{subnet}" for subnet in static_route_subnets]:
+        # Remove superfluous subnet routes, provision only missing subnet routes
+        for device_route in device_routes:
+            if device_route['name'] in [f"subnet-{subnet}" for subnet in static_route_subnets]:
+                # Skip already provisioned subnet route
+                static_route_subnets.remove(device_route['name'][7:])
+            else:
+                # Delete unneeded route
                 res = bigip.delete(path=device_route['path'])
                 res.raise_for_status()
-            else:
-                # provisioned already - remove from missing list
-                static_route_subnets.remove(device_route['name'][7:])
 
         # Add missing subnet routes
         for static_route_subnet in static_route_subnets:
