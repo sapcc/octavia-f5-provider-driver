@@ -23,6 +23,7 @@ from octavia.common import exceptions as api_exceptions
 from octavia.db import api as db_apis
 
 from octavia_f5.api.drivers.f5_driver import arbiter
+from octavia_f5.common import constants as f5_consts
 from octavia_f5.utils import driver_utils
 
 CONF = cfg.CONF
@@ -178,10 +179,10 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         delay = healthmonitor.delay
         if not delay:
             return
-        delay_max_value = 3600
-        if delay > delay_max_value:
+        if delay > f5_consts.HEALTH_MONITOR_DELAY_MAX:
             raise api_exceptions.ValidationException(
-                detail='Delay value for health monitor too high. Must not be higher than {}.'.format(delay_max_value))
+                detail='Delay value for health monitor too high. Must not be higher than {}.'.format(
+                    f5_consts.HEALTH_MONITOR_DELAY_MAX))
 
     def health_monitor_create(self, healthmonitor):
         self._health_monitor_check(healthmonitor)
