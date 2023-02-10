@@ -150,6 +150,8 @@ class EnsureRouteDomain(task.Task):
         rd = {'name': f"vlan-{network.vlan_id}", 'vlans': vlans, 'id': network.vlan_id}
 
         device_response = bigip.get(path=f"/mgmt/tm/net/route-domain/{rd['name']}")
+
+        # check for legacy name
         if device_response.status_code == 404:
             path = f"/mgmt/tm/net/route-domain/net-{network.id}"
             device_response = bigip.get(path=path)
@@ -246,12 +248,14 @@ class EnsureDefaultRoute(task.Task):
         route = {'name': name, 'gw': gw, 'network': network_name}
 
         device_response = bigip.get(path=f"/mgmt/tm/net/route/~Common~{route['name']}")
+
+        # check for legacy name
         if device_response.status_code == 404:
             path=f"/mgmt/tm/net/route/~Common~net-{network.id}"
             device_response = bigip.get(path=path)
 
+        # Create route if not existing
         if device_response.status_code == 404:
-            # Create route_domain if not existing
             res = bigip.post(path='/mgmt/tm/net/route', json=route)
             res.raise_for_status()
             return res.json()
