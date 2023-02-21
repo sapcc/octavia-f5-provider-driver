@@ -281,38 +281,51 @@ class L2SyncManager(BaseTaskFlowEngine):
         executor = futures.ThreadPoolExecutor(max_workers=1)
         fs = []
         for bigip in self._bigips:
+
             """ 1. Delete all orphaned routes """
             res = bigip.get(path='/mgmt/tm/net/route')
             res.raise_for_status()
-            for route in res.json().get('items', []):
-                # Check if route name is a legacy route net-{network_id}
-                if route['name'] in [f"{constants.PREFIX_NETWORK_LEGACY}{id}" for id in network_ids]:
-                    net_id = route['name'][len(constants.PREFIX_NETWORK_LEGACY):]
-                    # Consider route with unexpected vlan to be obsoloted
-                    if net_id in existing_networks and route['network'].endswith(
-                            str(existing_networks[net_id].vlan_id)):
+
+            def ignore_route(route):
+                route_name = route['name']
+
+                # Ignore unmanaged routes
+                if not (route_name.startswith(constants.PREFIX_NETWORK_LEGACY)  # legacy routes
+                        or route_name.startswith(constants.PREFIX_VLAN)         # VLAN routes
+                        or route_name.startswith(constants.PREFIX_NETWORK)      # subnet routes
+                ):
+                    return True
+
+                # Check if route is relevant to a network
+                for network_id in network_ids:
+                    existing_network = existing_networks.get(network_id)
+
+                    # Delete (don't ignore) routes of networks that don't exist
+                    if not existing_network:
                         continue
 
-                if route['name'] in [f"{constants.PREFIX_VLAN}{network.vlan_id}"
-                                     for network in existing_networks.values()]:
-                    continue
+                    # Ignore VLAN routes for existing networks
+                    if route_name == f"{constants.PREFIX_VLAN}{existing_network.vlan_id}":
+                        return True
 
-                # Skip unmanaged routes
-                if not (route['name'].startswith(constants.PREFIX_NETWORK_LEGACY)
-                        or route['name'].startswith(constants.PREFIX_VLAN)
-                        or route['name'].startswith(constants.PREFIX_NETWORK)):
-                    continue
+                    # Ignore legacy routes for existing networks
+                    if route_name == f"{constants.PREFIX_NETWORK_LEGACY}{network_id}" and \
+                            route['network'].endswith(str(existing_network.vlan_id)):
+                        return True
 
-                # Skip routes for existing subnets
-                for network_id in existing_networks:
-                    for subnet_id in existing_networks[network_id].subnets:
+                    # Ignore subnet routes for existing subnets
+                    for subnet_id in existing_network.subnets:
                         subnet_route_name = f5_tasks.get_subnet_route_name(network_id, subnet_id)
-                        if route['name'] == subnet_route_name:
-                            continue
+                        if route_name == subnet_route_name:
+                            return True
 
-                # Cleanup
-                path = f"/mgmt/tm/net/route/{route['fullPath'].replace('/', '~')}"
-                fs.append(executor.submit(bigip.delete, path=path))
+                # Delete the route
+                return False
+
+            for route in res.json().get('items', []):
+                if not ignore_route(route):
+                    path = f"/mgmt/tm/net/route/{route['fullPath'].replace('/', '~')}"
+                    fs.append(executor.submit(bigip.delete, path=path))
 
             """ 2. Delete all orphaned selfips """
             res = bigip.get(path='/mgmt/tm/net/self')
@@ -335,11 +348,12 @@ class L2SyncManager(BaseTaskFlowEngine):
             for route_domain in res.json().get('items', []):
                 if route_domain['name'] in [f"{constants.PREFIX_NETWORK_LEGACY}{id}" for id in network_ids]:
                     net_id = route_domain['name'][len(constants.PREFIX_NETWORK_LEGACY):]
-                    # Consider routedomain with unexpected vlan to be obsoloted
+                    # Consider route domain with unexpected vlan to be obsolete
                     if net_id in existing_networks and route_domain['id'] == existing_networks[net_id].vlan_id:
                         continue
 
-                if route_domain['name'] in [f"{constants.PREFIX_VLAN}{network.vlan_id}" for network in existing_networks.values()]:
+                if route_domain['name'] in [f"{constants.PREFIX_VLAN}{network.vlan_id}"
+                                            for network in existing_networks.values()]:
                     continue
 
                 # Skip unmanaged route domains
@@ -355,7 +369,8 @@ class L2SyncManager(BaseTaskFlowEngine):
             res = bigip.get(path='/mgmt/tm/net/vlan')
             res.raise_for_status()
             for vlan in res.json().get('items', []):
-                if vlan['name'] in [f"{constants.PREFIX_VLAN}{network.vlan_id}" for network in existing_networks.values()]:
+                if vlan['name'] in [f"{constants.PREFIX_VLAN}{network.vlan_id}"
+                                    for network in existing_networks.values()]:
                     continue
 
                 # Skip unmanaged vlans
