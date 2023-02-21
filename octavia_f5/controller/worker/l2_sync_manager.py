@@ -269,8 +269,8 @@ class L2SyncManager(BaseTaskFlowEngine):
     def full_sync(self, loadbalancers: [octavia_models.LoadBalancer]):
         """ Initiates a full sync for all L2 entities, this is a very api-heavy function. """
         network_ids = set(lb.vip.network_id for lb in loadbalancers)
-        networks = {net.id: net for net in
-                    self.executor.map(self._network_driver.get_network, network_ids, timeout=60)}
+        existing_networks = {net.id: net for net in
+                             self.executor.map(self._network_driver.get_network, network_ids, timeout=60)}
         selfip_ports = list(chain.from_iterable(
             self._network_driver.ensure_selfips(loadbalancers, cleanup_orphans=True)))
 
@@ -289,10 +289,10 @@ class L2SyncManager(BaseTaskFlowEngine):
                 if route['name'] in [f"net-{id}" for id in network_ids]:
                     net_id = route['name'][len('net-'):]
                     # Consider route with unexpected vlan to be obsoloted
-                    if net_id in networks and route['network'].endswith(str(networks[net_id].vlan_id)):
+                    if net_id in existing_networks and route['network'].endswith(str(existing_networks[net_id].vlan_id)):
                         continue
 
-                if route['name'] in [f"vlan-{network.vlan_id}" for network in networks.values()]:
+                if route['name'] in [f"vlan-{network.vlan_id}" for network in existing_networks.values()]:
                     continue
 
                 # Skip unmanaged routes
@@ -302,8 +302,8 @@ class L2SyncManager(BaseTaskFlowEngine):
                     continue
 
                 # Skip routes for existing subnets
-                for network_id in networks:
-                    for subnet_id in networks[network_id].subnets:
+                for network_id in existing_networks:
+                    for subnet_id in existing_networks[network_id].subnets:
                         subnet_route_name = f5_tasks.get_subnet_route_name(network_id, subnet_id)
                         if route['name'] == subnet_route_name:
                             continue
@@ -334,10 +334,10 @@ class L2SyncManager(BaseTaskFlowEngine):
                 if route_domain['name'] in [f"net-{id}" for id in network_ids]:
                     net_id = route_domain['name'][len('net-'):]
                     # Consider routedomain with unexpected vlan to be obsoloted
-                    if net_id in networks and route_domain['id'] == networks[net_id].vlan_id:
+                    if net_id in existing_networks and route_domain['id'] == existing_networks[net_id].vlan_id:
                         continue
 
-                if route_domain['name'] in [f"vlan-{network.vlan_id}" for network in networks.values()]:
+                if route_domain['name'] in [f"vlan-{network.vlan_id}" for network in existing_networks.values()]:
                     continue
 
                 # Skip unmanaged route domains
@@ -352,7 +352,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             res = bigip.get(path='/mgmt/tm/net/vlan')
             res.raise_for_status()
             for vlan in res.json().get('items', []):
-                if vlan['name'] in [f"vlan-{network.vlan_id}" for network in networks.values()]:
+                if vlan['name'] in [f"vlan-{network.vlan_id}" for network in existing_networks.values()]:
                     continue
 
                 # Skip unmanaged vlans
@@ -364,12 +364,12 @@ class L2SyncManager(BaseTaskFlowEngine):
                 fs.append(executor.submit(bigip.delete, path=path))
 
         """ 5. Full sync """
-        for network in networks.values():
+        for network in existing_networks.values():
             selfips = [sip for sip in selfip_ports if sip.network_id == network.id]
             fs.append(executor.submit(self.ensure_l2_flow, selfips=selfips, network_id=network.id))
 
         """ 6. Execute cleanup and full-sync and collect any errors """
-        done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout * len(networks))
+        done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout * len(existing_networks))
         for f in done | not_done:
             try:
                 res = f.result(0)
