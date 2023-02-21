@@ -30,7 +30,7 @@ class F5Flows(object):
 
         ensure_routedomain = f5_tasks.EnsureRouteDomain()
         ensure_default_route = f5_tasks.EnsureDefaultRoute()
-        ensure_static_routes = f5_tasks.SyncStaticRoutes(inject={'selfips': selfips})
+        ensure_static_routes = f5_tasks.SyncSubnetRoutes(inject={'selfips': selfips})
         ensure_vlan = f5_tasks.EnsureVLAN()
 
         ensure_l2_flow = linear_flow.Flow('ensure-l2-flow')
@@ -49,8 +49,8 @@ class F5Flows(object):
                                                    inject={'port': selfip})
             cleanup_selfip_subflow.add(cleanup_selfip)
 
-        cleanup_static_routes = f5_tasks.SyncStaticRoutes(inject={'selfips': []})
-        cleanup_route = f5_tasks.CleanupRoute()
+        cleanup_static_routes = f5_tasks.CleanupSubnetRoutes()
+        cleanup_route = f5_tasks.CleanupDefaultRoute()
         cleanup_routedomain = f5_tasks.CleanupRouteDomain()
         cleanup_vlan = f5_tasks.CleanupVLAN()
 

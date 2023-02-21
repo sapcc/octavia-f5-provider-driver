@@ -107,6 +107,8 @@ class ControllerWorker(object):
         super(ControllerWorker, self).__init__()
 
     def as3worker(self):
+        """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
+
         @lockutils.synchronized("f5sync", fair=True)
         def f5sync(network_id, device, *args):
             self._metric_as3worker_queue.labels(octavia_host=CONF.host).set(self.queue.qsize())
@@ -136,7 +138,7 @@ class ControllerWorker(object):
             for lb in loadbalancers:
                 self._reset_in_use_quota(lb.project_id)
 
-        """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
+        # run sync loop
         while True:
             try:
                 network_id, device = self.queue.get()

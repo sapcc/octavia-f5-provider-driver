@@ -191,7 +191,7 @@ class TestF5Tasks(base.TestCase):
             ]
         )
 
-        engines.run(f5_tasks.SyncStaticRoutes(),
+        engines.run(f5_tasks.SyncSubnetRoutes(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'selfips': [mock_selfip]})
@@ -205,7 +205,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_route_response = test_f5_flows.MockResponse({'items': []}, status_code=200)
         mock_bigip.get.return_value = mock_route_response
-        engines.run(f5_tasks.SyncStaticRoutes(),
+        engines.run(f5_tasks.SyncSubnetRoutes(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'selfips': [mock_selfip]})
