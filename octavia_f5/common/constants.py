@@ -32,6 +32,7 @@ PREFIX_SUBNET = 'sub_'
 PREFIX_IRULE = 'irule_'
 PREFIX_MEMBER = 'member_'
 PREFIX_SECRET = 'secret_'
+PREFIX_VLAN = 'vlan-'
 
 APPLICATION_TCP = 'tcp'
 APPLICATION_UDP = 'udp'

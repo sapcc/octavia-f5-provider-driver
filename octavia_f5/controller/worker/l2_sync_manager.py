@@ -286,18 +286,20 @@ class L2SyncManager(BaseTaskFlowEngine):
             res.raise_for_status()
             for route in res.json().get('items', []):
                 # Check if route name is a legacy route net-{network_id}
-                if route['name'] in [f"net-{id}" for id in network_ids]:
-                    net_id = route['name'][len('net-'):]
+                if route['name'] in [f"{constants.PREFIX_NETWORK_LEGACY}{id}" for id in network_ids]:
+                    net_id = route['name'][len(constants.PREFIX_NETWORK_LEGACY):]
                     # Consider route with unexpected vlan to be obsoloted
-                    if net_id in existing_networks and route['network'].endswith(str(existing_networks[net_id].vlan_id)):
+                    if net_id in existing_networks and route['network'].endswith(
+                            str(existing_networks[net_id].vlan_id)):
                         continue
 
-                if route['name'] in [f"vlan-{network.vlan_id}" for network in existing_networks.values()]:
+                if route['name'] in [f"{constants.PREFIX_VLAN}{network.vlan_id}"
+                                     for network in existing_networks.values()]:
                     continue
 
                 # Skip unmanaged routes
                 if not (route['name'].startswith(constants.PREFIX_NETWORK_LEGACY)
-                        or route['name'].startswith('vlan-')
+                        or route['name'].startswith(constants.PREFIX_VLAN)
                         or route['name'].startswith(constants.PREFIX_NETWORK)):
                     continue
 
@@ -331,17 +333,18 @@ class L2SyncManager(BaseTaskFlowEngine):
             res = bigip.get(path='/mgmt/tm/net/route-domain')
             res.raise_for_status()
             for route_domain in res.json().get('items', []):
-                if route_domain['name'] in [f"net-{id}" for id in network_ids]:
-                    net_id = route_domain['name'][len('net-'):]
+                if route_domain['name'] in [f"{constants.PREFIX_NETWORK_LEGACY}{id}" for id in network_ids]:
+                    net_id = route_domain['name'][len(constants.PREFIX_NETWORK_LEGACY):]
                     # Consider routedomain with unexpected vlan to be obsoloted
                     if net_id in existing_networks and route_domain['id'] == existing_networks[net_id].vlan_id:
                         continue
 
-                if route_domain['name'] in [f"vlan-{network.vlan_id}" for network in existing_networks.values()]:
+                if route_domain['name'] in [f"{constants.PREFIX_VLAN}{network.vlan_id}" for network in existing_networks.values()]:
                     continue
 
                 # Skip unmanaged route domains
-                if not (route_domain['name'].startswith('net-') or route_domain['name'].startswith('vlan-')):
+                if not (route_domain['name'].startswith(constants.PREFIX_NETWORK_LEGACY) or
+                        route_domain['name'].startswith(constants.PREFIX_VLAN)):
                     continue
 
                 # Cleanup Route-Domain
@@ -352,7 +355,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             res = bigip.get(path='/mgmt/tm/net/vlan')
             res.raise_for_status()
             for vlan in res.json().get('items', []):
-                if vlan['name'] in [f"vlan-{network.vlan_id}" for network in existing_networks.values()]:
+                if vlan['name'] in [f"{constants.PREFIX_VLAN}{network.vlan_id}" for network in existing_networks.values()]:
                     continue
 
                 # Skip unmanaged vlans
