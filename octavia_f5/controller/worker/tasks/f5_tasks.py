@@ -28,6 +28,11 @@ LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
 
+def get_subnet_route_name(network_id, subnet_id):
+    return "{}{}_{}{}".format(constants.PREFIX_NETWORK, network_id,
+                              constants.PREFIX_SUBNET, subnet_id)
+
+
 class EnsureVLAN(task.Task):
     default_provides = 'device_vlan'
 
@@ -291,10 +296,6 @@ class SyncSubnetRoutes(task.Task):
                     if fixed_ip.subnet_id == subnet:
                         return True
             return False
-
-        def get_subnet_route_name(network_id, subnet_id):
-            return "{}{}_{}{}".format(constants.PREFIX_NETWORK, network_id,
-                                      constants.PREFIX_SUBNET, subnet_id)
 
         # Fetch existing routes
         response = bigip.get(path=f"/mgmt/tm/net/route?$filter=partition+eq+Common").json()
