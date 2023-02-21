@@ -25,6 +25,7 @@ from octavia.common import data_models as octavia_models
 from octavia.common.base_taskflow import BaseTaskFlowEngine
 from octavia.network import base
 from octavia.network import data_models as network_models
+from octavia_f5.common import constants
 from octavia_f5.controller.worker.flows import f5_flows
 from octavia_f5.controller.worker.tasks import f5_tasks
 from octavia_f5.restclient.bigip import bigip_auth
@@ -295,8 +296,17 @@ class L2SyncManager(BaseTaskFlowEngine):
                     continue
 
                 # Skip unmanaged routes
-                if not (route['name'].startswith('net-') or route['name'].startswith('vlan-')):
+                if not (route['name'].startswith(constants.PREFIX_NETWORK_LEGACY)
+                        or route['name'].startswith('vlan-')
+                        or route['name'].startswith(constants.PREFIX_NETWORK)):
                     continue
+
+                # Skip routes for existing subnets
+                for network_id in networks:
+                    for subnet_id in networks[network_id].subnets:
+                        subnet_route_name = f5_tasks.get_subnet_route_name(network_id, subnet_id)
+                        if route['name'] == subnet_route_name:
+                            continue
 
                 # Cleanup
                 path = f"/mgmt/tm/net/route/{route['fullPath'].replace('/', '~')}"
