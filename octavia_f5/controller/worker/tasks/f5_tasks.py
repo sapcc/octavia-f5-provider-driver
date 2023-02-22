@@ -401,6 +401,8 @@ class CleanupSubnetRoutes(task.Task):
 
 
 class RemoveSelfIP(task.Task):
+
+    @decorators.RaisesIControlRestError()
     def execute(self, port: network_models.Port,
                 bigip: bigip_restclient.BigIPRestClient):
         """ Task to delete SelfIP """
@@ -411,6 +413,8 @@ class RemoveSelfIP(task.Task):
 
 
 class CleanupRouteDomain(task.Task):
+
+    @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient):
 
@@ -432,6 +436,8 @@ class CleanupRouteDomain(task.Task):
 
 
 class CleanupVLAN(task.Task):
+
+    @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient):
         """ Task to delete VLAN """
@@ -456,6 +462,8 @@ class GetVCMPGuests(task.Task):
 
 
 class CleanupVLANIfNotOwnedByGuest(task.Task):
+
+    @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
                 bigip_guest_names: [str],
@@ -480,6 +488,7 @@ class CleanupVLANIfNotOwnedByGuest(task.Task):
 
 class CleanupGuestVLAN(task.Task):
     """ Removes vlan assignment of a VCMP Guest """
+
     @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
