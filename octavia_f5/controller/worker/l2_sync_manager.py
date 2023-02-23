@@ -26,7 +26,6 @@ from octavia.common.base_taskflow import BaseTaskFlowEngine
 from octavia.network import base
 from octavia.network import data_models as network_models
 from octavia_f5.controller.worker.flows import f5_flows
-from octavia_f5.controller.worker.tasks import f5_tasks
 from octavia_f5.restclient.bigip import bigip_auth
 from octavia_f5.restclient.bigip.bigip_restclient import BigIPRestClient
 from octavia_f5.utils import driver_utils, decorators
@@ -119,12 +118,6 @@ class L2SyncManager(BaseTaskFlowEngine):
                                                                  'remove': [p.id for p in selfips['remove']]})
 
         e = self.taskflow_load(self._f5flows.sync_l2_selfips(selfips), store=store)
-        with tf_logging.LoggingListener(e, log=LOG):
-            e.run()
-
-    def _do_sync_l2_static_routes_flow(self, selfips: [network_models.Port], store: dict):
-        ensure_static_routes = f5_tasks.SyncStaticRoutes(inject={'selfips': selfips})
-        e = self.taskflow_load(ensure_static_routes, store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
@@ -252,8 +245,6 @@ class L2SyncManager(BaseTaskFlowEngine):
             fs[self.executor.submit(self._do_sync_l2_selfips_flow,
                                     expected_selfips=selfips_for_host,
                                     store=store)] = bigip
-            fs[self.executor.submit(self._do_sync_l2_static_routes_flow,
-                                    selfips=selfips_for_host, store=store)] = bigip
 
         done, not_done = futures.wait(fs, timeout=10)
         for f in done | not_done:

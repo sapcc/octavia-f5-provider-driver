@@ -17,7 +17,6 @@ from unittest import mock
 from oslo_config import cfg
 from oslo_config import fixture as oslo_fixture
 from oslo_log import log as logging
-from oslo_utils import uuidutils
 from taskflow import engines
 
 import octavia.tests.unit.base as base
@@ -63,7 +62,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_bigip.get.return_value = mock_route_response
 
-        engines.run(f5_tasks.EnsureDefaultRoute(),
+        engines.run(f5_tasks.EnsureRoute(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'subnet_id': 'test-subnet-id'})
@@ -97,7 +96,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404),
                                       mock_route_response]
 
-        engines.run(f5_tasks.EnsureDefaultRoute(),
+        engines.run(f5_tasks.EnsureRoute(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'subnet_id': 'test-subnet-id'})
@@ -135,7 +134,7 @@ class TestF5Tasks(base.TestCase):
         # Patch should fail
         mock_bigip.patch.side_effect = test_f5_flows.empty_response
 
-        engines.run(f5_tasks.EnsureDefaultRoute(),
+        engines.run(f5_tasks.EnsureRoute(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'subnet_id': 'test-subnet-id'})
@@ -151,72 +150,3 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.post.assert_called_with(json={
             'name': 'vlan-1234', 'gw': '8.8.8.8%1234', 'network': 'default%1234'},
             path='/mgmt/tm/net/route')
-
-    @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
-                ".get_subnet")
-    def test_SyncStaticRoutes(self, mock_get_subnet):
-        mock_subnets = [
-            network_models.Subnet(
-                id=uuidutils.generate_uuid(), gateway_ip='2.3.4.5',
-                cidr='2.3.4.0/24', network_id='test-network-id'),
-            network_models.Subnet(
-                id=uuidutils.generate_uuid(), gateway_ip='10.0.0.1',
-                cidr='10.0.0.0/24', network_id='test-network-id'),
-        ]
-        mock_get_subnet.side_effect = mock_subnets
-        mock_network = f5_network_models.Network(
-            mtu=9000, id=uuidutils.generate_uuid(),
-            subnets=[subnet.id for subnet in mock_subnets],
-            segments=[{'provider:physical_network': 'physnet',
-                       'provider:segmentation_id': 1234}]
-        )
-
-        mock_route_response = test_f5_flows.MockResponse({
-            'items': [
-                {
-                    'name': f"subnet-{mock_subnets[1].id}",
-                    'tmInterface': 'vlan-1234',
-                    'network': '10.0.0.2%1234/24'
-                }
-            ]
-        }, status_code=200)
-
-        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_bigip.get.return_value = mock_route_response
-        mock_selfip = network_models.Port(
-            name=f"local-bigipmockhost-test-subnet-id",
-            fixed_ips=[network_models.FixedIP(
-                ip_address='2.3.4.255',
-                subnet_id=mock_subnets[0].id)
-            ]
-        )
-
-        engines.run(f5_tasks.SyncStaticRoutes(),
-                    store={'network': mock_network,
-                           'bigip': mock_bigip,
-                           'selfips': [mock_selfip]})
-
-        mock_bigip.get.assert_called_with(
-            path=f"/mgmt/tm/net/route?$filter=partition+eq+net_{mock_network.id.replace('-','_')}")
-        mock_bigip.post.assert_not_called()
-        mock_bigip.delete.assert_not_called()
-
-        # Check creating new route
-        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_route_response = test_f5_flows.MockResponse({'items': []}, status_code=200)
-        mock_bigip.get.return_value = mock_route_response
-        engines.run(f5_tasks.SyncStaticRoutes(),
-                    store={'network': mock_network,
-                           'bigip': mock_bigip,
-                           'selfips': [mock_selfip]})
-
-        mock_bigip.get.assert_called_with(
-            path=f"/mgmt/tm/net/route?$filter=partition+eq+net_{mock_network.id.replace('-','_')}")
-        mock_bigip.delete.assert_not_called()
-        mock_bigip.post.assert_called_with(
-            path='/mgmt/tm/net/route', json={
-                'name': f"subnet-{mock_subnets[1].id}",
-                'tmInterface': '/Common/vlan-1234',
-                'network': '2.3.4.0%1234/24',
-                'partition': f"net_{mock_network.id.replace('-','_')}"}
-        )

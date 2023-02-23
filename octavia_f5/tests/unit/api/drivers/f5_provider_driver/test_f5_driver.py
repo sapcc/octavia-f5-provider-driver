@@ -17,11 +17,9 @@ from oslo_config import cfg
 from oslo_config import fixture as oslo_fixture
 
 from octavia.common import constants as consts
-from octavia.common import exceptions
 from octavia.tests.unit import base
 from octavia.tests.common import sample_data_models
 from octavia_f5.api.drivers.f5_driver import driver
-from octavia_f5.common import constants as f5_consts
 from octavia_lib.api.drivers import data_models as driver_dm
 
 
@@ -241,31 +239,6 @@ class TestF5Driver(base.TestRpc):
         self.amp_driver.health_monitor_create(provider_HM)
         payload = {consts.HEALTH_MONITOR_ID: self.sample_data.hm1_id}
         mock_cast.assert_called_with({}, 'create_health_monitor', **payload)
-
-    @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
-    def test_health_monitor_create_invalid_delay(self, mock_cast):
-        provider_HM = driver_dm.HealthMonitor(
-            healthmonitor_id=self.sample_data.hm1_id)
-        provider_HM.delay = f5_consts.HEALTH_MONITOR_DELAY_MAX + 1
-        self.assertRaises(exceptions.ValidationException, self.amp_driver.health_monitor_create, provider_HM)
-        mock_cast.assert_not_called()
-
-    @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
-    def test_health_monitor_update(self, mock_cast):
-        provider_HM = driver_dm.HealthMonitor(
-            healthmonitor_id=self.sample_data.hm1_id)
-        self.amp_driver.health_monitor_update(provider_HM, provider_HM)
-        payload = {consts.HEALTH_MONITOR_ID: self.sample_data.hm1_id}
-        mock_cast.assert_called_with({}, 'update_health_monitor', **payload)
-
-    @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
-    def test_health_monitor_update_invalid_delay(self, mock_cast):
-        provider_HM = driver_dm.HealthMonitor(
-            healthmonitor_id=self.sample_data.hm1_id)
-        provider_HM.delay = f5_consts.HEALTH_MONITOR_DELAY_MAX + 1
-        self.assertRaises(exceptions.ValidationException,self.amp_driver.health_monitor_update, provider_HM,
-                          provider_HM)
-        mock_cast.assert_not_called()
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
     def test_health_monitor_delete(self, mock_cast):

@@ -19,11 +19,9 @@ from oslo_log import log as logging
 
 from octavia.api.drivers.amphora_driver.v1 import driver
 from octavia.common import constants as consts
-from octavia.common import exceptions as api_exceptions
 from octavia.db import api as db_apis
 
 from octavia_f5.api.drivers.f5_driver import arbiter
-from octavia_f5.common import constants as f5_consts
 from octavia_f5.utils import driver_utils
 
 CONF = cfg.CONF
@@ -175,17 +173,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         client.cast({}, 'batch_update_members', **payload)
 
     # Health Monitor
-    def _health_monitor_check(self, healthmonitor):
-        delay = healthmonitor.delay
-        if not delay:
-            return
-        if delay > f5_consts.HEALTH_MONITOR_DELAY_MAX:
-            raise api_exceptions.ValidationException(
-                detail='Delay value for health monitor too high. Must not be higher than {}.'.format(
-                    f5_consts.HEALTH_MONITOR_DELAY_MAX))
-
     def health_monitor_create(self, healthmonitor):
-        self._health_monitor_check(healthmonitor)
         db_pool = self.repositories.pool.get(db_apis.get_session(), id=healthmonitor.pool_id)
         payload = {consts.HEALTH_MONITOR_ID: healthmonitor.healthmonitor_id}
         client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
@@ -198,7 +186,6 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         client.cast({}, 'delete_health_monitor', **payload)
 
     def health_monitor_update(self, old_healthmonitor, new_healthmonitor):
-        self._health_monitor_check(new_healthmonitor)
         db_pool = self.repositories.pool.get(db_apis.get_session(), id=old_healthmonitor.pool_id)
         payload = {consts.HEALTH_MONITOR_ID: new_healthmonitor.healthmonitor_id,
                    consts.HEALTH_MONITOR_UPDATES: {}}

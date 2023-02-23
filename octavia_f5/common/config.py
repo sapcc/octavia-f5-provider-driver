@@ -202,7 +202,7 @@ f5_networking_opts = [
                 default=[],
                 help=_('List of vcmp guest names to use for identifying the '
                        'correct vcmp guest - defaults to the bigip hostname.')),
-    cfg.BoolOpt('route_only_on_active',
+    cfg.BoolOpt('route_on_active',
                 default=True,
                 help=_("Sync routes only to active bigip device, this option"
                        "is useful if automatic full-sync is activated.")),
