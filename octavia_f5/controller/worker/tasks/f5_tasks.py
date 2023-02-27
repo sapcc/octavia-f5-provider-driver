@@ -303,7 +303,7 @@ class SyncStaticRoutes(task.Task):
         device_routes = device_response.json()
 
         # Remove vanished subnet routes
-        for device_route in device_routes['items']:
+        for device_route in device_routes.get('items'):
             # Skip already provisioned subnets
             if device_route['name'] not in [f"subnet-{subnet}" for subnet in static_route_subnets]:
                 res = bigip.delete(path=device_route['path'])
