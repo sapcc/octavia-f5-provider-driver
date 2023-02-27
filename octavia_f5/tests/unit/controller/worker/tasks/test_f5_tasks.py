@@ -154,7 +154,7 @@ class TestF5Tasks(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test_SyncStaticRoutes(self, mock_get_subnet):
+    def test_SyncSubnetRoutes(self, mock_get_subnet):
         mock_subnets = [
             network_models.Subnet(
                 id=uuidutils.generate_uuid(), gateway_ip='2.3.4.5',
@@ -171,10 +171,11 @@ class TestF5Tasks(base.TestCase):
                        'provider:segmentation_id': 1234}]
         )
 
+        # No subnet route shall be created when every subnet already has either a SelfIP or a subnet route
         mock_route_response = test_f5_flows.MockResponse({
             'items': [
                 {
-                    'name': f"subnet-{mock_subnets[1].id}",
+                    'name': f5_tasks.get_subnet_route_name(mock_network.id, mock_subnets[1].id),
                     'tmInterface': 'vlan-1234',
                     'network': '10.0.0.2%1234/24'
                 }
@@ -191,13 +192,13 @@ class TestF5Tasks(base.TestCase):
             ]
         )
 
-        engines.run(f5_tasks.SyncStaticRoutes(),
+        engines.run(f5_tasks.SyncSubnetRoutes(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'selfips': [mock_selfip]})
 
         mock_bigip.get.assert_called_with(
-            path=f"/mgmt/tm/net/route?$filter=partition+eq+net_{mock_network.id.replace('-','_')}")
+            path=f"/mgmt/tm/net/route?$filter=partition+eq+Common")
         mock_bigip.post.assert_not_called()
         mock_bigip.delete.assert_not_called()
 
@@ -205,18 +206,19 @@ class TestF5Tasks(base.TestCase):
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_route_response = test_f5_flows.MockResponse({'items': []}, status_code=200)
         mock_bigip.get.return_value = mock_route_response
-        engines.run(f5_tasks.SyncStaticRoutes(),
+        engines.run(f5_tasks.SyncSubnetRoutes(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'selfips': [mock_selfip]})
 
         mock_bigip.get.assert_called_with(
-            path=f"/mgmt/tm/net/route?$filter=partition+eq+net_{mock_network.id.replace('-','_')}")
+            path=f"/mgmt/tm/net/route?$filter=partition+eq+Common")
         mock_bigip.delete.assert_not_called()
         mock_bigip.post.assert_called_with(
-            path='/mgmt/tm/net/route', json={
-                'name': f"subnet-{mock_subnets[1].id}",
+            path='/mgmt/tm/net/route',
+            json={
+                'name': f5_tasks.get_subnet_route_name(mock_network.id, mock_subnets[1].id),
                 'tmInterface': '/Common/vlan-1234',
-                'network': '2.3.4.0%1234/24',
-                'partition': f"net_{mock_network.id.replace('-','_')}"}
+                'network': '2.3.4.0%1234/24'
+            }
         )

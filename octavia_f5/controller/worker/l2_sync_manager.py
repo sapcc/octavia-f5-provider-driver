@@ -123,7 +123,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             e.run()
 
     def _do_sync_l2_static_routes_flow(self, selfips: [network_models.Port], store: dict):
-        ensure_static_routes = f5_tasks.SyncStaticRoutes(inject={'selfips': selfips})
+        ensure_static_routes = f5_tasks.SyncSubnetRoutes(inject={'selfips': selfips})
         e = self.taskflow_load(ensure_static_routes, store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
