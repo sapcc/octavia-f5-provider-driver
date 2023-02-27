@@ -241,8 +241,8 @@ class EnsureDefaultRoute(task.Task):
                 subnet_id: str,
                 network: f5_network_models.Network):
 
-        if CONF.networking.route_on_active and not bigip.is_active:
-            # Skip passive device if route_on_active is enabled
+        # Skip passive device if routes_only_on_active is enabled
+        if CONF.networking.routes_only_on_active and not bigip.is_active:
             return None
 
         name = f"vlan-{network.vlan_id}"
@@ -286,8 +286,8 @@ class SyncSubnetRoutes(task.Task):
                 selfips: [network_models.Port],
                 network: f5_network_models.Network):
 
-        # Skip passive device if route_on_active is enabled
-        if CONF.networking.route_on_active and not bigip.is_active:
+        # Skip passive device if routes_only_on_active is enabled
+        if CONF.networking.routes_only_on_active and not bigip.is_active:
             return None
 
         def subnet_in_selfips(subnet, selfips):
