@@ -112,7 +112,7 @@ class ControllerWorker(object):
         @lockutils.synchronized("f5sync", fair=True)
         def f5sync(network_id, device, *args):
             self._metric_as3worker_queue.labels(octavia_host=CONF.host).set(self.queue.qsize())
-            loadbalancers = self._get_all_loadbalancer(network_id)
+            loadbalancers = self._get_all_loadbalancers(network_id)
             LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
                       self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
             selfips = list(chain.from_iterable(
@@ -275,7 +275,7 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def _get_all_loadbalancer(self, network_id):
+    def _get_all_loadbalancers(self, network_id):
         LOG.debug("Get load balancers from DB for network id: %s ", network_id)
         return self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
@@ -606,7 +606,7 @@ class ControllerWorker(object):
         LOG.debug("add_loadbalancer: force adding loadbalancer '%s' for tenant '%s'",
                   load_balancer_id, network_id)
 
-        loadbalancers = self._get_all_loadbalancer(network_id)
+        loadbalancers = self._get_all_loadbalancers(network_id)
         if load_balancer_id not in [_lb.id for _lb in loadbalancers]:
             loadbalancers.append(lb)
 
@@ -635,7 +635,7 @@ class ControllerWorker(object):
         LOG.debug("remove_loadbalancer: force removing loadbalancer '%s' for tenant '%s'",
                   load_balancer_id, network_id)
 
-        loadbalancers = self._get_all_loadbalancer(network_id)
+        loadbalancers = self._get_all_loadbalancers(network_id)
         loadbalancers = [_lb for _lb in loadbalancers if _lb.id != load_balancer_id]
 
         selfips = list(chain.from_iterable(
