@@ -171,6 +171,13 @@ class TestF5Tasks(base.TestCase):
                        'provider:segmentation_id': 1234}]
         )
 
+        # Check that subnet route names always include the network ID as well as the subnet ID
+        subnet_route_name = f5_tasks.get_subnet_route_name(mock_network.id, mock_subnets[0].id)
+        self.assertTrue(mock_network.id in subnet_route_name
+                        or mock_network.id.replace('-', '_') in subnet_route_name)
+        self.assertTrue(mock_subnets[0].id in subnet_route_name
+                        or mock_subnets[0].id.replace('-', '_') in subnet_route_name)
+
         # No subnet route shall be created when every subnet already has either a SelfIP or a subnet route
         mock_route_response = test_f5_flows.MockResponse({
             'items': [
