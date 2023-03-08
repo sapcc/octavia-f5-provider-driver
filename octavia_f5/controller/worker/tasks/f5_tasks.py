@@ -325,7 +325,7 @@ class SyncSubnetRoutes(task.Task):
 
             # Delete unneeded route
             if delete_device_route:
-                res = bigip.delete(path=existing_route['path'])
+                res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{existing_route_name}")
                 res.raise_for_status()
 
         # Add missing subnet routes
@@ -392,7 +392,7 @@ class CleanupSubnetRoutes(task.Task):
         for existing_route in existing_routes:
             existing_route_name = existing_route['name']
             if existing_route_name.startswith(subnet_route_network_prefix):
-                res = bigip.delete(path=existing_route['path'])
+                res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{existing_route_name}")
                 res.raise_for_status()
 
 
