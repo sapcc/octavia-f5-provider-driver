@@ -315,12 +315,13 @@ class SyncSubnetRoutes(task.Task):
 
             # delete the route or ignore it if it's still needed
             delete_device_route = True
-            for subnet_that_needs_route in subnets_that_need_routes:
 
-                # if the route is a needed subnet route, don't touch it
+            # if the existing route is a needed subnet route neither delete nor create it
+            for subnet_that_needs_route in subnets_that_need_routes:
                 if existing_route_name == get_subnet_route_name(network.id, subnet_that_needs_route):
                     subnets_that_need_routes.remove(subnet_that_needs_route)
                     delete_device_route = False
+                    break
 
             # Delete unneeded route
             if delete_device_route:
