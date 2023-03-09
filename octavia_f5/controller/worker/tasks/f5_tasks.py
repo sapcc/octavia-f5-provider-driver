@@ -282,7 +282,7 @@ class EnsureDefaultRoute(task.Task):
         return device_route
 
 
-class SyncSubnetRoutes(task.Task):
+class EnsureSubnetRoutes(task.Task):
     """ Task to create static subnet routes """
 
     @decorators.RaisesIControlRestError()
@@ -377,7 +377,7 @@ class CleanupDefaultRoute(task.Task):
 class CleanupSubnetRoutes(task.Task):
     """ Task to clean up static subnet routes.
 
-    We cannot clean up static subnet routes in SyncSubnetRoutes, because that function does not know whether the
+    We cannot clean up static subnet routes in EnsureSubnetRoutes, because that function does not know whether the
     network/tenant is to be removed completely, and thus blindly syncs routes for all subnets of the network,
     even though they have to be deleted.
     """
