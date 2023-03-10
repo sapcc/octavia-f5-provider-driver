@@ -313,18 +313,11 @@ class SyncSubnetRoutes(task.Task):
             if not existing_route_name.startswith(subnet_route_network_part):
                 continue
 
-            # delete the route or ignore it if it's still needed
-            delete_device_route = True
-
-            # if the existing route is a needed subnet route neither delete nor create it
-            for subnet_that_needs_route in subnets_that_need_routes:
-                if existing_route_name == get_subnet_route_name(network.id, subnet_that_needs_route):
-                    subnets_that_need_routes.remove(subnet_that_needs_route)
-                    delete_device_route = False
-                    break
-
-            # Delete unneeded route
-            if delete_device_route:
+            if existing_route_name in [get_subnet_route_name(network.id, sn) for sn in subnets_that_need_routes]:
+                # if the existing route is a needed subnet route neither delete nor create it
+                subnets_that_need_routes.remove(existing_route_name[len(subnet_route_network_part):])
+            else:
+                # Delete unneeded route
                 res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{existing_route_name}")
                 res.raise_for_status()
 
