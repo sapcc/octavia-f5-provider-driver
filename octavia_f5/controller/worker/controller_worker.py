@@ -112,12 +112,12 @@ class ControllerWorker(object):
         @lockutils.synchronized("f5sync", fair=True)
         def f5sync(network_id, device, *args):
             self._metric_as3worker_queue.labels(octavia_host=CONF.host).set(self.queue.qsize())
-            loadbalancers = self._get_all_loadbalancer(network_id)
+            loadbalancers = self._get_all_loadbalancers(network_id)
             LOG.debug("AS3Worker after pop (queue_size=%d): Refresh tenant '%s' with loadbalancer %s",
                       self.queue.qsize(), network_id, [lb.id for lb in loadbalancers])
             selfips = list(chain.from_iterable(
                 self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=True)))
-            if all(lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers):
+            if not loadbalancers or all(lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers):
                 self.sync.tenant_delete(network_id, device).raise_for_status()
                 # Cleanup l2 configuration and remove selfip ports
                 self.l2sync.remove_l2_flow(network_id, device)
@@ -155,6 +155,7 @@ class ControllerWorker(object):
 
     @periodics.periodic(60*60*24, run_immediately=CONF.f5_agent.sync_immediately)
     def cleanup_orphaned_tenants(self):
+        """ Find tenants without load balancers and put them on the sync queue """
         LOG.info("Running (24h) tenant cleanup")
         session = db_apis.get_session(autocommit=False)
 
@@ -180,6 +181,7 @@ class ControllerWorker(object):
 
     @periodics.periodic(60*4, run_immediately=CONF.f5_agent.sync_immediately)
     def full_sync_reappearing_devices(self):
+        """ For all devices that just came online, put all their tenants on the sync queue """
         session = db_apis.get_session(autocommit=False)
 
         # Get all pending devices
@@ -207,20 +209,17 @@ class ControllerWorker(object):
 
     @periodics.periodic(60*60*24, run_immediately=CONF.f5_agent.sync_immediately)
     def full_sync_l2(self):
+        """ For all tenants on this host, do a L2 sync"""
         session = db_apis.get_session()
-
-        # get all load balancers (of this host)
-        loadbalancers = self._loadbalancer_repo.get_all_from_host(
-            session, show_deleted=False)
+        loadbalancers = self._loadbalancer_repo.get_all_from_host(session, show_deleted=False)
         self.l2sync.full_sync(loadbalancers)
 
     @periodics.periodic(60*2, run_immediately=CONF.f5_agent.sync_immediately)
     def pending_sync(self):
         """
         Reconciliation loop that
-        - synchronizes load balancers that are in a PENDING state
+        - synchronizes load balancers that are in a PENDING state or have child objects in a PENDING state
         - deletes load balancers that are PENDING_DELETE
-        - executes a full sync on F5 devices that were offline but are now back online
         """
 
         # delete load balancers that are PENDING_DELETE
@@ -231,7 +230,7 @@ class ControllerWorker(object):
             LOG.info("Found pending deletion of lb %s", lb.id)
             self.delete_load_balancer(lb.id)
 
-        # Find pending loadbalancer not yet finally assigned to this host
+        # Find load balancers pending creation that are not yet finally assigned to this host
         lbs = []
         pending_create_lbs = self._loadbalancer_repo.get_all(
             db_apis.get_session(),
@@ -243,7 +242,7 @@ class ControllerWorker(object):
                 self.ensure_host_set(lb)
                 lbs.append(lb)
 
-        # Find pending loadbalancer
+        # Find load balancers pending an update
         lbs.extend(self._loadbalancer_repo.get_all_from_host(
             db_apis.get_session(),
             provisioning_status=lib_consts.PENDING_UPDATE))
@@ -275,7 +274,7 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def _get_all_loadbalancer(self, network_id):
+    def _get_all_loadbalancers(self, network_id):
         LOG.debug("Get load balancers from DB for network id: %s ", network_id)
         return self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
@@ -606,7 +605,7 @@ class ControllerWorker(object):
         LOG.debug("add_loadbalancer: force adding loadbalancer '%s' for tenant '%s'",
                   load_balancer_id, network_id)
 
-        loadbalancers = self._get_all_loadbalancer(network_id)
+        loadbalancers = self._get_all_loadbalancers(network_id)
         if load_balancer_id not in [_lb.id for _lb in loadbalancers]:
             loadbalancers.append(lb)
 
@@ -635,7 +634,7 @@ class ControllerWorker(object):
         LOG.debug("remove_loadbalancer: force removing loadbalancer '%s' for tenant '%s'",
                   load_balancer_id, network_id)
 
-        loadbalancers = self._get_all_loadbalancer(network_id)
+        loadbalancers = self._get_all_loadbalancers(network_id)
         loadbalancers = [_lb for _lb in loadbalancers if _lb.id != load_balancer_id]
 
         selfips = list(chain.from_iterable(

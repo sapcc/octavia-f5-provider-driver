@@ -155,6 +155,8 @@ class EnsureRouteDomain(task.Task):
         rd = {'name': f"vlan-{network.vlan_id}", 'vlans': vlans, 'id': network.vlan_id}
 
         device_response = bigip.get(path=f"/mgmt/tm/net/route-domain/{rd['name']}")
+
+        # check for legacy name
         if device_response.status_code == 404:
             path = f"/mgmt/tm/net/route-domain/net-{network.id}"
             device_response = bigip.get(path=path)
@@ -241,8 +243,8 @@ class EnsureDefaultRoute(task.Task):
                 subnet_id: str,
                 network: f5_network_models.Network):
 
-        if CONF.networking.route_on_active and not bigip.is_active:
-            # Skip passive device if route_on_active is enabled
+        # Skip passive device if routes_only_on_active is enabled
+        if CONF.networking.routes_only_on_active and not bigip.is_active:
             return None
 
         name = f"vlan-{network.vlan_id}"
@@ -251,12 +253,14 @@ class EnsureDefaultRoute(task.Task):
         route = {'name': name, 'gw': gw, 'network': network_name}
 
         device_response = bigip.get(path=f"/mgmt/tm/net/route/~Common~{route['name']}")
+
+        # check for legacy name
         if device_response.status_code == 404:
             path=f"/mgmt/tm/net/route/~Common~net-{network.id}"
             device_response = bigip.get(path=path)
 
+        # Create route if not existing
         if device_response.status_code == 404:
-            # Create route_domain if not existing
             res = bigip.post(path='/mgmt/tm/net/route', json=route)
             res.raise_for_status()
             return res.json()
@@ -278,7 +282,7 @@ class EnsureDefaultRoute(task.Task):
         return device_route
 
 
-class SyncSubnetRoutes(task.Task):
+class EnsureSubnetRoutes(task.Task):
     """ Task to create static subnet routes """
 
     @decorators.RaisesIControlRestError()
@@ -286,11 +290,12 @@ class SyncSubnetRoutes(task.Task):
                 selfips: [network_models.Port],
                 network: f5_network_models.Network):
 
-        # Skip passive device if route_on_active is enabled
-        if CONF.networking.route_on_active and not bigip.is_active:
+        # Skip passive device if routes_only_on_active is enabled
+        if CONF.networking.routes_only_on_active and not bigip.is_active:
             return None
 
         def subnet_in_selfips(subnet, selfips):
+            """Check whether a SelfIP exists for the subnet."""
             for selfip in selfips:
                 for fixed_ip in selfip.fixed_ips:
                     if fixed_ip.subnet_id == subnet:
@@ -365,7 +370,7 @@ class CleanupDefaultRoute(task.Task):
 class CleanupSubnetRoutes(task.Task):
     """ Task to clean up static subnet routes.
 
-    We cannot clean up static subnet routes in SyncSubnetRoutes, because that function does not know whether the
+    We cannot clean up static subnet routes in EnsureSubnetRoutes, because that function does not know whether the
     network/tenant is to be removed completely, and thus blindly syncs routes for all subnets of the network,
     even though they have to be deleted.
     """

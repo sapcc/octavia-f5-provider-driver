@@ -30,7 +30,7 @@ class F5Flows(object):
 
         ensure_routedomain = f5_tasks.EnsureRouteDomain()
         ensure_default_route = f5_tasks.EnsureDefaultRoute()
-        ensure_static_routes = f5_tasks.SyncSubnetRoutes(inject={'selfips': selfips})
+        ensure_static_routes = f5_tasks.EnsureSubnetRoutes(inject={'selfips': selfips})
         ensure_vlan = f5_tasks.EnsureVLAN()
 
         ensure_l2_flow = linear_flow.Flow('ensure-l2-flow')
