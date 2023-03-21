@@ -28,6 +28,13 @@ LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
 
+def subnet_in_selfips(subnet, selfips):
+    for selfip in selfips:
+        for fixed_ip in selfip.fixed_ips:
+            if fixed_ip.subnet_id == subnet:
+                return True
+    return False
+
 def get_subnet_route_name(network_id, subnet_id):
     return "{}{}_{}{}".format(constants.PREFIX_NETWORK, network_id,
                               constants.PREFIX_SUBNET, subnet_id)
@@ -278,8 +285,8 @@ class EnsureDefaultRoute(task.Task):
         return device_route
 
 
-class SyncSubnetRoutes(task.Task):
-    """ Task to create static subnet routes """
+class EnsureSubnetRoutes(task.Task):
+    """ Task to create missing needed static subnet routes"""
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
@@ -290,13 +297,6 @@ class SyncSubnetRoutes(task.Task):
         if CONF.networking.route_on_active and not bigip.is_active:
             return None
 
-        def subnet_in_selfips(subnet, selfips):
-            for selfip in selfips:
-                for fixed_ip in selfip.fixed_ips:
-                    if fixed_ip.subnet_id == subnet:
-                        return True
-            return False
-
         # Fetch existing routes
         response = bigip.get(path=f"/mgmt/tm/net/route?$filter=partition+eq+Common").json()
         existing_routes = response.get('items', [])
@@ -304,22 +304,21 @@ class SyncSubnetRoutes(task.Task):
         # subnet routes that must exist (routes already exist for SelfIPs)
         subnets_that_need_routes = [subnet for subnet in network.subnets if not subnet_in_selfips(subnet, selfips)]
 
+        # common prefix for subnet routes of this network
+        subnet_route_network_part = get_subnet_route_name(network.id, '')
+
         # delete existing subnet routes that aren't needed anymore - we'll only provision the missing ones
         for existing_route in existing_routes:
             existing_route_name = existing_route['name']
 
             # ignore routes that are not subnet routes of this network
-            subnet_route_network_part = get_subnet_route_name(network.id, '')
             if not existing_route_name.startswith(subnet_route_network_part):
                 continue
 
-            if existing_route_name in [get_subnet_route_name(network.id, sn) for sn in subnets_that_need_routes]:
-                # if the existing route is a needed subnet route neither delete nor create it
-                subnets_that_need_routes.remove(existing_route_name[len(subnet_route_network_part):])
-            else:
-                # Delete unneeded route
-                res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{existing_route_name}")
-                res.raise_for_status()
+            existing_route_subnet = existing_route_name[len(subnet_route_network_part):]
+            if existing_route_subnet in subnets_that_need_routes:
+                # if the subnet route is a needed one there's no need to provision it again
+                subnets_that_need_routes.remove(existing_route_subnet)
 
         # Add missing subnet routes
         network_driver = driver_utils.get_network_driver()
@@ -363,19 +362,21 @@ class CleanupDefaultRoute(task.Task):
 
 
 class CleanupSubnetRoutes(task.Task):
-    """ Task to clean up static subnet routes.
-
-    We cannot clean up static subnet routes in SyncSubnetRoutes, because that function does not know whether the
-    network/tenant is to be removed completely, and thus blindly syncs routes for all subnets of the network,
-    even though they have to be deleted.
-    """
+    """Task to clean up static subnet routes. If the network is to be deleted, set delete_all=True.
+    Else only the unneeded subnet routes of this network are deleted."""
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
-                network: f5_network_models.Network):
+                selfips: [network_models.Port],
+                network: f5_network_models.Network,
+                delete_all=False):
+
+        subnets_that_need_routes = []
+        if not delete_all:
+            subnets_that_need_routes = [subnet for subnet in network.subnets if not subnet_in_selfips(subnet, selfips)]
 
         # prefix of subnet routes that belong to this network
-        subnet_route_network_prefix = "{}{}_{}".format(constants.PREFIX_NETWORK, network.id, constants.PREFIX_SUBNET)
+        subnet_route_network_part = get_subnet_route_name(network.id, '')
 
         # Fetch existing routes in the partition
         response = bigip.get(path=f"/mgmt/tm/net/route").json()
@@ -384,7 +385,14 @@ class CleanupSubnetRoutes(task.Task):
         # delete routes from this network
         for existing_route in existing_routes:
             existing_route_name = existing_route['name']
-            if existing_route_name.startswith(subnet_route_network_prefix):
+
+            # ignore routes that are not subnet routes of this network
+            if not existing_route_name.startswith(subnet_route_network_part):
+                continue
+
+            # delete subnet route if it's not needed
+            existing_route_subnet = existing_route_name[len(subnet_route_network_part):]
+            if existing_route_subnet not in subnets_that_need_routes:
                 res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{existing_route_name}")
                 res.raise_for_status()
 

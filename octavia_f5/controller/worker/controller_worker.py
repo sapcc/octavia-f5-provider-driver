@@ -129,8 +129,8 @@ class ControllerWorker(object):
                     self.l2sync.ensure_l2_flow(selfips, network_id, device)
                 elif any(lb.provisioning_status in [lib_consts.PENDING_CREATE, lib_consts.PENDING_DELETE]
                          for lb in loadbalancers):
-                    # Network already exists, just ensure correct selfips
-                    self.l2sync.sync_l2_selfips_flow(selfips, network_id, device)
+                    # Network already exists, just ensure correct selfips and subnet routes
+                    self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips, network_id, device)
                 self.sync.tenant_update(network_id, device, selfips).raise_for_status()
 
             # update status of just-synced LBs

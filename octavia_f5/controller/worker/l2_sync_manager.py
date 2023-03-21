@@ -104,28 +104,31 @@ class L2SyncManager(BaseTaskFlowEngine):
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
-    def _do_sync_l2_selfips_flow(self, expected_selfips: [network_models.Port], store: dict):
+    def _do_sync_l2_selfips_and_subnet_routes_flow(self, expected_selfips: [network_models.Port], store: dict):
+        """Remove unneeded SelfIPs and subnet routes, then add missing SelfIPs and subnet routes.
+
+        If in another subnet of this network a load balancer is created or deleted, either a subnet route has to be
+        replaced with a SelfIP or vice versa. Since SelfIPs and subnet routes conflict, deletion must always happen
+        before creation."""
+
         e = self.taskflow_load(self._f5flows.get_selfips_from_device_for_vlan(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
+        LOG.debug("%s: The expected SelfIPs for network %s are: %s",
+                  store['bigip'].hostname, store['network'].id, [sip.id for sip in expected_selfips])
+
         device_selfips = e.storage.get('all-selfips')
-        selfips = {
-            'add': [port for port in expected_selfips if port.id not in [p.id for p in device_selfips]],
-            'remove': [port for port in device_selfips if port.id not in [p.id for p in expected_selfips]]
-        }
 
-        LOG.debug("%s: L2 SelfIP sync diff for network %s: %s",
-                  store['bigip'].hostname, store['network'].id, {'add': [p.id for p in selfips['add']],
-                                                                 'remove': [p.id for p in selfips['remove']]})
-
-        e = self.taskflow_load(self._f5flows.sync_l2_selfips(selfips), store=store)
+        # remove unneeded SelfIPs/subnet routes
+        e = self.taskflow_load(self._f5flows.cleanup_selfips_and_subnet_routes(
+            expected_selfips, device_selfips, store=store), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
-    def _do_sync_l2_static_routes_flow(self, selfips: [network_models.Port], store: dict):
-        ensure_static_routes = f5_tasks.SyncSubnetRoutes(inject={'selfips': selfips})
-        e = self.taskflow_load(ensure_static_routes, store=store)
+        # add missing SelfIPs/subnet routes
+        e = self.taskflow_load(self._f5flows.ensure_selfips_and_subnet_routes(
+            expected_selfips, device_selfips, store=store), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
@@ -229,19 +232,17 @@ class L2SyncManager(BaseTaskFlowEngine):
                 self._metric_failed_futures.labels(bigip.hostname, 'remove_l2_flow').inc()
                 LOG.error("Failed running remove_l2_flow for host %s: %s", bigip.hostname, e)
 
-    def sync_l2_selfips_flow(self, selfips: [network_models.Port], network_id: str, device=None):
-        """ Runs the taskflows to sync selfips (add/remove) on all bigip devices in parallel
+    def sync_l2_selfips_and_subnet_routes_flow(self, selfips: [network_models.Port], network_id: str, device=None):
+        """ Runs the taskflows to sync (add/remove) SelfIPs and subnet routes on all bigip devices in parallel
 
         :param selfips: Neutron SelfIP ports expected
         :param network_id: Neutron Network ID
         :param device: optional device host to sync, defaults to all devices to sync
         """
-        if not selfips:
-            return
 
         network = self._network_driver.get_network(network_id)
         if not network.has_bound_segment():
-            raise Exception(f"Failed sync_l2_selfips_flow for network_id={network_id}: No segment bound")
+            raise Exception(f"Failed sync_l2_selfips_and_subnet_routes_flow for network_id={network_id}: No segment bound")
 
         fs = {}
         for bigip in self._bigips:
@@ -250,11 +251,8 @@ class L2SyncManager(BaseTaskFlowEngine):
 
             store = {'bigip': bigip, 'network': network}
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
-            fs[self.executor.submit(self._do_sync_l2_selfips_flow,
-                                    expected_selfips=selfips_for_host,
-                                    store=store)] = bigip
-            fs[self.executor.submit(self._do_sync_l2_static_routes_flow,
-                                    selfips=selfips_for_host, store=store)] = bigip
+            fs[self.executor.submit(self._do_sync_l2_selfips_and_subnet_routes_flow,
+                                    expected_selfips=selfips_for_host, store=store)] = bigip
 
         done, not_done = futures.wait(fs, timeout=10)
         for f in done | not_done:
@@ -262,8 +260,8 @@ class L2SyncManager(BaseTaskFlowEngine):
             try:
                 f.result(0)
             except Exception as e:
-                self._metric_failed_futures.labels(bigip.hostname, 'sync_l2_selfips_flow').inc()
-                LOG.error("Failed running sync_l2_selfips_flow for host %s: %s", bigip.hostname, e)
+                self._metric_failed_futures.labels(bigip.hostname, 'sync_l2_selfips_and_subnet_routes_flow').inc()
+                LOG.error("Failed running sync_l2_selfips_and_subnet_routes_flow for host %s: %s", bigip.hostname, e)
 
     @decorators.RaisesIControlRestError()
     def full_sync(self, loadbalancers: [octavia_models.LoadBalancer]):
@@ -301,7 +299,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                         or route['name'].startswith(constants.PREFIX_NETWORK)):
                     continue
 
-                # Skip routes for existing subnets
+                # Skip routes for existing subnets, i.e. needed subnet routes
                 for network_id in networks:
                     for subnet_id in networks[network_id].subnets:
                         subnet_route_name = f5_tasks.get_subnet_route_name(network_id, subnet_id)
