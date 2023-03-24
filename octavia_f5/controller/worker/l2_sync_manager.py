@@ -242,7 +242,8 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         network = self._network_driver.get_network(network_id)
         if not network.has_bound_segment():
-            raise Exception(f"Failed sync_l2_selfips_and_subnet_routes_flow for network_id={network_id}: No segment bound")
+            raise Exception(
+                f"Failed sync_l2_selfips_and_subnet_routes_flow for network_id={network_id}: No segment bound")
 
         fs = {}
         for bigip in self._bigips:
@@ -299,12 +300,15 @@ class L2SyncManager(BaseTaskFlowEngine):
                         or route['name'].startswith(constants.PREFIX_NETWORK)):
                     continue
 
-                # Skip routes for existing subnets, i.e. needed subnet routes
-                for network_id in networks:
-                    for subnet_id in networks[network_id].subnets:
-                        subnet_route_name = f5_tasks.get_subnet_route_name(network_id, subnet_id)
-                        if route['name'] == subnet_route_name:
-                            continue
+                # Skip needed subnet routes, i.e. routes for subnets that don't have LBs but are in a network with LBs
+                lb_subnets = [lb.vip.subnet_id for lb in loadbalancers]
+                needed_subnet_routes = []
+                for net, subs in [(n, networks[n].subnets) for n in networks]:
+                    # lb_subnets is the list of subnets that don't have subnet routes but SelfIPs
+                    needed_subnet_routes.extend([f5_tasks.get_subnet_route_name(net, sub)
+                                                 for sub in subs if sub not in lb_subnets])
+                if route['name'] in needed_subnet_routes:
+                    continue
 
                 # Cleanup
                 path = f"/mgmt/tm/net/route/{route['fullPath'].replace('/', '~')}"
