@@ -67,6 +67,7 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
 
         return [model.to_data_model() for model in query.all()]
 
+
 class PoolRepository(repositories.PoolRepository):
     def get_pending_from_host(self, session, host=None):
         """Get a list of pending pools from specific host
@@ -143,7 +144,7 @@ class AmphoraRepository(repositories.AmphoraRepository):
         query = session.query(self.model_class.cached_zone)
         # pylint: disable=singleton-comparison
         query = query.filter(self.model_class.compute_flavor == host,
-                             self.model_class.cached_zone != None)
+                             self.model_class.cached_zone.is_(None))
 
         return [model[0] for model in query.all()]
 
@@ -153,8 +154,8 @@ class AmphoraRepository(repositories.AmphoraRepository):
         """
         try:
             session.query(self.model_class).filter(
-                self.model_class.load_balancer_id == None,
-                self.model_class.cached_zone == None,
+                self.model_class.load_balancer_id.is_(None),
+                self.model_class.cached_zone.is_(None),
                 self.model_class.compute_flavor == CONF.host,
             ).delete()
         except sqlalchemy.orm.exc.NoResultFound:
