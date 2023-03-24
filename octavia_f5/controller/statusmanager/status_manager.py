@@ -19,7 +19,6 @@ import futurist
 import oslo_messaging as messaging
 import prometheus_client as prometheus
 import requests
-import sqlalchemy
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
@@ -31,6 +30,7 @@ from octavia.db import api as db_api
 from octavia.db import repositories as repo
 from octavia_f5.common import constants
 from octavia_f5.controller.statusmanager.legacy_healthmanager.health_drivers import update_db
+from octavia_f5.db import repositories as f5_repo
 from octavia_f5.restclient.bigip import bigip_restclient, bigip_auth
 
 CONF = cfg.CONF
@@ -67,7 +67,7 @@ class StatusManager(object):
     def __init__(self):
         LOG.info('Health Manager starting.')
         self.seq = 0
-        self.amp_repo = repo.AmphoraRepository()
+        self.amp_repo = f5_repo.AmphoraRepository()
         self.listener_repo = repo.ListenerRepository()
         self.amp_health_repo = repo.AmphoraHealthRepository()
         self.lb_repo = repo.LoadBalancerRepository()
@@ -220,7 +220,8 @@ class StatusManager(object):
 
         if time.time() - self._last_cleanup_check >= CONF.status_manager.cleanup_check_interval:
             self._last_cleanup_check = time.time()
-            self.cleanup()
+            with DatabaseLockSession() as session:
+                self.amp_repo.cleanup(session)
 
         def _get_lb_msg(lb_id):
             if lb_id not in amphora_messages:
@@ -372,14 +373,3 @@ class StatusManager(object):
                     self.amp_repo.create(session, **amp_dict)
                 else:
                     self.amp_repo.update(session, device_entry.id, **amp_dict)
-
-    def cleanup(self):
-        """ Deletes old amphora entries whose load balancers don't exist anymore.
-        See controller_worker.ensure_amphora_exists for details.
-        """
-        with DatabaseLockSession() as session:
-            filters = {'load_balancer_id': None, 'cached_zone': None, 'compute_flavor': CONF.host,}
-            try:
-                self.amp_repo.delete(session, **filters)
-            except sqlalchemy.exc.InvalidRequestError:
-                pass
