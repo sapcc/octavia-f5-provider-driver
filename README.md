@@ -24,6 +24,7 @@ Instead, otherwise unused tables are used in a specific way:
 - The **amphora** table is used in two ways:
   - For each load balancer an amphora entry is created. This is done [to prevent problems with Octavias health manager](./octavia_f5/controller/worker/controller_worker.py#L249-L251), which makes assumptions about amphora entries.
     - `compute_flavor` holds the name of the device the load balancer is scheduled to. This can be used to query the device via `openstack loadbalancer amphora show $LB_ID`.
+    - Since an amphora table entry is never updated as long as its respective load balancer lives, the `updated_at` field will always be `null` until the load balancer is being deleted, [which will update the amphora entry status to `DELETED` as well](octavia_f5/controller/worker/status_manager.py#L158).
   - For each F5 device that is managed by a provider driver worker a special entry is created in the `amphora` table.
     - `compute_flavor` holds the name of the managed F5 device
     - `cached_zone` holds the hostname
