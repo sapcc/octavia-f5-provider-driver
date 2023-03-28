@@ -12,11 +12,14 @@
 #  License for the specific language governing permissions and limitations
 #  under the License.
 
+from oslo_log import log as logging
 from taskflow import flow
 from taskflow.patterns import unordered_flow, linear_flow
 
 from octavia.network import data_models as network_models
 from octavia_f5.controller.worker.tasks import f5_tasks
+
+LOG = logging.getLogger(__name__)
 
 
 class F5Flows(object):
@@ -29,14 +32,16 @@ class F5Flows(object):
             ensure_selfip_subflow.add(ensure_selfip)
 
         ensure_routedomain = f5_tasks.EnsureRouteDomain()
-        ensure_route = f5_tasks.EnsureRoute()
+        ensure_default_route = f5_tasks.EnsureDefaultRoute()
+        ensure_static_routes = f5_tasks.EnsureSubnetRoutes(inject={'selfips': selfips})
         ensure_vlan = f5_tasks.EnsureVLAN()
 
         ensure_l2_flow = linear_flow.Flow('ensure-l2-flow')
         ensure_l2_flow.add(ensure_vlan,
                            ensure_routedomain,
                            ensure_selfip_subflow,
-                           ensure_route)
+                           ensure_default_route,
+                           ensure_static_routes)
         return ensure_l2_flow
 
     def remove_l2(self, selfips: [str]) -> flow.Flow:
@@ -47,35 +52,66 @@ class F5Flows(object):
                                                    inject={'port': selfip})
             cleanup_selfip_subflow.add(cleanup_selfip)
 
-        cleanup_route = f5_tasks.CleanupRoute()
+        cleanup_subnet_routes = f5_tasks.CleanupSubnetRoutes(inject={'selfips': selfips,
+                                                                     'delete_all': True})
+        cleanup_route = f5_tasks.CleanupDefaultRoute()
         cleanup_routedomain = f5_tasks.CleanupRouteDomain()
         cleanup_vlan = f5_tasks.CleanupVLAN()
 
         cleanup_l2_flow = linear_flow.Flow('cleanup-l2-flow')
-        cleanup_l2_flow.add(cleanup_route,
+        cleanup_l2_flow.add(cleanup_subnet_routes,
+                            cleanup_route,
                             cleanup_selfip_subflow,
                             cleanup_routedomain,
                             cleanup_vlan)
         return cleanup_l2_flow
 
-    def sync_l2_selfips(self, selfips: dict) -> flow.Flow:
-        """ Updates SelfIPs of a specific network
-            * Adding new ones
-            * Removing orphaned ones
+    def cleanup_selfips_and_subnet_routes(self, expected_selfips, device_selfips, store: dict) -> flow.Flow:
+        """ Remove unneeded SelfIPs and subnet routes of a specific network
 
-        :param selfips: 'add' and 'remove' dictionary of selfips
+        :param expected_selfips: SelfIPs that must exist
+        :param device_selfips: SelfIPs that currently exist
         """
 
-        sync_l2_selfips_flow = unordered_flow.Flow('sync-l2-selfips-flow')
-        for selfip in selfips.get('add', []):
-            ensure_selfip = f5_tasks.EnsureSelfIP(name=f"ensure-selfip-{selfip.id}", inject={'port': selfip})
-            sync_l2_selfips_flow.add(ensure_selfip)
+        cleanup_selfips_and_subnet_routes_flow = unordered_flow.Flow('cleanup-selfips-and-subnet-routes-flow')
 
-        for selfip in selfips.get('remove', []):
+        # removal of SelfIPs
+        selfips_to_remove = [port for port in device_selfips if port.id not in [p.id for p in expected_selfips]]
+        LOG.debug("%s: SelfIPs to remove for network %s: %s",
+                  store['bigip'].hostname, store['network'].id, [p.id for p in selfips_to_remove])
+        for selfip in selfips_to_remove:
             cleanup_selfip = f5_tasks.RemoveSelfIP(name=f"cleanup-selfip-{selfip.id}", inject={'port': selfip})
-            sync_l2_selfips_flow.add(cleanup_selfip)
+            cleanup_selfips_and_subnet_routes_flow.add(cleanup_selfip)
 
-        return sync_l2_selfips_flow
+        # removal of subnet routes
+        cleanup_selfips_and_subnet_routes_flow.add(
+            f5_tasks.CleanupSubnetRoutes(inject={'selfips': expected_selfips}))
+
+        return cleanup_selfips_and_subnet_routes_flow
+
+    def ensure_selfips_and_subnet_routes(self, expected_selfips, device_selfips, store: dict) -> flow.Flow:
+        """ Add needed SelfIPs and subnet routes of a specific network
+
+        :param expected_selfips: SelfIPs that must exist
+        :param device_selfips: SelfIPs that currently exist
+        """
+
+        ensure_selfips_and_subnet_routes_flow = unordered_flow.Flow('ensure-selfips-and-subnet-routes-flow')
+
+        # adding SelfIPs
+        selfips_to_add = [port for port in expected_selfips if port.id not in [p.id for p in device_selfips]]
+        LOG.debug("%s: SelfIPs to add for network %s: %s",
+                  store['bigip'].hostname, store['network'].id, [p.id for p in selfips_to_add])
+
+        for selfip in selfips_to_add:
+            ensure_selfip = f5_tasks.EnsureSelfIP(name=f"ensure-selfip-{selfip.id}", inject={'port': selfip})
+            ensure_selfips_and_subnet_routes_flow.add(ensure_selfip)
+
+        # removal of subnet routes
+        ensure_selfips_and_subnet_routes_flow.add(
+            f5_tasks.EnsureSubnetRoutes(inject={'selfips': expected_selfips}))
+
+        return ensure_selfips_and_subnet_routes_flow
 
     def get_selfips_from_device_for_vlan(self) -> [network_models.Port]:
         return f5_tasks.GetAllSelfIPsForVLAN(name='all-selfips')

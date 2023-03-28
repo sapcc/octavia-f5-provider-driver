@@ -107,6 +107,8 @@ class ControllerWorker(object):
         super(ControllerWorker, self).__init__()
 
     def as3worker(self):
+        """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
+
         @lockutils.synchronized("f5sync", fair=True)
         def f5sync(network_id, device, *args):
             self._metric_as3worker_queue.labels(octavia_host=CONF.host).set(self.queue.qsize())
@@ -127,8 +129,8 @@ class ControllerWorker(object):
                     self.l2sync.ensure_l2_flow(selfips, network_id, device)
                 elif any(lb.provisioning_status in [lib_consts.PENDING_CREATE, lib_consts.PENDING_DELETE]
                          for lb in loadbalancers):
-                    # Network already exists, just ensure correct selfips
-                    self.l2sync.sync_l2_selfips_flow(selfips, network_id, device)
+                    # Network already exists, just ensure correct selfips and subnet routes
+                    self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips, network_id, device)
                 self.sync.tenant_update(network_id, device, selfips).raise_for_status()
 
             # update status of just-synced LBs
@@ -136,7 +138,7 @@ class ControllerWorker(object):
             for lb in loadbalancers:
                 self._reset_in_use_quota(lb.project_id)
 
-        """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
+        # run sync loop
         while True:
             try:
                 network_id, device = self.queue.get()

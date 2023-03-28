@@ -81,7 +81,10 @@ class TestF5Flows(base.TestCase):
         )
 
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_bigip.get.side_effect = empty_response
+        mock_bigip.get.side_effect = [empty_response(), empty_response(),
+                                      empty_response(), empty_response(),
+                                      empty_response(), empty_response(),
+                                      MockResponse({'items':[]}, status_code=200)]
         f5flows = f5_flows.F5Flows()
 
         engines.run(f5flows.ensure_l2([selfip_port]),
@@ -156,7 +159,8 @@ class TestF5Flows(base.TestCase):
         mock_bigip.get.side_effect = [mock_vlan_response,
                                       mock_routedomain_response,
                                       mock_selfip_response,
-                                      mock_route_response]
+                                      mock_route_response,
+                                      MockResponse({'items':[]}, status_code=200)]
         f5flows = f5_flows.F5Flows()
 
         engines.run(f5flows.ensure_l2([selfip_port]),
