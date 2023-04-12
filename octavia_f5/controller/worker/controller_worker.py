@@ -641,7 +641,7 @@ class ControllerWorker(object):
         selfips = list(chain.from_iterable(
             self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=False)))
         if loadbalancers:
-            self.l2sync.ensure_l2_flow(selfips, network_id)
+            self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips, network_id)
             self.sync.tenant_update(network_id, selfips=selfips, loadbalancers=loadbalancers).raise_for_status()
         else:
             self.sync.tenant_delete(network_id).raise_for_status()
