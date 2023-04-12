@@ -612,7 +612,17 @@ class ControllerWorker(object):
 
         selfips = list(chain.from_iterable(
             self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=False)))
-        self.l2sync.ensure_l2_flow(selfips, network_id)
+
+        # If other LBs in the same network already exist on this host, just ensure correct selfips and subnet routes
+        loadbalancers_here = [lb for lb in loadbalancers
+                              if lb.server_group_id == CONF.host and lb.id != load_balancer_id]
+        LOG.debug(f'LBs already on this device (without {load_balancer_id}): {loadbalancers_here}')
+        if loadbalancers_here:
+            LOG.debug(f'Only syncing SelfIPs and subnet routes on network {network_id}')
+            self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips, network_id)
+        else:
+            LOG.debug(f'Running complete ensure_l2_flow on network {network_id}')
+            self.l2sync.ensure_l2_flow(selfips, network_id)
         self.sync.tenant_update(network_id, selfips=selfips, loadbalancers=loadbalancers).raise_for_status()
         self.network_driver.invalidate_cache()
         return True
