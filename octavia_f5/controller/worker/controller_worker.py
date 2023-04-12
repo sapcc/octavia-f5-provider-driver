@@ -276,7 +276,7 @@ class ControllerWorker(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
     def _get_all_loadbalancer(self, network_id):
-        LOG.debug("Get load balancers from DB for network id: %s ", network_id)
+        LOG.debug("Get load balancers from DB for this host for network id: %s ", network_id)
         return self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
 
@@ -614,10 +614,8 @@ class ControllerWorker(object):
             self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=False)))
 
         # If other LBs in the same network already exist on this host, just ensure correct selfips and subnet routes
-        loadbalancers_here = [lb for lb in loadbalancers
-                              if lb.server_group_id == CONF.host and lb.id != load_balancer_id]
-        LOG.debug(f'LBs already on this device (without {load_balancer_id}): {loadbalancers_here}')
-        if loadbalancers_here:
+        lbs_already_present = [lb for lb in loadbalancers if lb.id != load_balancer_id]
+        if lbs_already_present:
             LOG.debug(f'Only syncing SelfIPs and subnet routes on network {network_id}')
             self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips, network_id)
         else:
