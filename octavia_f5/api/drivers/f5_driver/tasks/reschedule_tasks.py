@@ -19,7 +19,6 @@ from oslo_log import log as logging
 from taskflow import task
 from taskflow.types import failure
 
-from octavia.common import constants
 from octavia.common import data_models as models
 from octavia.db import api as db_apis
 from octavia_f5.db import repositories as repo
