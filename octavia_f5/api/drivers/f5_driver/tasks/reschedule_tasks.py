@@ -14,14 +14,14 @@
 
 from abc import ABCMeta
 
+from octavia.common import data_models as models
+from octavia.db import api as db_apis
 from oslo_config import cfg
 from oslo_log import log as logging
 from taskflow import task
 from taskflow.types import failure
 
-from octavia.common import constants
-from octavia.common import data_models as models
-from octavia.db import api as db_apis
+from octavia_f5.common import constants as f5_const
 from octavia_f5.db import repositories as repo
 
 LOG = logging.getLogger(__name__)
@@ -35,6 +35,30 @@ class RescheduleTasks(task.Task, metaclass=ABCMeta):
         super(RescheduleTasks, self).__init__(**kwargs)
         self._loadbalancer_repo = repo.LoadBalancerRepository()
         self._amphora_repo = repo.AmphoraRepository()
+
+
+class LockLoadBalancer(RescheduleTasks):
+    def execute(self, loadbalancer_id):
+        LOG.debug("Locking load balancer: %s ", loadbalancer_id)
+        # Fail if LB already locked. We probably don't want to wait until it's unlocked, since that would mean we're
+        # doing two migrations back-to-back, which we most definitely don't want.
+        if self._amphora_repo.get(db_apis.get_session(), id=loadbalancer_id) \
+                .vrrp_interface == f5_const.RESCHEDULING_LOCK_STRING:
+            return failure.Failure(causes=["Cannot acquire lock for load balancer {}. It's already being rescheduled."])
+        self._amphora_repo.update(db_apis.get_session(), loadbalancer_id,
+                                  vrrp_interface=f5_const.RESCHEDULING_LOCK_STRING)
+        # TODO temp - Testing revert
+        return failure.Failure(causes=["Testing revert"])
+
+    def revert(self, loadbalancer_id, **kwargs):
+        self._amphora_repo.update(db_apis.get_session(), loadbalancer_id, vrrp_interface=None)
+
+
+class ReleaseLoadBalancer(RescheduleTasks):
+    def execute(self, loadbalancer_id):
+        LOG.debug("Releasing load balancer: %s ", loadbalancer_id)
+        self._amphora_repo.update(db_apis.get_session(), loadbalancer_id, vrrp_interface=None)
+        # TODO error handling without rolling back the whole migration
 
 
 class GetLoadBalancerByID(RescheduleTasks):

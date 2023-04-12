@@ -183,6 +183,9 @@ class SyncManager(object):
         if not loadbalancers:
             raise exceptions.AS3Exception("No loadbalancers specified for tenant_update")
 
+        # If any of the load balancers is currently being rescheduled, we want to hold back the whole declaration because we don't know whether the load balancer is supposed to exist on this device or not.
+        pass # TODO
+
         decl = self._declaration_manager.get_declaration({network_id: loadbalancers}, self_ips)
         if CONF.f5_agent.dry_run:
             decl.set_action('dry-run')
