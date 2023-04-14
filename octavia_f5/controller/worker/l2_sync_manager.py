@@ -147,10 +147,12 @@ class L2SyncManager(BaseTaskFlowEngine):
         if not selfips:
             return
 
+        # get and check network
         network = self._network_driver.get_network(network_id)
         if not network.has_bound_segment():
             raise Exception(f"Failed ensure_l2_flow for network_id={network_id}: No segment bound")
 
+        # run l2 flow for all devices in parallel
         fs = {}
         for bigip in self._bigips:
             if device and bigip.hostname != device:
@@ -161,15 +163,16 @@ class L2SyncManager(BaseTaskFlowEngine):
             store = {'bigip': bigip, 'network': network, 'subnet_id': subnet_ids.pop()}
             fs[self.executor.submit(self._do_ensure_l2_flow, selfips=selfips_for_host, store=store)] = bigip
 
-        if CONF.networking.override_vcmp_guest_names:
-            guest_names = CONF.networking.override_vcmp_guest_names
-        else:
-            guest_names = [bigip.hostname for bigip in self._bigips]
-
+        # run VCMP l2 flow for all VCMPs in parallel
         for vcmp in self._vcmps:
-            store = {'bigip': vcmp, 'network': network, 'bigip_guest_names': guest_names}
+            store = {'bigip': vcmp, 'network': network}
+            if CONF.networking.override_vcmp_guest_names:
+                store['bigip_guest_names'] = CONF.networking.override_vcmp_guest_names
+            else:
+                store['bigip_guest_names'] = [bigip.hostname for bigip in self._bigips]
             fs[self.executor.submit(self._do_ensure_vcmp_l2_flow, store=store)] = vcmp
 
+        # wait for all flows to finish
         failed_bigips = []
         done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
         for f in done | not_done:
@@ -181,10 +184,9 @@ class L2SyncManager(BaseTaskFlowEngine):
                 LOG.error("Failed running ensure_l2_flow for host %s: %s", bigip.hostname, e)
                 failed_bigips.append(bigip)
 
-        # We raise error only if all pairs failed
+        # raise error only if all pairs failed
         if self._bigips and all(bigip in failed_bigips for bigip in self._bigips):
             raise Exception(f"Failed ensure_l2_flow for all bigip devices of network_id={network_id}")
-
         if self._vcmps and all(vcmp in failed_bigips for vcmp in self._vcmps):
             raise Exception(f"Failed ensure_l2_flow for all vcmp devices of network_id={network_id}")
 

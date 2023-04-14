@@ -276,7 +276,7 @@ class ControllerWorker(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
     def _get_all_loadbalancer(self, network_id):
-        LOG.debug("Get load balancers from DB for network id: %s ", network_id)
+        LOG.debug("Get load balancers from DB for this host for network id: %s ", network_id)
         return self._loadbalancer_repo.get_all_by_network(
             db_apis.get_session(), network_id=network_id, show_deleted=False)
 
@@ -612,7 +612,15 @@ class ControllerWorker(object):
 
         selfips = list(chain.from_iterable(
             self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=False)))
-        self.l2sync.ensure_l2_flow(selfips, network_id)
+
+        # If other LBs in the same network already exist on this host, just ensure correct selfips and subnet routes
+        lbs_already_present = [lb for lb in loadbalancers if lb.id != load_balancer_id]
+        if lbs_already_present:
+            LOG.debug(f'Only syncing SelfIPs and subnet routes on network {network_id}')
+            self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips, network_id)
+        else:
+            LOG.debug(f'Running complete ensure_l2_flow on network {network_id}')
+            self.l2sync.ensure_l2_flow(selfips, network_id)
         self.sync.tenant_update(network_id, selfips=selfips, loadbalancers=loadbalancers).raise_for_status()
         self.network_driver.invalidate_cache()
         return True
@@ -635,18 +643,36 @@ class ControllerWorker(object):
         LOG.debug("remove_loadbalancer: force removing loadbalancer '%s' for tenant '%s'",
                   load_balancer_id, network_id)
 
+        # all LBs on this device, including the one to be removed
         loadbalancers = self._get_all_loadbalancer(network_id)
-        loadbalancers = [_lb for _lb in loadbalancers if _lb.id != load_balancer_id]
-
         selfips = list(chain.from_iterable(
             self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=False)))
-        if loadbalancers:
-            self.l2sync.ensure_l2_flow(selfips, network_id)
-            self.sync.tenant_update(network_id, selfips=selfips, loadbalancers=loadbalancers).raise_for_status()
+
+        loadbalancers_remaining = [lb for lb in loadbalancers if lb.id != load_balancer_id]
+        if loadbalancers_remaining:
+            # if there are still load balancers we only need to sync SelfIPs and subnet routes
+
+            selfips_remaining = list(chain.from_iterable(
+                self.network_driver.ensure_selfips(loadbalancers_remaining, CONF.host, cleanup_orphans=False)))
+
+            # provision the rest to the device
+            self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips_remaining, network_id)
+            self.sync.tenant_update(
+                network_id, selfips=selfips_remaining, loadbalancers=loadbalancers_remaining).raise_for_status()
+
+            # If the subnet of the LB to be removed is now empty, remove the unneeded SelfIP ports. Since they are not
+            # considered orphaned (they aren't even considered by ensure_selfips because the subnet is gone) they need
+            # to be determined by comparing SelfIP ports for all LBs with those of the remaining LBs.
+            selfips_to_delete = [sip for sip in selfips if sip not in selfips_remaining]
+            self.network_driver.cleanup_selfips(selfips_to_delete)
+
         else:
+            # this was the last load balancer - delete everything
             self.sync.tenant_delete(network_id).raise_for_status()
             self.l2sync.remove_l2_flow(network_id)
             self.network_driver.cleanup_selfips(selfips)
+
+        # invalidate cache so that workers forget about the old host
         self.network_driver.invalidate_cache()
         return True
 

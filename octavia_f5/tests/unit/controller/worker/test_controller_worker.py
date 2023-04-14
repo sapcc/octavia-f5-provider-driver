@@ -24,19 +24,19 @@ from octavia_f5.controller.worker import controller_worker
 
 CONF = cfg.CONF
 
-_health_mon_mock = mock.MagicMock()
+LB_ID = uuidutils.generate_uuid()
+NETWORK_ID = uuidutils.generate_uuid()
 _status_manager = mock.MagicMock()
 _vip_mock = mock.MagicMock()
+_vip_mock.network_id = NETWORK_ID
 _listener_mock = mock.MagicMock()
 _load_balancer_mock = mock.MagicMock()
+_load_balancer_mock.id = LB_ID
 _load_balancer_mock.listeners = [_listener_mock]
+_load_balancer_mock.vip = _vip_mock
 _load_balancer_mock.flavor_id = None
 _load_balancer_mock.availability_zone = None
-_member_mock = mock.MagicMock()
-_pool_mock = mock.MagicMock()
-_l7policy_mock = mock.MagicMock()
-_l7rule_mock = mock.MagicMock()
-_az_mock = mock.MagicMock()
+_selfip = mock.MagicMock()
 _db_session = mock.MagicMock()
 
 
@@ -49,6 +49,8 @@ class TestControllerWorker(base.TestCase):
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         conf.config(group="f5_agent", prometheus=False)
         conf.config(group="controller_worker", network_driver='network_noop_driver_f5')
+        # prevent ControllerWorker() from spawning threads
+        conf.config(group="f5_agent", sync_immediately=False)
 
     @mock.patch('octavia.db.repositories.AvailabilityZoneRepository')
     @mock.patch('octavia.db.repositories.AvailabilityZoneProfileRepository')
@@ -79,3 +81,28 @@ class TestControllerWorker(base.TestCase):
         cw.register_in_availability_zone(az)
         mock_az_repo.return_value.create.assert_called_once()
         mock_azp_repo.return_value.create.assert_called_once()
+
+    @mock.patch('octavia.db.repositories.LoadBalancerRepository.get',
+                return_value=_load_balancer_mock)
+    @mock.patch('octavia_f5.db.repositories.LoadBalancerRepository.get_all_by_network',
+                return_value=[_load_balancer_mock])
+    @mock.patch("octavia_f5.network.drivers.noop_driver_f5.driver.NoopNetworkDriverF5"
+                ".ensure_selfips",
+                return_value=([_selfip], []))
+    @mock.patch("octavia_f5.network.drivers.noop_driver_f5.driver.NoopNetworkDriverF5"
+                ".cleanup_selfips")
+    def test_remove_loadbalancer_last(self,
+                                      mock_cleanup_selfips,
+                                      mock_ensure_selfips,
+                                      mock_lb_repo_get_all_by_network,
+                                      mock_lb_repo_get,
+                                      mock_api_get_session,
+                                      mock_sync_manager,
+                                      mock_status_manager):
+        cw = controller_worker.ControllerWorker()
+        cw.remove_loadbalancer(LB_ID)
+
+        mock_lb_repo_get_all_by_network.assert_called_once_with(_db_session, network_id=NETWORK_ID, show_deleted=False)
+        mock_lb_repo_get.assert_called_once_with(_db_session, id=LB_ID)
+        mock_ensure_selfips.assert_called_with([_load_balancer_mock], CONF.host, cleanup_orphans=False)
+        mock_cleanup_selfips.assert_called_with([_selfip])

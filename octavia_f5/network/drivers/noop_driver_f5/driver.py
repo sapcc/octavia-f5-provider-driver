@@ -48,3 +48,6 @@ class NoopNetworkDriverF5(driver.NoopNetworkDriver):
 
     def create_vip(self, load_balancer, candidate):
         return self.driver.create_port(load_balancer.vip.network_id)
+
+    def invalidate_cache(self, hard=True):
+        pass
