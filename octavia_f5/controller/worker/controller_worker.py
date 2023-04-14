@@ -652,14 +652,18 @@ class ControllerWorker(object):
         if loadbalancers_remaining:
             # if there are still load balancers we only need to sync SelfIPs and subnet routes
 
-            # If the subnet of the LB to be removed is now empty, remove its SelfIPs by treating them as orphaned
-            selfips = list(chain.from_iterable(
-                self.network_driver.ensure_selfips(loadbalancers_remaining, CONF.host, cleanup_orphans=True)))
+            # If the subnet of the LB to be removed is now empty, remove the unneeded SelfIP ports. Since they are not
+            # considered orphaned (they aren't even considered by ensure_selfips because the subnet is gone) they need
+            # to be determined by comparing SelfIP ports for all LBs with those of the remaining LBs.
+            selfips_remaining = list(chain.from_iterable(
+                self.network_driver.ensure_selfips(loadbalancers_remaining, CONF.host, cleanup_orphans=False)))
+            selfips_to_delete = [sip for sip in selfips if sip not in selfips_remaining]
+            self.network_driver.cleanup_selfips(selfips_to_delete)
 
             # provision the rest to the device
-            self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips, network_id)
+            self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips_remaining, network_id)
             self.sync.tenant_update(
-                network_id, selfips=selfips, loadbalancers=loadbalancers_remaining).raise_for_status()
+                network_id, selfips=selfips_remaining, loadbalancers=loadbalancers_remaining).raise_for_status()
 
         else:
             # this was the last load balancer - delete everything
