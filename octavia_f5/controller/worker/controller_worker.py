@@ -643,18 +643,31 @@ class ControllerWorker(object):
         LOG.debug("remove_loadbalancer: force removing loadbalancer '%s' for tenant '%s'",
                   load_balancer_id, network_id)
 
+        # all LBs on this device, including the one to be removed
         loadbalancers = self._get_all_loadbalancer(network_id)
-        loadbalancers = [_lb for _lb in loadbalancers if _lb.id != load_balancer_id]
-
         selfips = list(chain.from_iterable(
             self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=False)))
-        if loadbalancers:
+
+        loadbalancers_remaining = [lb for lb in loadbalancers if lb.id != load_balancer_id]
+        if loadbalancers_remaining:
+            # if there are still load balancers we only need to sync SelfIPs and subnet routes
+
+            # If the subnet of the LB to be removed is now empty, remove its SelfIPs by treating them as orphaned
+            selfips = list(chain.from_iterable(
+                self.network_driver.ensure_selfips(loadbalancers_remaining, CONF.host, cleanup_orphans=True)))
+
+            # provision the rest to the device
             self.l2sync.sync_l2_selfips_and_subnet_routes_flow(selfips, network_id)
-            self.sync.tenant_update(network_id, selfips=selfips, loadbalancers=loadbalancers).raise_for_status()
+            self.sync.tenant_update(
+                network_id, selfips=selfips, loadbalancers=loadbalancers_remaining).raise_for_status()
+
         else:
+            # this was the last load balancer - delete everything
             self.sync.tenant_delete(network_id).raise_for_status()
             self.l2sync.remove_l2_flow(network_id)
             self.network_driver.cleanup_selfips(selfips)
+
+        # invalidate cache so that workers forget about the old host
         self.network_driver.invalidate_cache()
         return True
 
