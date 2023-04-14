@@ -49,6 +49,8 @@ class TestControllerWorker(base.TestCase):
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         conf.config(group="f5_agent", prometheus=False)
         conf.config(group="controller_worker", network_driver='network_noop_driver_f5')
+        # prevent ControllerWorker() from spawning threads
+        conf.config(group="f5_agent", sync_immediately=False)
 
     @mock.patch('octavia.db.repositories.AvailabilityZoneRepository')
     @mock.patch('octavia.db.repositories.AvailabilityZoneProfileRepository')
@@ -100,10 +102,7 @@ class TestControllerWorker(base.TestCase):
         cw = controller_worker.ControllerWorker()
         cw.remove_loadbalancer(LB_ID)
 
-        mock_lb_repo_get_all_by_network.assert_called_once_with(
-            _db_session, network_id=NETWORK_ID, show_deleted=False)
-        mock_lb_repo_get.assert_called_once_with(
-            _db_session, id=LB_ID)
-        mock_ensure_selfips.assert_called_with([LB_ID], CONF.host, cleanup_orphans=False)
+        mock_lb_repo_get_all_by_network.assert_called_once_with(_db_session, network_id=NETWORK_ID, show_deleted=False)
+        mock_lb_repo_get.assert_called_once_with(_db_session, id=LB_ID)
+        mock_ensure_selfips.assert_called_with([_load_balancer_mock], CONF.host, cleanup_orphans=False)
         mock_cleanup_selfips.assert_called_with([_selfip])
-
