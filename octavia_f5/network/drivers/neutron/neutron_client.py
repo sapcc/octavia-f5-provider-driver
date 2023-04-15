@@ -411,6 +411,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             m = re.match('local-(.*)-([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12})',
                          selfip.get('name', ''))
             if not m:
+                selfips.remove(selfip)
                 continue
 
             host, subnet = m.group(1, 2)
