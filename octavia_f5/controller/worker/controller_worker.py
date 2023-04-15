@@ -664,6 +664,8 @@ class ControllerWorker(object):
             # considered orphaned (they aren't even considered by ensure_selfips because the subnet is gone) they need
             # to be determined by comparing SelfIP ports for all LBs with those of the remaining LBs.
             selfips_to_delete = [sip for sip in selfips if sip not in selfips_remaining]
+            for selfip in selfips_to_delete:
+                LOG.info(f"Deleting unneeded SelfIP {selfip.id} \"{selfip.name}\"")
             self.network_driver.cleanup_selfips(selfips_to_delete)
 
         else:
