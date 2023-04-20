@@ -16,6 +16,7 @@
 Extends octavia base repository with enhanced f5-specific queries
 """
 
+import sqlalchemy
 from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -65,6 +66,7 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
                 models.LoadBalancer.provisioning_status != consts.DELETED)
 
         return [model.to_data_model() for model in query.all()]
+
 
 class PoolRepository(repositories.PoolRepository):
     def get_pending_from_host(self, session, host=None):
@@ -142,6 +144,19 @@ class AmphoraRepository(repositories.AmphoraRepository):
         query = session.query(self.model_class.cached_zone)
         # pylint: disable=singleton-comparison
         query = query.filter(self.model_class.compute_flavor == host,
-                             self.model_class.cached_zone != None)
+                             self.model_class.cached_zone.is_(None))
 
         return [model[0] for model in query.all()]
+
+    def cleanup(self, session):
+        """ Deletes old amphora entries whose load balancers don't exist anymore.
+        See controller_worker.ensure_amphora_exists for details.
+        """
+        try:
+            session.query(self.model_class).filter(
+                self.model_class.load_balancer_id.is_(None),
+                self.model_class.cached_zone.is_(None),
+                self.model_class.compute_flavor == CONF.host,
+            ).delete()
+        except sqlalchemy.orm.exc.NoResultFound:
+            pass
