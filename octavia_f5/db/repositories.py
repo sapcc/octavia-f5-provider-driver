@@ -159,3 +159,11 @@ class AmphoraRepository(repositories.AmphoraRepository):
             ).delete()
         except sqlalchemy.orm.exc.NoResultFound:
             pass
+
+class QuotasRepository(repositories.BaseRepository):
+    model_class = models.Quotas
+
+    def update(self, session, project_id, **model_kwargs):
+        with session.begin(subtransactions=True):
+            session.query(self.model_class).filter_by(
+                project_id=project_id).update(model_kwargs)

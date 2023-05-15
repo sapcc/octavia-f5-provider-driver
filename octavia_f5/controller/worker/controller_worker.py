@@ -66,7 +66,7 @@ class ControllerWorker(object):
         self._l7policy_repo = f5_repos.L7PolicyRepository()
         self._l7rule_repo = repo.L7RuleRepository()
         self._vip_repo = repo.VipRepository()
-        self._quota_repo = repo.QuotasRepository()
+        self._quota_repo = f5_repos.QuotasRepository()
         self._az_repo = repo.AvailabilityZoneRepository()
         self._azp_repo = repo.AvailabilityZoneProfileRepository()
         self.queue = SetQueue()
@@ -135,8 +135,8 @@ class ControllerWorker(object):
 
             # update status of just-synced LBs
             self.status.update_status(loadbalancers)
-            for lb in loadbalancers:
-                self._reset_in_use_quota(lb.project_id)
+            for project_id in set(lb.project_id for lb in loadbalancers):
+                self._reset_in_use_quota(project_id)
 
         # run sync loop
         while True:
@@ -296,7 +296,7 @@ class ControllerWorker(object):
 
         try:
             self._quota_repo.update(db_apis.get_session(),
-                                    project_id=project_id, quota=reset_dict)
+                                    project_id=project_id, **reset_dict)
         except Exception:
             with excutils.save_and_reraise_exception():
                 LOG.error('Failed to reset quota for '
