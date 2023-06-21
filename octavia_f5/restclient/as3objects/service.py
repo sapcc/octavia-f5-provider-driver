@@ -334,7 +334,10 @@ def get_service(listener, cert_manager, esd_repository):
             service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http)
     if CONF.f5_agent.profile_http2 and service_args['_servicetype'] in f5_const.SERVICE_HTTPS and is_http2(listener):
         if 'profileHTTP' not in service_args:
-            service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http2)
+            LOG.error("Misconfiguration detected: listener %s should be configured with"
+                      " HTTP/2 profile but does not contain HTTP/1 profile.")
+        elif 'profileHTTP2' not in service_args:
+            service_args['profileHTTP2'] = as3.BigIP(CONF.f5_agent.profile_http2)
     if CONF.f5_agent.profile_l4 and service_args['_servicetype'] == f5_const.SERVICE_L4:
         if 'profileL4' not in service_args:
             service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)
