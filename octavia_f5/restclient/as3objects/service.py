@@ -109,6 +109,15 @@ def get_service(listener, cert_manager, esd_repository):
         'label': label
     }
 
+    def is_http2(listener):
+        """Check whether a listener counts as HTTP2.
+
+        It would suffice to count a listener with alpn_protocols set to anything as HTTP2(-capable), because the
+        HTTP2 profile acts like normal HTTP when HTTP2 isn't explicitely requested via ALPN. However,
+        having a listener be able to speak HTTP2 without it being declared that way is unexpected behavior.
+        """
+        return hasattr(listener, 'alpn_protocols') and lib_consts.ALPN_PROTOCOL_HTTP_2 in listener.alpn_protocols
+
     # Custom virtual address settings
     if CONF.f5_agent.service_address_icmp_echo:
         service_address = as3.ServiceAddress(virtualAddress=virtual_address,
@@ -119,6 +128,7 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['virtualAddresses'] = [virtual_address]
 
     # Determine service type
+    # TCP
     if listener.protocol == lib_consts.PROTOCOL_TCP:
         service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
     # UDP
@@ -130,12 +140,6 @@ def get_service(listener, cert_manager, esd_repository):
     # HTTPS (non-terminated, forward TCP traffic)
     elif listener.protocol == lib_consts.PROTOCOL_HTTPS:
         service_args['_servicetype'] = CONF.f5_agent.tcp_service_type
-    # Proxy
-    elif listener.protocol == lib_consts.PROTOCOL_PROXY:
-        service_args['_servicetype'] = f5_const.SERVICE_TCP
-        name, irule = m_irule.get_proxy_irule()
-        service_args['iRules'].append(name)
-        entities.append((name, irule))
     # Terminated HTTPS
     elif listener.protocol == lib_consts.PROTOCOL_TERMINATED_HTTPS:
         service_args['_servicetype'] = f5_const.SERVICE_HTTPS
@@ -154,12 +158,23 @@ def get_service(listener, cert_manager, esd_repository):
             except exceptions.CertificateRetrievalException as e:
                 LOG.error("Error fetching certificate: %s", e)
 
+        # TLS renegotiation has to be turned off for HTTP2, in order to be compliant.
+        allow_renegotiation = not is_http2(listener)
+
         entities.append((
             m_tls.get_listener_name(listener.id),
-            m_tls.get_tls_server([cert['id'] for cert in certificates], listener, auth_name)
+            m_tls.get_tls_server([cert['id'] for cert in certificates], listener, auth_name,
+                                 allow_renegotiation)
         ))
         entities.extend([(cert['id'], cert['as3']) for cert in certificates])
+    # Proxy
+    elif listener.protocol == lib_consts.PROTOCOL_PROXY:
+        service_args['_servicetype'] = f5_const.SERVICE_TCP
+        name, irule = m_irule.get_proxy_irule()
+        service_args['iRules'].append(name)
+        entities.append((name, irule))
 
+    # maximum number of connections
     if listener.connection_limit > 0:
         service_args['maxConnections'] = listener.connection_limit
 
@@ -212,7 +227,7 @@ def get_service(listener, cert_manager, esd_repository):
                 )
             ))
 
-    # Insert header irules
+    # Insert header iRules
     if service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
         # HTTP profiles only
         for name, irule in m_irule.get_header_irules(listener.insert_headers):
@@ -317,6 +332,12 @@ def get_service(listener, cert_manager, esd_repository):
     if CONF.f5_agent.profile_http and service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
         if 'profileHTTP' not in service_args:
             service_args['profileHTTP'] = as3.BigIP(CONF.f5_agent.profile_http)
+    if CONF.f5_agent.profile_http2 and service_args['_servicetype'] in f5_const.SERVICE_HTTPS and is_http2(listener):
+        if 'profileHTTP' not in service_args:
+            LOG.error("Misconfiguration detected: listener %s should be configured with"
+                      " HTTP/2 profile but does not contain HTTP/1 profile.", listener.id)
+        elif 'profileHTTP2' not in service_args:
+            service_args['profileHTTP2'] = as3.BigIP(CONF.f5_agent.profile_http2)
     if CONF.f5_agent.profile_l4 and service_args['_servicetype'] == f5_const.SERVICE_L4:
         if 'profileL4' not in service_args:
             service_args['profileL4'] = as3.BigIP(CONF.f5_agent.profile_l4)

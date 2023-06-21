@@ -69,12 +69,13 @@ def filter_cipher_suites(cipher_suites, object_print_name, object_id):
     return ':'.join(cipher_suites_list)
 
 
-def get_tls_server(certificate_ids, listener, authentication_ca=None):
+def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_renegotiation=True):
     """ returns AS3 TLS_Server
 
     :param certificate_ids: reference ids to AS3 certificate objs
     :param listener: Listener object
     :param authentication_ca: reference id to AS3 auth-ca obj
+    :param allow_renegotiation: Whether to allow TLS renegotiation. Has to be False when HTTP2 is used.
     :return: TLS_Server
     """
     mode_map = {
@@ -118,6 +119,7 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None):
     # Note: tls_1_1 is only supported in tmos version 14.0+
     service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
     service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in tls_versions
+    service_args['renegotiationEnabled'] = allow_renegotiation
 
     return TLS_Server(**service_args)
 
