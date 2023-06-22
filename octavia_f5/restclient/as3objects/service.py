@@ -116,7 +116,8 @@ def get_service(listener, cert_manager, esd_repository):
         HTTP2 profile acts like normal HTTP when HTTP2 isn't explicitely requested via ALPN. However,
         having a listener be able to speak HTTP2 without it being declared that way is unexpected behavior.
         """
-        return hasattr(listener, 'alpn_protocols') and lib_consts.ALPN_PROTOCOL_HTTP_2 in listener.alpn_protocols
+        return (hasattr(listener, 'alpn_protocols') and listener.alpn_protocols and
+                lib_consts.ALPN_PROTOCOL_HTTP_2 in listener.alpn_protocols)
 
     # Custom virtual address settings
     if CONF.f5_agent.service_address_icmp_echo:
