@@ -126,8 +126,6 @@ f5_agent_opts = [
                 help=_("Use unsafe mode for posting AS3 declarations.")),
     cfg.StrOpt('availability_zone', default=None,
                 help=_("Name of the availability zone the F5 device of this worker is assigned to.")),
-    cfg.StrOpt('irule_allowed_cidrs', default='cc_allowed_cidrs',
-               help=_("Name of iRule used for allowed_cidrs filtering.")),
 ]
 
 f5_tls_shared = {

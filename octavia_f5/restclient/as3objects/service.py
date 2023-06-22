@@ -48,7 +48,7 @@ def get_data_group_name(listener_id):
     :param listener_id: listener id
     :return: AS3 object name
     """
-    return "{}{}{}".format(f5_const.PREFIX_LISTENER, listener_id, f5_const.SUFFIX_ALLOWED_CIDRS)
+    return "{}{}".format(get_name(listener_id), f5_const.SUFFIX_ALLOWED_CIDRS)
 
 
 def get_esd_entities(servicetype, esd):
