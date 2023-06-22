@@ -136,7 +136,13 @@ when HTTP_RESPONSE {{
         persist add uie [HTTP::cookie "{_cookie}"] 3600
     }}
 }}"""
-
+ALLOWED_CIDRS = """when CLIENT_ACCEPTED priority 200 {
+    if { not [class match -- [getfield [IP::client_addr] "%" 1] equals [virtual name]_allowed_cidrs] }
+    {
+        reject
+        event disable all
+    }
+}"""
 
 def get_proxy_irule():
     """
@@ -227,3 +233,14 @@ def get_header_irules(insert_headers):
         entities.append(('irule_x_ssl_client_not_after', irule))
 
     return entities
+
+
+def get_allowed_cidrs_irule():
+    """
+    Returns iRule for allowed cidrs filtering.
+    :return: iRule entity (tuple with iRule name and definition)
+    """
+    irule = IRule(ALLOWED_CIDRS,
+                  remark="allowed cidr filtering")
+    name = '{}allowed_cidr'.format(constants.PREFIX_IRULE)
+    return name, irule
