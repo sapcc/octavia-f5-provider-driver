@@ -187,8 +187,10 @@ def get_service(listener, cert_manager, esd_repository):
     # Set allowed cidrs
     if hasattr(listener, 'allowed_cidrs') and listener.allowed_cidrs:
         cidrs = [c.cidr for c in listener.allowed_cidrs]
-        entities.append((get_data_group_name(listener.id), as3.Data_Group(cidrs)))
-        service_args['iRules'].append(as3.BigIP(CONF.f5_agent.irule_allowed_cidrs))
+        if '0.0.0.0/0' not in cidrs:
+            # 0.0.0.0/0 - means not restrictions
+            entities.append((get_data_group_name(listener.id), as3.Data_Group(cidrs)))
+            service_args['iRules'].append(as3.BigIP(CONF.f5_agent.irule_allowed_cidrs))
 
     # maximum number of connections
     if listener.connection_limit > 0:
