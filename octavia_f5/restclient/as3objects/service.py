@@ -42,6 +42,15 @@ def get_name(listener_id):
     return "{}{}".format(f5_const.PREFIX_LISTENER, listener_id)
 
 
+def get_data_group_name(listener_id):
+    """Return AS3 object name for type data group
+
+    :param listener_id: listener id
+    :return: AS3 object name
+    """
+    return "{}{}".format(get_name(listener_id), f5_const.SUFFIX_ALLOWED_CIDRS)
+
+
 def get_esd_entities(servicetype, esd):
     """
     Map F5 ESD (Enhanced Service Definition) to service components.
@@ -174,6 +183,14 @@ def get_service(listener, cert_manager, esd_repository):
         name, irule = m_irule.get_proxy_irule()
         service_args['iRules'].append(name)
         entities.append((name, irule))
+
+    # Set allowed cidrs
+    if hasattr(listener, 'allowed_cidrs') and listener.allowed_cidrs:
+        cidrs = [c.cidr for c in listener.allowed_cidrs]
+        if '0.0.0.0/0' not in cidrs:
+            # 0.0.0.0/0 - means all sources are allowed, no filtering needed
+            entities.append((get_data_group_name(listener.id), as3.Data_Group(cidrs)))
+            service_args['iRules'].append(as3.BigIP(CONF.f5_agent.irule_allowed_cidrs))
 
     # maximum number of connections
     if listener.connection_limit > 0:

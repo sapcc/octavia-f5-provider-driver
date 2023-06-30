@@ -137,7 +137,6 @@ when HTTP_RESPONSE {{
     }}
 }}"""
 
-
 def get_proxy_irule():
     """
     Returns iRule for proxy protocol initiation.

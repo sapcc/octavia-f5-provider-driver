@@ -305,3 +305,11 @@ class HTTP_Profile(BaseDescription):
     def __init__(self, **kwargs):
         super(HTTP_Profile, self).__init__(locals())
         setattr(self, 'class', 'HTTP_Profile')
+
+
+class Data_Group(BaseDescription):
+    def __init__(self, _records, keyDataType='ip', **kwargs):
+        super(Data_Group, self).__init__(locals())
+        setattr(self, 'class', 'Data_Group')
+        self.require('keyDataType')
+        setattr(self, 'records', [{"key": r} for r in _records])
