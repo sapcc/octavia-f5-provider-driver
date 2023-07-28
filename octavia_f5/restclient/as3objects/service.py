@@ -91,6 +91,12 @@ def get_esd_entities(servicetype, esd):
         if compression:
             service_args['profileHTTPCompression'] = as3.BigIP(compression)
 
+    if servicetype == f5_const.SERVICE_UDP:
+        # UDP datagram profile - routes UDP traffic without a connection table
+        cudp = esd.get('lbaas_cudp', None)
+        if cudp:
+            service_args['profileUDP'] = as3.BigIP(cudp)
+
     return service_args
 
 
