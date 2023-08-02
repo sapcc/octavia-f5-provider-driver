@@ -18,6 +18,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 from taskflow import task
 from taskflow.types import failure
+from taskflow import exceptions
 
 from octavia.common import data_models as models
 from octavia.db import api as db_apis
@@ -43,6 +44,13 @@ class GetLoadBalancerByID(RescheduleTasks):
         LOG.debug("Get load balancer from DB by id: %s ", loadbalancer_id)
         return self._loadbalancer_repo.get(db_apis.get_session(),
                                            id=loadbalancer_id)
+
+
+class CheckTargetHost(RescheduleTasks):
+    def execute(self, target_host: str):
+        devices = self._amphora_repo.get_devices_for_host(db_apis.get_session(), host=target_host)
+        if not devices:
+            raise exceptions.NotFound(f"Target host not found: {target_host}")
 
 
 class GetOldAgentFromLoadBalancer(RescheduleTasks):

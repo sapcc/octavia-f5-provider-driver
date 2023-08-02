@@ -60,8 +60,11 @@ class MigrationArbiter(RescheduleMixin):
             tf.run()
 
     def get_reschedule_flow(self) -> flow.Flow:
-        # Prepare Self-IPs for target
+        # do basic checks and get load balancer
+        check_host_task = reschedule_tasks.CheckTargetHost()
         get_loadbalancer_task = reschedule_tasks.GetLoadBalancerByID()
+
+        # Prepare Self-IPs for target
         create_selfips_task = network_tasks.CreateSelfIPs(self.network_driver)
         wait_for_selfip_task = network_tasks.WaitForNewSelfIPs(self.network_driver)
 
@@ -89,7 +92,6 @@ class MigrationArbiter(RescheduleMixin):
                                  invalidate_cache_task)
 
         reschedule_flow = linear_flow.Flow('reschedule-flow')
-        reschedule_flow.add(get_loadbalancer_task, get_old_agent_task, create_selfips_task,
-                            wait_for_selfip_task, add_remove_loadbalancer_flow,
-                            update_database_flow)
+        reschedule_flow.add(check_host_task, get_loadbalancer_task, get_old_agent_task, create_selfips_task,
+                            wait_for_selfip_task, add_remove_loadbalancer_flow, update_database_flow)
         return reschedule_flow
