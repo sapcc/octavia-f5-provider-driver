@@ -155,6 +155,8 @@ class EsdRepository(EsdJSONValidation):
             'value_type': str},
         'lbaas_stcp': {
             'value_type': str},
+        'lbaas_cudp': {
+            'value_type': str},
         'lbaas_http': {
             'value_type': str},
         'lbaas_one_connect': {
