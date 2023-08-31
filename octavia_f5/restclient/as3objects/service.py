@@ -64,9 +64,11 @@ def get_esd_entities(servicetype, esd):
     if irules:
         service_args['iRules'] = [as3.BigIP(rule) for rule in irules]
 
-    # client / server tcp profiles
+    # TCP/FastL4 profiles
     if servicetype in [f5_const.SERVICE_HTTP, f5_const.SERVICE_HTTPS,
                        f5_const.SERVICE_TCP, f5_const.SERVICE_L4]:
+
+        # client/server TCP profiles
         ctcp = esd.get('lbaas_ctcp', None)
         stcp = esd.get('lbaas_stcp', None)
         if stcp and ctcp:
@@ -80,6 +82,12 @@ def get_esd_entities(servicetype, esd):
         else:
             service_args['profileTCP'] = 'normal'
 
+        # FastL4 profiles
+        profilel4 = esd.get('lbaas_fastl4', None)
+        if profilel4 and servicetype == f5_const.SERVICE_L4:
+            service_args['profilel4'] = as3.BigIP(profilel4)
+
+    # HTTP profiles
     if servicetype in [f5_const.SERVICE_HTTP, f5_const.SERVICE_HTTPS]:
         # OneConnect (Multiplex) Profile
         oneconnect = esd.get('lbaas_one_connect', None)
@@ -91,6 +99,7 @@ def get_esd_entities(servicetype, esd):
         if compression:
             service_args['profileHTTPCompression'] = as3.BigIP(compression)
 
+    # UDP profiles
     if servicetype == f5_const.SERVICE_UDP:
         # UDP datagram profile - routes UDP traffic without a connection table
         cudp = esd.get('lbaas_cudp', None)
