@@ -361,6 +361,9 @@ def get_service(listener, cert_manager, esd_repository):
             service_args['iRules'] or 'profileTCP' in service_args):
         service_args['_servicetype'] = f5_const.SERVICE_TCP
 
+        # profilel4 is only used on ServiceL4, so remove it
+        service_args.pop('profilel4', None)
+
     # add default profiles to supported listeners
     if CONF.f5_agent.profile_http and service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
         if 'profileHTTP' not in service_args:
