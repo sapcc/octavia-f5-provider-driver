@@ -79,13 +79,11 @@ def get_esd_entities(servicetype, esd):
             )
         elif ctcp:
             service_args['profileTCP'] = as3.BigIP(ctcp)
-        else:
-            service_args['profileTCP'] = 'normal'
 
         # FastL4 profiles
         profilel4 = esd.get('lbaas_fastl4', None)
         if profilel4 and servicetype == f5_const.SERVICE_L4:
-            service_args['profilel4'] = as3.BigIP(profilel4)
+            service_args['profileL4'] = as3.BigIP(profilel4)
 
     # HTTP profiles
     if servicetype in [f5_const.SERVICE_HTTP, f5_const.SERVICE_HTTPS]:
@@ -362,7 +360,7 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['_servicetype'] = f5_const.SERVICE_TCP
 
         # profilel4 is only used on ServiceL4, so remove it
-        service_args.pop('profilel4', None)
+        service_args.pop('profileL4', None)
 
     # add default profiles to supported listeners
     if CONF.f5_agent.profile_http and service_args['_servicetype'] in f5_const.SERVICE_HTTP_TYPES:
