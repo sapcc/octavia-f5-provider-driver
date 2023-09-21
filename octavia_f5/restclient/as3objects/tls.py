@@ -69,13 +69,14 @@ def filter_cipher_suites(cipher_suites, object_print_name, object_id):
     return ':'.join(cipher_suites_list)
 
 
-def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_renegotiation=True):
+def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_renegotiation=True, cipher_group=None):
     """ returns AS3 TLS_Server
 
     :param certificate_ids: reference ids to AS3 certificate objs
     :param listener: Listener object
     :param authentication_ca: reference id to AS3 auth-ca obj
     :param allow_renegotiation: Whether to allow TLS renegotiation. Has to be False when HTTP2 is used.
+    :param cipher_group: name of Cipher Group has to be used for this listener
     :return: TLS_Server
     """
     mode_map = {
@@ -84,12 +85,12 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_rene
         'MANDATORY': 'require'
     }
 
-    # LBs created before Ussuri may have TLS-enabled listeners with no tls_ciphers specified
-    ciphers = listener.tls_ciphers or CONF.api_settings.default_listener_ciphers
     service_args = {
         'certificates': [{'certificate': cert_id} for cert_id in set(certificate_ids)],
-        'ciphers': filter_cipher_suites(ciphers, "Listener", listener.id)
     }
+
+    if cipher_group:
+        service_args['cipherGroup'] = {'use': cipher_group}
 
     if authentication_ca:
         service_args['authenticationTrustCA'] = authentication_ca
@@ -124,21 +125,21 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_rene
     return TLS_Server(**service_args)
 
 
-def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None):
+def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None, cipher_group=None):
     """ returns AS3 TLS_Client
 
     :param pool: The pool for which to create the TLS client
     :param trust_ca: reference to AS3 trust_ca obj
     :param client_cert: reference to AS3 client_cert
     :param crl_file: reference to AS3 crl_file
+    :param cipher_group: name of Cipher Group has to be used for this pool
     :return: TLS_Client
     """
 
-    # LBs created before Ussuri may have TLS-enabled pools with no tls_ciphers specified
-    ciphers = pool.tls_ciphers or CONF.api_settings.default_pool_ciphers
-    service_args = {
-        'ciphers': filter_cipher_suites(ciphers, "Pool", pool.id)
-    }
+    service_args = {}
+
+    if cipher_group:
+        service_args['cipherGroup'] = {'use': cipher_group}
 
     if trust_ca:
         service_args['trustCA'] = Pointer(trust_ca)

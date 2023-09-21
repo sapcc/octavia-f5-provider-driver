@@ -313,3 +313,15 @@ class Data_Group(BaseDescription):
         setattr(self, 'class', 'Data_Group')
         self.require('keyDataType')
         setattr(self, 'records', [{"key": r} for r in _records])
+
+
+class Cipher_Group(BaseDescription):
+    def __init__(self, **kwargs):
+        super(Cipher_Group, self).__init__(locals())
+        setattr(self, 'class', 'Cipher_Group')
+
+
+class Cipher_Rule(BaseDescription):
+    def __init__(self, **kwargs):
+        super(Cipher_Rule, self).__init__(locals())
+        setattr(self, 'class', 'Cipher_Rule')
