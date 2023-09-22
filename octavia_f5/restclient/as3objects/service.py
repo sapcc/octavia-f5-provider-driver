@@ -170,9 +170,9 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['serverTLS'] = m_tls.get_listener_name(listener.id)
         service_args['redirect80'] = False
 
-        if is_http2(listener):
-            # MRF Routing should be anabled for HTTP2 Listeners
-            service_args['httpMrfRoutingEnabled'] = True
+        # if is_http2(listener):
+        #     # MRF Routing should be anabled for HTTP2 Listeners
+        #     service_args['httpMrfRoutingEnabled'] = True
 
         # Certificate Handling
         auth_name = None
