@@ -69,7 +69,7 @@ def filter_cipher_suites(cipher_suites, object_name, object_id, http2=False):
     # Add required ciphers if HTTP2 is using
     for cipher in constants.CIPHERS_HTTP2:
         if cipher not in cipher_suites_list:
-            LOG.warning("mandatory cipher {} was added for {} because HTTP2 is using"
+            LOG.warning("mandatory cipher {} was added for {} {} because HTTP2 is using"
                         .format(cipher, object_name, object_id))
             cipher_suites_list.append(cipher)
 
