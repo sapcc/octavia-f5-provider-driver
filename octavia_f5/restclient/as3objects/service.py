@@ -170,6 +170,10 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['serverTLS'] = m_tls.get_listener_name(listener.id)
         service_args['redirect80'] = False
 
+        if is_http2(listener):
+            # MRF Routing should be anabled for HTTP2 Listeners
+            service_args['httpMrfRoutingEnabled'] = True
+
         # Certificate Handling
         auth_name = None
         certificates = cert_manager.get_certificates(listener)
@@ -261,6 +265,9 @@ def get_service(listener, cert_manager, esd_repository):
             cipher_name, cipher_class = m_cipher.get_cipher_rule(pool_ciphers, 'Pool', default_pool.id)
             entities.extend(cipher_class)
 
+            # TLS renegotiation has to be turned off for HTTP2, in order to be compliant.
+            allow_renegotiation = not is_http2(listener)
+
             entities.append((
                 m_tls.get_pool_name(default_pool.id),
                 m_tls.get_tls_client(
@@ -268,6 +275,7 @@ def get_service(listener, cert_manager, esd_repository):
                     trust_ca=trust_ca,
                     client_cert=client_cert,
                     crl_file=crl_file,
+                    allow_renegotiation=allow_renegotiation,
                     cipher_group=cipher_name,
                 )
             ))

@@ -125,13 +125,14 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_rene
     return TLS_Server(**service_args)
 
 
-def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None, cipher_group=None):
+def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None, allow_renegotiation=True, cipher_group=None):
     """ returns AS3 TLS_Client
 
     :param pool: The pool for which to create the TLS client
     :param trust_ca: reference to AS3 trust_ca obj
     :param client_cert: reference to AS3 client_cert
     :param crl_file: reference to AS3 crl_file
+    :param allow_renegotiation: Whether to allow TLS renegotiation. Has to be False when HTTP2 is used.
     :param cipher_group: name of Cipher Group has to be used for this pool
     :return: TLS_Client
     """
@@ -168,5 +169,6 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None, cipher_
     # Note: tls_1_1 is only supported in tmos version 14.0+
     service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
     service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in tls_versions
+    service_args['renegotiationEnabled'] = allow_renegotiation
 
     return TLS_Client(**service_args)
