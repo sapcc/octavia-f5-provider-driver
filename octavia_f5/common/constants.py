@@ -21,6 +21,8 @@ PREFIX_TLS_LISTENER = 'tls_listener_'
 PREFIX_TLS_POOL = 'tls_pool_'
 PREFIX_CONTAINER = 'container_'
 PREFIX_CERTIFICATE = 'cert_'
+PREFIX_CIPHER_RULE = 'cipher_rule_'
+PREFIX_CIPHER_GROUP = 'cipher_group_'
 PREFIX_POOL = 'pool_'
 PREFIX_HEALTH_MONITOR = 'hm_'
 PREFIX_LOADBALANCER = 'lb_'
@@ -84,3 +86,6 @@ MAINT = 'MAINT'
 F5_NETWORK_AGENT_TYPE = 'F5 Agent'
 
 HEALTH_MONITOR_DELAY_MAX = 3600
+
+# The list of required ciphers for HTTP2
+CIPHERS_HTTP2 = ['ECDHE-RSA-AES128-GCM-SHA256']
