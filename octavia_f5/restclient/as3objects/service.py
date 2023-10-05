@@ -170,10 +170,6 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['serverTLS'] = m_tls.get_listener_name(listener.id)
         service_args['redirect80'] = False
 
-        # if is_http2(listener):
-        #     # MRF Routing should be anabled for HTTP2 Listeners
-        #     service_args['httpMrfRoutingEnabled'] = True
-
         # Certificate Handling
         auth_name = None
         certificates = cert_manager.get_certificates(listener)
@@ -192,13 +188,14 @@ def get_service(listener, cert_manager, esd_repository):
         # LBs created before Ussuri may have TLS-enabled listeners with no
         # tls_ciphers specified so we have to use default value
         listener_ciphers = listener.tls_ciphers or CONF.api_settings.default_listener_ciphers
-        cipher_name, cipher_class = m_cipher.get_cipher_rule(listener_ciphers, 'Listener', listener.id)
-        entities.extend(cipher_class)
+        cipher_group_name, cipher_rule_and_group = m_cipher.get_cipher_rule_and_group(
+            listener_ciphers, 'Listener', listener.id)
+        entities.extend(cipher_rule_and_group)
 
         entities.append((
             m_tls.get_listener_name(listener.id),
             m_tls.get_tls_server([cert['id'] for cert in certificates], listener, auth_name,
-                                 allow_renegotiation, cipher_name)
+                                 allow_renegotiation, cipher_group_name)
         ))
         entities.extend([(cert['id'], cert['as3']) for cert in certificates])
     # Proxy
@@ -262,8 +259,9 @@ def get_service(listener, cert_manager, esd_repository):
             # LBs created before Ussuri may have TLS-enabled pools with no
             # tls_ciphers specified so we have to use default value
             pool_ciphers = default_pool.tls_ciphers or CONF.api_settings.default_pool_ciphers
-            cipher_name, cipher_class = m_cipher.get_cipher_rule(pool_ciphers, 'Pool', default_pool.id)
-            entities.extend(cipher_class)
+            cipher_group_name, cipher_rule_and_group = m_cipher.get_cipher_rule_and_group(
+                pool_ciphers, 'Pool', default_pool.id)
+            entities.extend(cipher_rule_and_group)
 
             # TLS renegotiation has to be turned off for HTTP2, in order to be compliant.
             allow_renegotiation = not is_http2(listener)
@@ -276,7 +274,7 @@ def get_service(listener, cert_manager, esd_repository):
                     client_cert=client_cert,
                     crl_file=crl_file,
                     allow_renegotiation=allow_renegotiation,
-                    cipher_group=cipher_name,
+                    cipher_group=cipher_group_name,
                 )
             ))
 

@@ -69,14 +69,14 @@ def filter_cipher_suites(cipher_suites, object_name, object_id, http2=False):
     # Add required ciphers if HTTP2 is using
     for cipher in constants.CIPHERS_HTTP2:
         if cipher not in cipher_suites_list:
-            LOG.warning("mandatory cipher {} was added for {} {} because HTTP2 is using"
+            LOG.warning("mandatory cipher {} was added for {} {} because HTTP2 is being used"
                         .format(cipher, object_name, object_id))
             cipher_suites_list.append(cipher)
 
     return cipher_suites_list
 
 
-def get_cipher_rule(ciphers, parent_obj, parent_id, http2=False):
+def get_cipher_rule_and_group(ciphers, parent_obj, parent_id, http2=False):
     rule_name = get_cipher_rule_name(parent_id, parent_obj)
     group_name = get_cipher_group_name(parent_id, parent_obj)
     rule_args = {
