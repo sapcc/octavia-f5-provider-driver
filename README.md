@@ -43,11 +43,11 @@ There are lots of F5-specific configuration options. They can be found in `octav
 
 # Listener type to AS3 service class mapping
 Mapping happens in [`octavia_f5/restclient/as3objects/service.py`](./octavia_f5/restclient/as3objects/service.py).
-| Openstack listener type | AS3 service class |
-|-|-|
-| TCP | Service_L4 |
-| UDP | Service_UDP |
-| HTTP | Service_HTTP |
-| HTTPS | Service_L4 |
-| PROXY | Service_TCP |
-| TERMINATED_HTTPS | Service_HTTPS |
+| Openstack listener type | AS3 service class | Notes |
+|-|-|-|
+| TCP | Service_L4 | Uses L4 acceleration |
+| UDP | Service_UDP | |
+| HTTP | Service_HTTP | |
+| HTTPS | Service_L4 | Uses L4 acceleration, since HTTPS simply gets passed through without decryption |
+| PROXY | Service_TCP | Does *not* use L4 acceleration, since it's incompatible with the Proxy Protocol iRule |
+| TERMINATED_HTTPS | Service_HTTPS | |
