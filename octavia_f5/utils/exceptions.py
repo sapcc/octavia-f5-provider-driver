@@ -13,19 +13,23 @@
 # under the License.
 
 
-class AS3Exception(Exception):
+class ProviderDriverException(Exception):
     pass
 
 
-class RetryException(Exception):
+class AS3Exception(ProviderDriverException):
     pass
 
 
-class FailoverException(Exception):
+class RetryException(ProviderDriverException):
     pass
 
 
-class IControlRestException(Exception):
+class FailoverException(ProviderDriverException):
+    pass
+
+
+class IControlRestException(ProviderDriverException):
     pass
 
 
@@ -57,7 +61,7 @@ class MonitorDeletionException(AS3Exception):
         self.monitor = monitor
 
 
-class DeleteAllTenantsException(Exception):
+class DeleteAllTenantsException(AS3Exception):
     def __init__(self):
         super(DeleteAllTenantsException).__init__()
         self.message = 'Delete called without tenant, would wipe all AS3 Declaration, ignoring.'
