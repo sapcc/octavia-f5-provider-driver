@@ -120,6 +120,7 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_rene
     # Note: tls_1_1 is only supported in tmos version 14.0+
     service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
     service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in tls_versions
+    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in tls_versions
     # Control Renegotiation depends on HTTP2
     service_args['renegotiationEnabled'] = allow_renegotiation
 
@@ -170,6 +171,7 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None, allow_r
     # Note: tls_1_1 is only supported in tmos version 14.0+
     service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
     service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in tls_versions
+    service_args['tls1_3Enabled'] = lib_consts.TLS_VERSION_1_3 in tls_versions
     # Control Renegotiation depends on HTTP2
     service_args['renegotiationEnabled'] = allow_renegotiation
 
