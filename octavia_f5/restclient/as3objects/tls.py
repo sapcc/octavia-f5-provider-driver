@@ -113,15 +113,8 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_rene
     # LBs created before Ussuri may have TLS-enabled listeners with no tls_versions specified
     tls_versions = listener.tls_versions or CONF.api_settings.default_listener_tls_versions
 
-    # Set TLS versions
-    # Enable/Disable all SSL versions at once
-    service_args['sslEnabled'] = lib_consts.SSL_VERSION_3 in tls_versions
-    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in tls_versions
-    # Note: tls_1_1 is only supported in tmos version 14.0+
-    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
-    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in tls_versions
-    # Control Renegotiation depends on HTTP2
-    service_args['renegotiationEnabled'] = allow_renegotiation
+    # Add TLS version-specific args
+    service_args.update(get_tls_versions_args(tls_versions, allow_renegotiation))
 
     return TLS_Server(**service_args)
 
@@ -163,14 +156,28 @@ def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None, allow_r
     # LBs created before Ussuri may have TLS-enabled pools with no tls_versions specified
     tls_versions = pool.tls_versions or CONF.api_settings.default_pool_tls_versions
 
-    # Set TLS versions
-    # Enable/Disable all SSL versions at once
-    service_args['sslEnabled'] = lib_consts.SSL_VERSION_3 in tls_versions
-    service_args['tls1_0Enabled'] = lib_consts.TLS_VERSION_1 in tls_versions
-    # Note: tls_1_1 is only supported in tmos version 14.0+
-    service_args['tls1_1Enabled'] = lib_consts.TLS_VERSION_1_1 in tls_versions
-    service_args['tls1_2Enabled'] = lib_consts.TLS_VERSION_1_2 in tls_versions
-    # Control Renegotiation depends on HTTP2
-    service_args['renegotiationEnabled'] = allow_renegotiation
+    # Add TLS version-specific args
+    service_args.update(get_tls_versions_args(tls_versions, allow_renegotiation))
 
     return TLS_Client(**service_args)
+
+
+def get_tls_versions_args(tls_versions, allow_renegotiation):
+    return {
+        # The following versions: SSLv3, TLSv1.0, TLSv1.1 are disabled and are not
+        # supported because of security issues. They are also not allowed on API
+        # level and our customers cannot configure them. But we have to set them to
+        # false because default values are true.
+        'sslEnabled': False,
+        'tls1_0Enabled': False,
+        'tls1_1Enabled': False,
+        # TLSv1.2 has to be enabled in any case because most of the ciphers require
+        # it and also it should be configured for HTTP2. Otherwise, we should have
+        # only TLSv1.3 ciphers. But this configuration is much more complicated for
+        # customers.
+        'tls1_2Enabled': True,
+        # Note: tls1_3Enabled is only supported in tmos version 14.0+
+        'tls1_3Enabled': lib_consts.TLS_VERSION_1_3 in tls_versions,
+        # Control Renegotiation depends on HTTP2
+        'renegotiationEnabled': allow_renegotiation,
+    }
