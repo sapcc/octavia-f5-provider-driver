@@ -43,6 +43,7 @@ class RaisesIControlRestError(ContextDecorator):
         return self
 
     def __exit__(self, exc_type, exc_val, traceback):
+        """Convert a HTTPError into an IControlRestException"""
         if exc_type == HTTPError:
             parsed = urlparse(exc_val.request.url)
             redacted = parsed._replace(netloc="{}:{}@{}".format(parsed.username, "???", parsed.hostname))
@@ -55,4 +56,5 @@ class RaisesIControlRestError(ContextDecorator):
             raise IControlRestException(
                 f"HTTP {exc_val.response.status_code} for {exc_val.request.method} {redacted.geturl()}: {message}"
             )
+        # False means reraise the exception
         return False

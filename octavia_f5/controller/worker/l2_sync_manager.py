@@ -127,10 +127,15 @@ class L2SyncManager(BaseTaskFlowEngine):
             e.run()
 
         # add missing SelfIPs/subnet routes
-        e = self.taskflow_load(self._f5flows.ensure_selfips_and_subnet_routes(
-            expected_selfips, device_selfips, store=store), store=store)
-        with tf_logging.LoggingListener(e, log=LOG):
-            e.run()
+        # FIXME rollback cleanup_selfips_and_subnet_routes if we get an exception here.
+        # FIXME we'll probably have to put these two flows into one that can be rolled back
+        try:
+            e = self.taskflow_load(self._f5flows.ensure_selfips_and_subnet_routes(
+                expected_selfips, device_selfips, store=store), store=store)
+            with tf_logging.LoggingListener(e, log=LOG):
+                e.run()
+        except Exception as e:
+            print(f"Catched exception from _f5flows.ensure_selfips_and_subnet_routes: {e}")
 
     def _do_remove_vcmp_l2_flow(self, store: dict):
         e = self.taskflow_load(self._f5flows.remove_vcmp_l2(), store=store)

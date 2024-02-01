@@ -217,6 +217,10 @@ class EnsureSelfIP(task.Task):
         # No Changes needed
         return device_selfip
 
+    # @decorators.RaisesIControlRestError()
+    def revert(self, *args, **kwargs):
+        print(f"Rolling back EnsureSelfIP: {self.__class__.__name__}")
+
 
 class GetAllSelfIPsForVLAN(task.Task):
     default_provides = 'selfips'
@@ -333,6 +337,10 @@ class EnsureSubnetRoutes(task.Task):
             res = bigip.post(path='/mgmt/tm/net/route', json=route)
             res.raise_for_status()
 
+    # @decorators.RaisesIControlRestError()
+    def revert(self, *args, **kwargs):
+        print(f"Rolling back EnsureSubnetRoutes: {self.__class__.__name__}")
+
 
 """ Cleanup Tasks """
 
@@ -396,6 +404,10 @@ class CleanupSubnetRoutes(task.Task):
                 res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{existing_route_name}")
                 res.raise_for_status()
 
+    # @decorators.RaisesIControlRestError()
+    def revert(self, *args, **kwargs):
+        print(f"Rolling back CleanupSubnetRoutes: {self.__class__.__name__}")
+
 
 class RemoveSelfIP(task.Task):
     def execute(self, port: network_models.Port,
@@ -405,6 +417,10 @@ class RemoveSelfIP(task.Task):
         if not res.ok:
             LOG.warning("%s: Failed cleanup SelfIP %s: %s",
                         port.id, bigip.hostname, res.content)
+
+    # @decorators.RaisesIControlRestError()
+    def revert(self, *args, **kwargs):
+        print(f"Rolling back RemoveSelfIRemoveSelfIP {self.__class__.__name__}")
 
 
 class CleanupRouteDomain(task.Task):
