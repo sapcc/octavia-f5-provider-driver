@@ -184,11 +184,10 @@ class EnsureRouteDomain(task.Task):
 class EnsureSelfIP(task.Task):
     """ Task to create or update Self-IP if needed """
 
-    @decorators.RaisesIControlRestError()
-    def execute(self, network: f5_network_models.Network,
-                port: network_models.Port,
-                bigip: bigip_restclient.BigIPRestClient,
-                *args, **kwargs):
+    def _get_selfip_from_device(self, network: f5_network_models.Network,
+               port: network_models.Port,
+               bigip: bigip_restclient.BigIPRestClient,
+               *args, **kwargs):
 
         network_driver = driver_utils.get_network_driver()
         name = f"port-{port.id}"
@@ -198,7 +197,16 @@ class EnsureSelfIP(task.Task):
         address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{ipnetwork.prefixlen}"
         selfip = {'name': name, 'vlan': vlan, 'address': address}
 
-        device_response = bigip.get(path=f"/mgmt/tm/net/self/{name}")
+        return bigip.get(path=f"/mgmt/tm/net/self/{name}")
+
+    @decorators.RaisesIControlRestError()
+    def execute(self, network: f5_network_models.Network,
+                port: network_models.Port,
+                bigip: bigip_restclient.BigIPRestClient,
+                *args, **kwargs):
+
+        # check whether selfip already exists
+        device_response = self._get_selfip_from_device(network, port, bigip)
 
         # Create selfip if not existing
         if device_response.status_code == 404:
@@ -217,9 +225,24 @@ class EnsureSelfIP(task.Task):
         # No Changes needed
         return device_selfip
 
-    # @decorators.RaisesIControlRestError()
+    @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
-        LOG.warning(f"Rolling back EnsureSelfIP: {self.__class__.__name__}")
+        LOG.warning(f"Reverting task EnsureSelfIP for network {network.id}, SelfIP port {port.id}")
+
+        # check whether selfip still exists
+        device_response = self._get_selfip_from_device(network, port, bigip)
+
+        # Remove selfip if existing
+        if device_response.status_code != 404:
+            # TODO: Check if DELETE is supported for this endpoint
+            res = bigip.delete(path='/mgmt/tm/net/self', json=selfip)
+            res.raise_for_status()
+            return res.json()
+
+        # FIXME If at the time of EnsureSelfIP.execute the SelfIP already
+        # existed, but then was changed EnsureSelfIP.execute, we cannot revert
+        # that. To make that work we'll have to record the old SelfIP object
+        # somewhere for as long as the flow that's executing this task lives.
 
 
 class GetAllSelfIPsForVLAN(task.Task):
