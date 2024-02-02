@@ -219,7 +219,7 @@ class EnsureSelfIP(task.Task):
 
     # @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
-        print(f"Rolling back EnsureSelfIP: {self.__class__.__name__}")
+        LOG.warning(f"Rolling back EnsureSelfIP: {self.__class__.__name__}")
 
 
 class GetAllSelfIPsForVLAN(task.Task):
@@ -240,6 +240,10 @@ class GetAllSelfIPsForVLAN(task.Task):
                 for item in items
                 if item['vlan'] == vlan
                 and item['name'].startswith('port-')]
+
+    # @decorators.RaisesIControlRestError()
+    def revert(self, *args, **kwargs):
+        LOG.warning(f"Rolling back GetAllSelfIPsForVLAN: {self.__class__.__name__}")
 
 
 class EnsureDefaultRoute(task.Task):
@@ -339,7 +343,7 @@ class EnsureSubnetRoutes(task.Task):
 
     # @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
-        print(f"Rolling back EnsureSubnetRoutes: {self.__class__.__name__}")
+        LOG.warning(f"Rolling back EnsureSubnetRoutes: {self.__class__.__name__}")
 
 
 """ Cleanup Tasks """
@@ -406,7 +410,7 @@ class CleanupSubnetRoutes(task.Task):
 
     # @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
-        print(f"Rolling back CleanupSubnetRoutes: {self.__class__.__name__}")
+        LOG.warning(f"Rolling back CleanupSubnetRoutes: {self.__class__.__name__}")
 
 
 class RemoveSelfIP(task.Task):
@@ -420,7 +424,7 @@ class RemoveSelfIP(task.Task):
 
     # @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
-        print(f"Rolling back RemoveSelfIRemoveSelfIP {self.__class__.__name__}")
+        LOG.warning(f"Rolling back RemoveSelfIP {self.__class__.__name__}")
 
 
 class CleanupRouteDomain(task.Task):
