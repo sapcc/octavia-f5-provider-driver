@@ -114,7 +114,7 @@ class F5Flows(object):
 
         cleanup_selfips_and_subnet_routes_flow = unordered_flow.Flow('cleanup-selfips-and-subnet-routes-flow')
 
-        # removal of SelfIPs
+        # remove unneeded SelfIPs
         selfips_to_remove = [port for port in device_selfips if port.id not in [p.id for p in expected_selfips]]
         LOG.debug("%s: SelfIPs to remove for network %s: %s",
                   store['bigip'].hostname, store['network'].id, [p.id for p in selfips_to_remove])
@@ -122,7 +122,7 @@ class F5Flows(object):
             cleanup_selfip = f5_tasks.RemoveSelfIP(name=f"cleanup-selfip-{selfip.id}", inject={'port': selfip})
             cleanup_selfips_and_subnet_routes_flow.add(cleanup_selfip)
 
-        # removal of subnet routes
+        # remove unneeded subnet routes
         cleanup_selfips_and_subnet_routes_flow.add(
             f5_tasks.CleanupSubnetRoutes(inject={'selfips': expected_selfips}))
 
@@ -137,7 +137,7 @@ class F5Flows(object):
 
         ensure_selfips_and_subnet_routes_flow = unordered_flow.Flow('ensure-selfips-and-subnet-routes-flow')
 
-        # add SelfIPs
+        # add missing SelfIPs
         selfips_to_add = [port for port in expected_selfips if port.id not in [p.id for p in device_selfips]]
         LOG.debug("%s: SelfIPs to add for network %s: %s",
                   store['bigip'].hostname, store['network'].id, [p.id for p in selfips_to_add])
@@ -146,7 +146,7 @@ class F5Flows(object):
             ensure_selfip = f5_tasks.EnsureSelfIP(name=f"ensure-selfip-{selfip.id}", inject={'port': selfip})
             ensure_selfips_and_subnet_routes_flow.add(ensure_selfip)
 
-        # removal of subnet routes
+        # add missing subnet routes
         ensure_selfips_and_subnet_routes_flow.add(
             f5_tasks.EnsureSubnetRoutes(inject={'selfips': expected_selfips}))
 

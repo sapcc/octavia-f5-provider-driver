@@ -360,7 +360,7 @@ class EnsureSubnetRoutes(task.Task):
             res = bigip.post(path='/mgmt/tm/net/route', json=route)
             res.raise_for_status()
 
-    # @decorators.RaisesIControlRestError()
+    @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
         LOG.warning(f"Rolling back EnsureSubnetRoutes: {self.__class__.__name__}")
 
@@ -427,7 +427,7 @@ class CleanupSubnetRoutes(task.Task):
                 res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{existing_route_name}")
                 res.raise_for_status()
 
-    # @decorators.RaisesIControlRestError()
+    @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
         LOG.warning(f"Rolling back CleanupSubnetRoutes: {self.__class__.__name__}")
 
@@ -441,7 +441,7 @@ class RemoveSelfIP(task.Task):
             LOG.warning("%s: Failed cleanup SelfIP %s: %s",
                         port.id, bigip.hostname, res.content)
 
-    # @decorators.RaisesIControlRestError()
+    @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
         LOG.warning(f"Rolling back RemoveSelfIP {self.__class__.__name__}")
 
