@@ -111,15 +111,15 @@ class L2SyncManager(BaseTaskFlowEngine):
         replaced with a SelfIP or vice versa. Since SelfIPs and subnet routes conflict, deletion must always happen
         before creation."""
 
-        # get list of SelfIPs that must exist
+        # get list of SelfIPs that currently exist
         e = self.taskflow_load(self._f5flows.get_selfips_from_device_for_vlan(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
+        device_selfips = e.storage.get('all-selfips')
+
+        # show what we'll changed
         LOG.debug("%s: The expected SelfIPs for network %s are: %s",
                   store['bigip'].hostname, store['network'].id, [sip.id for sip in expected_selfips])
-
-        # get list of SelfIPs that currently exist
-        device_selfips = e.storage.get('all-selfips')
         LOG.debug("%s: The existing SelfIPs for network %s are: %s",
                   store['bigip'].hostname, store['network'].id, [sip.id for sip in device_selfips])
 
