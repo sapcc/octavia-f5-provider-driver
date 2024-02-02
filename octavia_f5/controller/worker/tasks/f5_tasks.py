@@ -241,10 +241,6 @@ class GetAllSelfIPsForVLAN(task.Task):
                 if item['vlan'] == vlan
                 and item['name'].startswith('port-')]
 
-    # @decorators.RaisesIControlRestError()
-    def revert(self, *args, **kwargs):
-        LOG.warning(f"Rolling back GetAllSelfIPsForVLAN: {self.__class__.__name__}")
-
 
 class EnsureDefaultRoute(task.Task):
     default_provides = 'device_route'
