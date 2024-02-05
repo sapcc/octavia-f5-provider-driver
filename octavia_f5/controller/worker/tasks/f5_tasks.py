@@ -251,7 +251,7 @@ class EnsureSelfIP(task.Task):
         # FIXME If at the time of EnsureSelfIP.execute the SelfIP already
         # existed, but then was changed EnsureSelfIP.execute, we cannot revert
         # that. To make that work we'll have to record the old SelfIP object
-        # somewhere for as long as the flow that's executing this task lives.
+        # in the store.
 
 
 class GetAllSelfIPsForVLAN(task.Task):
@@ -291,6 +291,7 @@ class GetAllSubnetRoutesForNetwork(task.Task):
                 r.startswith(subnet_route_network_part)]
         # TODO remove the following line and directly return the list comprehension expression above
         LOG.warning(f"GetAllSubnetRoutesForNetwork: Got {len(routes)} routes, {len(subnet_routes_this_network)} for this network: {subnet_routes_this_network}")
+        return subnet_routes_this_network
 
 
 class EnsureDefaultRoute(task.Task):
@@ -329,8 +330,8 @@ class EnsureDefaultRoute(task.Task):
             res = bigip.patch(path=f"/mgmt/tm/net/route/~Common~{device_route['name']}",
                               json={'gw': route['gw'], 'network': route['network']})
             if not res.ok:
-                # If the network also changed, we probably had a legacy named route with wrong values.
-                # re-create it (last resort)
+                # If the network also changed, we probably had a legacy named
+                # route with wrong values. Recreate it (last resort)
                 bigip.delete(path=f"/mgmt/tm/net/route/~Common~{device_route['name']}")
                 res = bigip.post(path='/mgmt/tm/net/route', json=route)
                 res.raise_for_status()
@@ -360,7 +361,8 @@ class EnsureSubnetRoutes(task.Task):
         # common prefix for subnet routes of this network
         subnet_route_network_part = get_subnet_route_name(network.id, '')
 
-        # delete existing subnet routes that aren't needed anymore - we'll only provision the missing ones
+        # ignore existing subnet routes that are needed - we'll only provision
+        # the missing ones
         for existing_route in existing_routes:
             existing_route_name = existing_route['name']
 
@@ -368,9 +370,9 @@ class EnsureSubnetRoutes(task.Task):
             if not existing_route_name.startswith(subnet_route_network_part):
                 continue
 
+            # if the subnet route is a needed one there's no need to provision it again
             existing_route_subnet = existing_route_name[len(subnet_route_network_part):]
             if existing_route_subnet in subnets_that_need_routes:
-                # if the subnet route is a needed one there's no need to provision it again
                 subnets_that_need_routes.remove(existing_route_subnet)
 
         # Add missing subnet routes
@@ -387,12 +389,46 @@ class EnsureSubnetRoutes(task.Task):
             res.raise_for_status()
 
     @decorators.RaisesIControlRestError()
-    def revert(self, *args, **kwargs):
-        LOG.warning(f"Rolling back EnsureSubnetRoutes for network {network.id}")
+    def revert(self, bigip: bigip_restclient.BigIPRestClient,
+               existing_routes: [str],
+               network: f5_network_models.Network):
 
-        # Skip passive device if route_on_active is enabled
+        # revert route creation, i.e. only delete routes. Delete every route on
+        # the device unless
+        # - it's not a subnet route belonging to this network
+        # - in the list of routes that existed before this task was executed
+        #   ('existing_routes' in the store)
+
+        LOG.warning(f"Reverting EnsureSubnetRoutes for network {network.id}")
+
+        # if route_on_active is enabled we can skip the passive device, since
+        # it was also ignored by execute
         if CONF.networking.route_on_active and not bigip.is_active:
             return None
+
+        # in the store 'existing_routes' contains the routes that existed
+        # before, so these routes must remain after a rollback
+        routes_to_remain = existing_routes
+
+        # we don't know which routes were already created, so ask the BigIP
+        # which routes currently exist
+        response = bigip.get(path=f"/mgmt/tm/net/route").json()
+        existing_routes = response.get('items', [])
+
+        # common prefix for subnet routes of this network
+        subnet_route_network_part = get_subnet_route_name(network.id, '')
+
+        # delete unneeded routes
+        for route in existing_routes:
+
+            # ignore routes that are not subnet routes of this network
+            if not route_.startswith(subnet_route_network_part):
+                continue
+
+            if route not in routes_to_remain:
+                # TODO remove this log line
+                LOG.warning(f"EnsureSubnetRoutes: Deleting route {route}")
+                bigip.delete(path=f"/mgmt/tm/net/route/{route}")
 
 
 """ Cleanup Tasks """
@@ -456,8 +492,24 @@ class CleanupSubnetRoutes(task.Task):
                 res.raise_for_status()
 
     @decorators.RaisesIControlRestError()
-    def revert(self, *args, **kwargs):
-        LOG.warning(f"Rolling back CleanupSubnetRoutes: {self.__class__.__name__}")
+    def revert(self, delete_all=False, *args, **kwargs):
+
+        # Revert route deletion, i.e. only create routes.
+        # Recreate routes that were deleted before.
+        # - If delete_all==True, recreate all routes in 'existing_routes' that
+        #   are subnet routes of this network and don't yet exist.
+        # - else, recreate only the routes in 'existing_routes' that are both a
+        #   subnet route of this network as well as 
+
+        # Recreate routes that
+        # - are not in subnets_that_need_routes (because those for sure have
+        #   not been deleted)
+        # - are in 'existing_routes' (i.e. those that must exist after rollback)
+        # - don't exist right now
+
+        LOG.warning(f"Reverting CleanupSubnetRoutes: {self.__class__.__name__}")
+
+        # TODO
 
 
 class RemoveSelfIP(task.Task):
@@ -471,7 +523,9 @@ class RemoveSelfIP(task.Task):
 
     @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
-        LOG.warning(f"Rolling back RemoveSelfIP {self.__class__.__name__}")
+        LOG.warning(f"Reverting RemoveSelfIP {self.__class__.__name__}")
+        # TODO implement
+        pass
 
 
 class CleanupRouteDomain(task.Task):
