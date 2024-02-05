@@ -184,11 +184,8 @@ class EnsureRouteDomain(task.Task):
 class EnsureSelfIP(task.Task):
     """ Task to create or update Self-IP if needed """
 
-    def _get_selfip_from_device(self, network: f5_network_models.Network,
-               port: network_models.Port,
-               bigip: bigip_restclient.BigIPRestClient,
-               *args, **kwargs):
-
+    def _get_selfip_payload(self, network: f5_network_models.Network,
+               port: network_models.Port):
         network_driver = driver_utils.get_network_driver()
         name = f"port-{port.id}"
         vlan = f"/Common/vlan-{network.vlan_id}"
@@ -196,27 +193,31 @@ class EnsureSelfIP(task.Task):
         ipnetwork = IPNetwork(subnet.cidr)
         address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{ipnetwork.prefixlen}"
         selfip = {'name': name, 'vlan': vlan, 'address': address}
+        return selfip
 
+    def _get_selfip_from_device(self, bigip, selfip_payload):
+        name = selfip_payload['name']
         return bigip.get(path=f"/mgmt/tm/net/self/{name}")
 
     @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
-                port: network_models.Port,
-                bigip: bigip_restclient.BigIPRestClient,
-                *args, **kwargs):
+            port: network_models.Port,
+            bigip: bigip_restclient.BigIPRestClient,
+            *args, **kwargs):
 
         # check whether selfip already exists
-        device_response = self._get_selfip_from_device(network, port, bigip)
+        selfip_payload = self._get_selfip_payload(network, port)
+        device_response = self._get_selfip_from_device(bigip, selfip_payload)
 
         # Create selfip if not existing
         if device_response.status_code == 404:
-            res = bigip.post(path='/mgmt/tm/net/self', json=selfip)
+            res = bigip.post(path='/mgmt/tm/net/self', json=selfip_payload)
             res.raise_for_status()
             return res.json()
 
         # Update if dict differs from on-device state
         device_selfip = device_response.json()
-        if not selfip.items() <= device_selfip.items():
+        if not selfip_payload.items() <= device_selfip.items():
             res = bigip.patch(path='/mgmt/tm/net/self/{}'.format(device_selfip['name']),
                               json=selfip)
             res.raise_for_status()
@@ -226,16 +227,20 @@ class EnsureSelfIP(task.Task):
         return device_selfip
 
     @decorators.RaisesIControlRestError()
-    def revert(self, *args, **kwargs):
+    def revert(self, network: f5_network_models.Network,
+            port: network_models.Port,
+            bigip: bigip_restclient.BigIPRestClient,
+            *args, **kwargs):
         LOG.warning(f"Reverting task EnsureSelfIP for network {network.id}, SelfIP port {port.id}")
 
         # check whether selfip still exists
-        device_response = self._get_selfip_from_device(network, port, bigip)
+        selfip_payload = self._get_selfip_payload(network, port)
+        device_response = self._get_selfip_from_device(bigip, selfip_payload)
 
         # Remove selfip if existing
         if device_response.status_code != 404:
             # TODO: Check if DELETE is supported for this endpoint
-            res = bigip.delete(path='/mgmt/tm/net/self', json=selfip)
+            res = bigip.delete(path='/mgmt/tm/net/self', json=selfip_payload)
             res.raise_for_status()
             return res.json()
 
@@ -324,6 +329,15 @@ class EnsureSubnetRoutes(task.Task):
         if CONF.networking.route_on_active and not bigip.is_active:
             return None
 
+        # TODO write unit tests for sync_selfips_and_subnet_routes to check
+        # that all still works as expected after the refactoring of the
+        # following FIXME is done
+
+        # FIXME how is revert supposed to know which subnet routes were created
+        # by execute? Try refactoring this to work like EnsureSelfIP - one
+        # subnet route at a time, the set of them predetermined at the time of
+        # flow creation!
+
         # Fetch existing routes
         response = bigip.get(path=f"/mgmt/tm/net/route?$filter=partition+eq+Common").json()
         existing_routes = response.get('items', [])
@@ -362,7 +376,11 @@ class EnsureSubnetRoutes(task.Task):
 
     @decorators.RaisesIControlRestError()
     def revert(self, *args, **kwargs):
-        LOG.warning(f"Rolling back EnsureSubnetRoutes: {self.__class__.__name__}")
+        LOG.warning(f"Rolling back EnsureSubnetRoutes for network {network.id}")
+
+        # Skip passive device if route_on_active is enabled
+        if CONF.networking.route_on_active and not bigip.is_active:
+            return None
 
 
 """ Cleanup Tasks """
