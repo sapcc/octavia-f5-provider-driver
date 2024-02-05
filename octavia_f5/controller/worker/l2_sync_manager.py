@@ -84,7 +84,14 @@ class L2SyncManager(BaseTaskFlowEngine):
             bigip.update_status()
 
     def _do_ensure_l2_flow(self, selfips: [network_models.Port], store: dict):
-        e = self.taskflow_load(self._f5flows.ensure_l2(selfips), store=store)
+
+        # get existing subnet routes
+        e = self.taskflow_load(self._f5flows.get_subnet_routes_from_device_for_network(), store=store)
+        with tf_logging.LoggingListener(e, log=LOG):
+            e.run()
+        existing_routes = e.storage.get('existing_routes')
+
+        e = self.taskflow_load(self._f5flows.ensure_l2(selfips, existing_routes), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
@@ -94,13 +101,21 @@ class L2SyncManager(BaseTaskFlowEngine):
             e.run()
 
     def _do_remove_l2_flow(self, store: dict):
+
+        # get existing SelfIPs
         e = self.taskflow_load(self._f5flows.get_selfips_from_device_for_vlan(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
-
         selfips = e.storage.get('all-selfips')
 
-        e = self.taskflow_load(self._f5flows.remove_l2(selfips), store=store)
+        # get existing subnet routes
+        # TODO put this into a parallel flow together with get_selfips_from_device_for_vlan above
+        e = self.taskflow_load(self._f5flows.get_subnet_routes_from_device_for_network(), store=store)
+        with tf_logging.LoggingListener(e, log=LOG):
+            e.run()
+        existing_routes = e.storage.get('existing_routes')
+
+        e = self.taskflow_load(self._f5flows.remove_l2(selfips, existing_routes), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
@@ -117,6 +132,12 @@ class L2SyncManager(BaseTaskFlowEngine):
             e.run()
         device_selfips = e.storage.get('all-selfips')
 
+        # get existing subnet routes
+        e = self.taskflow_load(self._f5flows.get_subnet_routes_from_device_for_network(), store=store)
+        with tf_logging.LoggingListener(e, log=LOG):
+            e.run()
+        existing_routes = e.storage.get('existing_routes')
+
         # show what we'll changed
         LOG.debug("%s: The expected SelfIPs for network %s are: %s",
                   store['bigip'].hostname, store['network'].id, [sip.id for sip in expected_selfips])
@@ -125,7 +146,8 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         # remove unneeded and add needed SelfIPs/subnet routes
         e = self.taskflow_load(self._f5flows.sync_selfips_and_subnet_routes(
-            expected_selfips, device_selfips, store=store), store=store)
+            expected_selfips, device_selfips, existing_routes, store=store),
+            store=store)
         try:
             with tf_logging.LoggingListener(e, log=LOG):
                 e.run()

@@ -239,8 +239,12 @@ class EnsureSelfIP(task.Task):
 
         # Remove selfip if existing
         if device_response.status_code != 404:
-            # TODO: Check if DELETE is supported for this endpoint
-            res = bigip.delete(path='/mgmt/tm/net/self', json=selfip_payload)
+            selfip_name = selfip_payload['name']
+
+            # TODO remove
+            LOG.warning(f"EnsureSelfIP.revert: Deleting SelfIP {selfip_name}")
+
+            res = bigip.delete(path=f"/mgmt/tm/net/self/{selfip_name}")
             res.raise_for_status()
             return res.json()
 
@@ -268,6 +272,25 @@ class GetAllSelfIPsForVLAN(task.Task):
                 for item in items
                 if item['vlan'] == vlan
                 and item['name'].startswith('port-')]
+
+
+class GetAllSubnetRoutesForNetwork(task.Task):
+    default_provides = 'existing_routes'
+
+    @decorators.RaisesIControlRestError()
+    def execute(self, bigip: bigip_restclient.BigIPRestClient,
+                network: f5_network_models.Network):
+
+        # get all routes
+        response = bigip.get(path=f"/mgmt/tm/net/route").json()
+        routes = response.get('items', [])
+
+        # filter for only the subnet routes belonging to this network
+        subnet_route_network_part = get_subnet_route_name(network.id, '')
+        subnet_routes_this_network = [r for r in routes if
+                r.startswith(subnet_route_network_part)]
+        # TODO remove the following line and directly return the list comprehension expression above
+        LOG.warning(f"GetAllSubnetRoutesForNetwork: Got {len(routes)} routes, {len(subnet_routes_this_network)} for this network: {subnet_routes_this_network}")
 
 
 class EnsureDefaultRoute(task.Task):
@@ -322,28 +345,17 @@ class EnsureSubnetRoutes(task.Task):
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
-                selfips: [network_models.Port],
+                expected_selfips: [network_models.Port],
+                existing_routes: [str],
                 network: f5_network_models.Network):
 
         # Skip passive device if route_on_active is enabled
         if CONF.networking.route_on_active and not bigip.is_active:
             return None
 
-        # TODO write unit tests for sync_selfips_and_subnet_routes to check
-        # that all still works as expected after the refactoring of the
-        # following FIXME is done
-
-        # FIXME how is revert supposed to know which subnet routes were created
-        # by execute? Try refactoring this to work like EnsureSelfIP - one
-        # subnet route at a time, the set of them predetermined at the time of
-        # flow creation!
-
-        # Fetch existing routes
-        response = bigip.get(path=f"/mgmt/tm/net/route?$filter=partition+eq+Common").json()
-        existing_routes = response.get('items', [])
-
         # subnet routes that must exist (routes already exist for SelfIPs)
-        subnets_that_need_routes = [subnet for subnet in network.subnets if not subnet_in_selfips(subnet, selfips)]
+        subnets_that_need_routes = [subnet for subnet in network.subnets if not
+                subnet_in_selfips(subnet, expected_selfips)]
 
         # common prefix for subnet routes of this network
         subnet_route_network_part = get_subnet_route_name(network.id, '')
@@ -416,20 +428,18 @@ class CleanupSubnetRoutes(task.Task):
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
-                selfips: [network_models.Port],
+                expected_selfips: [network_models.Port],
+                existing_routes: [str],
                 network: f5_network_models.Network,
                 delete_all=False):
 
         subnets_that_need_routes = []
         if not delete_all:
-            subnets_that_need_routes = [subnet for subnet in network.subnets if not subnet_in_selfips(subnet, selfips)]
+            subnets_that_need_routes = [subnet for subnet in network.subnets if
+                    not subnet_in_selfips(subnet, expected_selfips)]
 
         # prefix of subnet routes that belong to this network
         subnet_route_network_part = get_subnet_route_name(network.id, '')
-
-        # Fetch existing routes in the partition
-        response = bigip.get(path=f"/mgmt/tm/net/route").json()
-        existing_routes = response.get('items', [])
 
         # delete routes from this network
         for existing_route in existing_routes:
