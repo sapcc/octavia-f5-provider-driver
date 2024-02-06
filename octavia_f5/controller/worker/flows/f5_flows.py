@@ -24,7 +24,10 @@ LOG = logging.getLogger(__name__)
 
 class F5Flows(object):
     def make_ensure_l2_flow(self, selfips: [network_models.Port], store: dict) -> flow.Flow:
-        """Construct and return a flow to ensure complete L2 configuration for a new partition."""
+        """
+        Construct and return a flow to ensure complete L2 configuration for a new partition.
+        The flow assumes that no L2 objects exist yet for the network so nothing is cleaned up.
+        """
 
         # parallelize SelfIP and subnet route creation
         ensure_selfip_and_subnet_routes_subflow = unordered_flow.Flow('ensure-selfips-and-subnet-routes-subflow')
@@ -54,8 +57,10 @@ class F5Flows(object):
                            ensure_selfip_and_subnet_routes_subflow)
         return ensure_l2_flow
 
-    def make_remove_l2_flow(self, existing_selfips: [str], existing_subnet_routes) -> flow.Flow:
+    def make_remove_l2_flow(self, store: dict) -> flow.Flow:
         """Construct and return a flow to remove complete L2 configuration of a partition."""
+        existing_selfips = store['existing_selfips']
+        existing_subnet_routes = store['existing_subnet_routes']
 
         # parallelize SelfIP and subnet route deletion
         remove_selfips_and_subnet_routes_subflow = unordered_flow.Flow('remove-selfips-and-subnet-routes-subflow')
@@ -80,8 +85,7 @@ class F5Flows(object):
                             cleanup_vlan)
         return cleanup_l2_flow
 
-    def make_sync_selfips_and_subnet_routes_flow(self, expected_selfips, preexisting_selfips,
-                                                 subnets_that_need_routes, preexisting_subnet_routes,
+    def make_sync_selfips_and_subnet_routes_flow(self, expected_selfips, subnets_that_need_routes,
                                                  store: dict) -> flow.Flow:
         """ Construct and return a flow that syncs SelfIPs and static subnet routes.
         Since SelfIPs and subnet routes are mutually exclusive (per subnet), first remove unneeded SelfIPs/subnet
@@ -89,30 +93,31 @@ class F5Flows(object):
         can both be rolled back together.
 
         :param expected_selfips: SelfIPs that must exist
-        :param preexisting_selfips: SelfIPs that currently exist
         :param subnets_that_need_routes: Subnets for which subnet routes must exist
-        :param preexisting_subnet_routes: Subnet routes that currently exist
         """
 
         sync_flow = linear_flow.Flow('sync-selfips-and-subnet-routes-flow')
+
+        # remove unneeded SelfIPs and subnet routes
         sync_flow.add(self.make_cleanup_selfips_and_subnet_routes_flow(
-            expected_selfips, preexisting_selfips, subnets_that_need_routes, preexisting_subnet_routes, store))
+            expected_selfips, subnets_that_need_routes, store))
+
+        # create needed SelfIPs and subnet routes
         sync_flow.add(self.make_ensure_selfips_and_subnet_routes_flow(
-            expected_selfips, preexisting_selfips, subnets_that_need_routes, preexisting_subnet_routes, store))
+            expected_selfips, subnets_that_need_routes, store))
         return sync_flow
 
-    def make_cleanup_selfips_and_subnet_routes_flow(self, expected_selfips, preexisting_selfips,
-                                                    subnets_that_need_routes, preexisting_subnet_routes,
+    def make_cleanup_selfips_and_subnet_routes_flow(self, expected_selfips, subnets_that_need_routes,
                                                     store: dict) -> flow.Flow:
         """ Remove unneeded SelfIPs and subnet routes of a specific network
 
         :param expected_selfips: SelfIPs that must exist
-        :param preexisting_selfips: SelfIPs that currently exist
         :param subnets_that_need_routes: Subnets for which subnet routes must exist
-        :param preexisting_subnet_routes: Subnet routes that currently exist
         """
         host = store['bigip'].hostname
         network = store['network']
+        preexisting_selfips = store['existing_selfips']
+        preexisting_subnet_routes = store['existing_subnet_routes']
 
         cleanup_selfips_and_subnet_routes_flow = unordered_flow.Flow('cleanup-selfips-and-subnet-routes-flow')
 
@@ -138,8 +143,7 @@ class F5Flows(object):
 
         return cleanup_selfips_and_subnet_routes_flow
 
-    def make_ensure_selfips_and_subnet_routes_flow(self, expected_selfips, preexisting_selfips,
-                                                   subnets_that_need_routes, preexisting_subnet_routes,
+    def make_ensure_selfips_and_subnet_routes_flow(self, expected_selfips, subnets_that_need_routes,
                                                    store: dict) -> flow.Flow:
         """ Add needed SelfIPs and subnet routes of a specific network
 
@@ -148,6 +152,8 @@ class F5Flows(object):
         """
         host = store['bigip'].hostname
         network = store['network'].id
+        preexisting_selfips = store['existing_selfips']
+        preexisting_subnet_routes = store['existing_subnet_routes']
 
         ensure_selfips_and_subnet_routes_flow = unordered_flow.Flow('ensure-selfips-and-subnet-routes-flow')
 

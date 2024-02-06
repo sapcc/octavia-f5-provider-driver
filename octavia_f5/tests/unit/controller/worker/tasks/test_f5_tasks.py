@@ -165,17 +165,23 @@ class TestF5Tasks(base.TestCase):
             segments=[{'provider:physical_network': 'physnet',
                        'provider:segmentation_id': 1234}]
         )
-        mock_get_subnet.side_effect = [mock_subnet]
+        subnet_route_name = "net_{}_sub_{}".format(
+            mock_network.id, mock_subnet.id)
+        mock_get_subnet.side_effect = [mock_subnet, mock_subnet]
+        mock_bigip.get.side_effect = [
+            test_f5_flows.MockResponse({}, 404),
+        ]
 
+        # case: subnet route doesn't exist yet
         store = {
             'bigip': mock_bigip,
             'network': mock_network,
             'subnet_id': mock_subnet.id,
         }
         engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
-
-        subnet_route_name = "net_{}_sub_{}".format(
-            mock_network.id, mock_subnet.id)
+        mock_bigip.delete.assert_not_called()
+        mock_bigip.get.assert_called_with(
+            path=f"/mgmt/tm/net/route/{subnet_route_name}")
         mock_bigip.post.assert_called_with(
             path='/mgmt/tm/net/route',
             json={
@@ -183,5 +189,25 @@ class TestF5Tasks(base.TestCase):
                 'tmInterface': "/Common/vlan-1234",
                 'network': "2.3.4.0%1234/24",
             })
-        mock_bigip.get.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+
+        # case: subnet route exists
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.get.side_effect = [
+            test_f5_flows.MockResponse({'name': subnet_route_name}, 200),
+        ]
+        store = {
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'subnet_id': mock_subnet.id,
+        }
+        engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
         mock_bigip.delete.assert_not_called()
+        mock_bigip.get.assert_called_with(
+            path=f"/mgmt/tm/net/route/{subnet_route_name}")
+        mock_bigip.patch.assert_called_with(
+            path=f"/mgmt/tm/net/route/{subnet_route_name}",
+            json={'name': subnet_route_name,
+                  'tmInterface': '/Common/vlan-1234',
+                  'network': '2.3.4.0%1234/24'})
+        mock_bigip.post.assert_not_called()
