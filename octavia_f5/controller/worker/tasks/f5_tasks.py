@@ -416,7 +416,7 @@ class CleanupSubnetRoutes(task.Task):
 class RemoveSelfIP(task.Task):
     def execute(self, port: network_models.Port,
                 bigip: bigip_restclient.BigIPRestClient):
-        """ Task to delete SelfIP """
+        """ Task to delete a SelfIP """
         res = bigip.delete(path=f"/mgmt/tm/net/self/port-{port.id}")
         if not res.ok:
             LOG.warning("%s: Failed cleanup SelfIP %s: %s",

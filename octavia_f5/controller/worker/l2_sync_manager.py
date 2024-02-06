@@ -96,7 +96,7 @@ class L2SyncManager(BaseTaskFlowEngine):
     def _do_remove_l2_flow(self, store: dict):
 
         # get existing SelfIPs and subnet routes
-        e = self.taskflow_load(self._f5flows.get_existing_selfips_and_subnet_routes_flow(), store=store)
+        e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
         preexisting_selfips = e.storage.get('get-existing-selfips')
@@ -114,7 +114,7 @@ class L2SyncManager(BaseTaskFlowEngine):
         before creation."""
 
         # get existing SelfIPs and subnet routes
-        e = self.taskflow_load(self._f5flows.get_existing_selfips_and_subnet_routes_flow(), store=store)
+        e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
         preexisting_selfips = e.storage.get('get-existing-selfips')
@@ -130,15 +130,10 @@ class L2SyncManager(BaseTaskFlowEngine):
         subnets_that_need_routes = [subnet for subnet in network.subnets if
                                     not f5_tasks.subnet_in_selfips(subnet, expected_selfips)]
 
-        # remove unneeded SelfIPs/subnet routes
-        e = self.taskflow_load(self._f5flows.get_cleanup_selfips_and_subnet_routes_flow(
-            expected_selfips, preexisting_selfips, store=store), store=store)
-        with tf_logging.LoggingListener(e, log=LOG):
-            e.run()
-
-        # add missing SelfIPs/subnet routes
-        e = self.taskflow_load(self._f5flows.ensure_selfips_and_subnet_routes(
-            expected_selfips, preexisting_selfips, store=store), store=store)
+        # get and run the sync flow
+        sync_flow = self._f5flows.make_sync_selfips_and_subnet_routes_flow(
+            expected_selfips, preexisting_selfips, subnets_that_need_routes, preexisting_subnet_routes, store=store)
+        self.taskflow_load(sync_flow, store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
