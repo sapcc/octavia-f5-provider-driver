@@ -84,7 +84,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             bigip.update_status()
 
     def _do_ensure_l2_flow(self, selfips: [network_models.Port], store: dict):
-        e = self.taskflow_load(self._f5flows.ensure_l2(selfips), store=store)
+        e = self.taskflow_load(self._f5flows.make_ensure_l2_flow(selfips, store), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
@@ -99,10 +99,11 @@ class L2SyncManager(BaseTaskFlowEngine):
         e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
-        preexisting_selfips = e.storage.get('get-existing-selfips')
-        preexisting_subnet_routes = e.storage.get('get-existing-subnet-routes')
+        existing_selfips = e.storage.get('get-existing-selfips')
+        existing_subnet_routes = e.storage.get('get-existing-subnet-routes')
 
-        e = self.taskflow_load(self._f5flows.remove_l2(preexisting_selfips), store=store)
+        remove_l2_flow = self._f5flows.make_remove_l2_flow(existing_selfips, existing_subnet_routes)
+        e = self.taskflow_load(remove_l2_flow, store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
@@ -128,11 +129,11 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         # subnet routes that must exist (subnets with SelfIPs already have routes)
         subnets_that_need_routes = [subnet for subnet in network.subnets if
-                                    not f5_tasks.subnet_in_selfips(subnet, expected_selfips)]
+                                    not f5_tasks.selfip_for_subnet_exists(subnet, expected_selfips)]
 
         # get and run the sync flow
         sync_flow = self._f5flows.make_sync_selfips_and_subnet_routes_flow(
-            expected_selfips, preexisting_selfips, subnets_that_need_routes, preexisting_subnet_routes, store=store)
+            expected_selfips, preexisting_selfips, subnets_that_need_routes, preexisting_subnet_routes, store)
         self.taskflow_load(sync_flow, store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
