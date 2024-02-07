@@ -15,12 +15,12 @@
 from collections import defaultdict
 
 import tenacity
-from octavia_lib.api.drivers import driver_lib
 from octavia_lib.api.drivers import exceptions as driver_exceptions
 from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 from oslo_log import log as logging
 
+from octavia.api.drivers.driver_agent import driver_updater
 from octavia.common import data_models
 from octavia.db import api as db_apis
 from octavia.db.repositories import AmphoraRepository
@@ -33,11 +33,7 @@ LOG = logging.getLogger(__name__)
 class StatusManager(object):
 
     def __init__(self):
-        self._octavia_driver_lib = driver_lib.DriverLibrary(
-            status_socket=CONF.driver_agent.status_socket_path,
-            stats_socket=CONF.driver_agent.stats_socket_path,
-            get_socket=CONF.driver_agent.get_socket_path,
-        )
+        self._octavia_driver_updater = driver_updater.DriverUpdater()
 
     def status_dict(self, obj, cascade=False):
         """ Returns status dict for octavia object,
@@ -142,7 +138,7 @@ class StatusManager(object):
         stop=tenacity.stop_after_attempt(max_attempt_number=3))
     def _update_status_to_octavia(self, status):
         try:
-            self._octavia_driver_lib.update_loadbalancer_status(status)
+            self._octavia_driver_updater.update_loadbalancer_status(status)
         except driver_exceptions.UpdateStatusError as e:
             msg = ("Error while updating status to octavia: "
                    "%s") % e.fault_string
