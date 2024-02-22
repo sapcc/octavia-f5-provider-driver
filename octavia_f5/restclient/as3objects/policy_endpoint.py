@@ -102,6 +102,8 @@ def _get_action(l7policy):
         args['type'] = 'httpRedirect'
         args['location'] = l7policy.redirect_url
         args['event'] = 'request'
+        if l7policy.redirect_http_code:
+            args['code'] = l7policy.redirect_http_code
     elif l7policy.action == constants.L7POLICY_ACTION_REDIRECT_PREFIX:
         args['type'] = 'httpRedirect'
         args['location'] = 'tcl:{}[HTTP::uri]'.format(l7policy.redirect_prefix)
