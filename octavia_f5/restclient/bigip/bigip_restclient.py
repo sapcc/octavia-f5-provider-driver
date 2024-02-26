@@ -59,8 +59,7 @@ class BigIPRestClient(requests.Session):
 
     @property
     def is_active(self):
-        if self._active is None:
-            return self.update_status()
+        self.update_status()
         return self._active
 
     def update_status(self):
