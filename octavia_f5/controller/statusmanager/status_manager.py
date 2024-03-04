@@ -32,6 +32,7 @@ from octavia_f5.common import constants
 from octavia_f5.controller.statusmanager.legacy_healthmanager.health_drivers import update_db
 from octavia_f5.db import repositories as f5_repo
 from octavia_f5.restclient.bigip import bigip_restclient, bigip_auth
+from octavia_f5.utils import exceptions
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -107,6 +108,10 @@ class StatusManager(object):
         'octavia_status_failover', 'Number of failovers')
 
     def initialize_bigips(self):
+
+        if not CONF.f5_agent.bigip_urls:
+            raise exceptions.ProviderDriverException("No BigIPs configured")
+
         for bigip_url in CONF.f5_agent.bigip_urls:
             # Create REST client for every bigip
 
