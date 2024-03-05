@@ -57,7 +57,11 @@ def get_pool(pool, ips_to_skip, status):
         'members': [],
     }
 
-    enable_priority_group = any([member.backup for member in pool.members])
+    # Never set priority group if there is only one member, even if it's a backup member
+    enable_priority_group = False
+    if len(pool.members) > 1:
+        enable_priority_group = any([member.backup for member in pool.members])
+
     for member in pool.members:
         if not utils.pending_delete(member):
             if member.ip_address in ips_to_skip:
