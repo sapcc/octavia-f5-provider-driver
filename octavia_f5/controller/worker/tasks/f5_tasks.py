@@ -218,8 +218,8 @@ class EnsureSelfIP(task.Task):
         return device_selfip
 
 
-class GetAllSelfIPsForVLAN(task.Task):
-    default_provides = 'selfips'
+class GetExistingSelfIPsForVLAN(task.Task):
+    default_provides = 'existing-selfips'
 
     @staticmethod
     def _remove_port_prefix(name: str):
@@ -236,6 +236,22 @@ class GetAllSelfIPsForVLAN(task.Task):
                 for item in items
                 if item['vlan'] == vlan
                 and item['name'].startswith('port-')]
+
+
+class GetExistingSubnetRoutesForNetwork(task.Task):
+    default_provides = 'existing-subnet-routes'
+
+    @decorators.RaisesIControlRestError()
+    def execute(self, bigip: bigip_restclient.BigIPRestClient,
+                network: f5_network_models.Network):
+
+        # get all routes
+        response = bigip.get(path=f"/mgmt/tm/net/route").json()
+        routes = response.get('items', [])
+
+        # filter for only the subnet routes belonging to this network
+        subnet_route_network_part = get_subnet_route_name(network.id, '')
+        return [r for r in routes if r.startswith(subnet_route_network_part)]
 
 
 class EnsureDefaultRoute(task.Task):

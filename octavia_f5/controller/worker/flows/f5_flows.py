@@ -66,7 +66,7 @@ class F5Flows(object):
                             cleanup_vlan)
         return cleanup_l2_flow
 
-    def cleanup_selfips_and_subnet_routes(self, expected_selfips, device_selfips, store: dict) -> flow.Flow:
+    def get_cleanup_selfips_and_subnet_routes_flow(self, expected_selfips, device_selfips, store: dict) -> flow.Flow:
         """ Remove unneeded SelfIPs and subnet routes of a specific network
 
         :param expected_selfips: SelfIPs that must exist
@@ -113,8 +113,13 @@ class F5Flows(object):
 
         return ensure_selfips_and_subnet_routes_flow
 
-    def get_selfips_from_device_for_vlan(self) -> [network_models.Port]:
-        return f5_tasks.GetAllSelfIPsForVLAN(name='all-selfips')
+    def get_existing_selfips_and_subnet_routes_flow(self) -> [network_models.Port]:
+        """Return a flow that gets all SelfIPs and subnet routes that currently
+        exist on a particular device for a particular network."""
+        get_existing_sip_sr_flow = unordered_flow.Flow('get-existing-selfips-and-subnet-routes-flow')
+        get_existing_sip_sr_flow.add(f5_tasks.GetExistingSelfIPsForVLAN(name='get-existing-selfips'))
+        get_existing_sip_sr_flow.add(f5_tasks.GetExistingSubnetRoutesForNetwork(name='get-existing-subnet-routes'))
+        return get_existing_sip_sr_flow
 
     def ensure_vcmp_l2(self) -> flow.Flow:
         ensure_vlan = f5_tasks.EnsureVLAN()
