@@ -87,11 +87,13 @@ class TestF5Flows(base.TestCase):
                                       MockResponse({'items':[]}, status_code=200)]
         f5flows = f5_flows.F5Flows()
 
-        engines.run(f5flows.ensure_l2([selfip_port]),
-                    store={'network': mock_network,
-                           'bigip': mock_bigip,
-                           'subnet_id': selfip_fixed_ip.subnet_id})
+        store = {'network': mock_network,
+                 'bigip': mock_bigip,
+                 'subnet_id': selfip_fixed_ip.subnet_id}
+        ensure_l2_flow = f5flows.make_ensure_l2_flow([selfip_port], store=store)
+        engines.run(ensure_l2_flow, store=store)
 
+        # check that VLAN, RD, SelfIP, and default route have been created
         calls = [
             mock.call(json={'name': 'vlan-1234', 'tag': 1234,
                             'mtu': 9000, 'hardwareSyncookie': 'enabled',
@@ -158,15 +160,16 @@ class TestF5Flows(base.TestCase):
         # Flow ensures entities in order [vlan, route-domain, selfips, route]
         mock_bigip.get.side_effect = [mock_vlan_response,
                                       mock_routedomain_response,
-                                      mock_selfip_response,
                                       mock_route_response,
+                                      mock_selfip_response,
                                       MockResponse({'items':[]}, status_code=200)]
         f5flows = f5_flows.F5Flows()
 
-        engines.run(f5flows.ensure_l2([selfip_port]),
-                    store={'network': mock_network,
-                           'bigip': mock_bigip,
-                           'subnet_id': selfip_fixed_ip.subnet_id})
+        store = {'network': mock_network,
+                 'bigip': mock_bigip,
+                 'subnet_id': selfip_fixed_ip.subnet_id}
+        ensure_l2_flow = f5flows.make_ensure_l2_flow([selfip_port], store=store)
+        engines.run(ensure_l2_flow, store=store)
 
         mock_bigip.get.assert_called()
         mock_bigip.patch.assert_not_called()
