@@ -84,7 +84,20 @@ class L2SyncManager(BaseTaskFlowEngine):
             bigip.update_status()
 
     def _do_ensure_l2_flow(self, selfips: [network_models.Port], store: dict):
-        e = self.taskflow_load(self._f5flows.ensure_l2(selfips), store=store)
+
+        # get existing SelfIPs and subnet routes - they are needed to determine,
+        # which ones have to be created and which already exist
+        e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
+        with tf_logging.LoggingListener(e, log=LOG):
+            e.run()
+
+        # info about existing SelfIPs and subnet routes could be needed for either
+        # flow construction or in the tasks themselves, or both
+        store['existing_selfips'] = e.storage.get('get-existing-selfips')
+        store['existing_subnet_routes'] = e.storage.get('get-existing-subnet-routes')
+
+        ensure_l2_flow = self._f5flows.make_ensure_l2_flow(selfips, store=store)
+        e = self.taskflow_load(ensure_l2_flow, store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
@@ -94,41 +107,54 @@ class L2SyncManager(BaseTaskFlowEngine):
             e.run()
 
     def _do_remove_l2_flow(self, store: dict):
-        e = self.taskflow_load(self._f5flows.get_selfips_from_device_for_vlan(), store=store)
+
+        # get existing SelfIPs and subnet routes
+        e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
-        selfips = e.storage.get('all-selfips')
+        # info about existing SelfIPs and subnet routes could be needed for either
+        # flow construction or in the tasks themselves, or both
+        store['existing_selfips'] = e.storage.get('get-existing-selfips')
+        store['existing_subnet_routes'] = e.storage.get('get-existing-subnet-routes')
 
-        e = self.taskflow_load(self._f5flows.remove_l2(selfips), store=store)
+        remove_l2_flow = self._f5flows.make_remove_l2_flow(store=store)
+        e = self.taskflow_load(remove_l2_flow, store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
-    def _do_sync_l2_selfips_and_subnet_routes_flow(self, expected_selfips: [network_models.Port], store: dict):
+    def _do_sync_l2_selfips_and_subnet_routes_flow(self, needed_selfips: [network_models.Port], store: dict):
         """Remove unneeded SelfIPs and subnet routes, then add missing SelfIPs and subnet routes.
 
         If in another subnet of this network a load balancer is created or deleted, either a subnet route has to be
         replaced with a SelfIP or vice versa. Since SelfIPs and subnet routes conflict, deletion must always happen
         before creation."""
 
-        e = self.taskflow_load(self._f5flows.get_selfips_from_device_for_vlan(), store=store)
+        # get existing SelfIPs and subnet routes
+        e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
+        preexisting_selfips = e.storage.get('get-existing-selfips')
+        preexisting_subnet_routes = e.storage.get('get-existing-subnet-routes')
 
-        LOG.debug("%s: The expected SelfIPs for network %s are: %s",
-                  store['bigip'].hostname, store['network'].id, [sip.id for sip in expected_selfips])
+        # subnet routes that must exist (subnets with SelfIPs already have routes)
+        network = store['network']
+        subnets_that_need_routes = [subnet for subnet in network.subnets if
+                                    not f5_tasks.selfip_for_subnet_exists(subnet, needed_selfips)]
 
-        device_selfips = e.storage.get('all-selfips')
+        # log the current and desired state
+        hostname = store['bigip'].hostname
+        LOG.debug(f"{hostname}: The preexisting SelfIPs for network {network.id} are: {[sip.id for sip in preexisting_selfips]}")
+        LOG.debug(f"{hostname}: The expected SelfIPs for network {network.id} are: {[sip.id for sip in needed_selfips]}")
+        LOG.debug(f"{hostname}: The preexisting subnet routes for network {network.id} are: {[r['name'] for r in preexisting_subnet_routes]}")
+        LOG.debug(f"{hostname}: The expected subnet routes for network {network.id} are for these subnets: {subnets_that_need_routes}")
 
-        # remove unneeded SelfIPs/subnet routes
-        e = self.taskflow_load(self._f5flows.cleanup_selfips_and_subnet_routes(
-            expected_selfips, device_selfips, store=store), store=store)
-        with tf_logging.LoggingListener(e, log=LOG):
-            e.run()
-
-        # add missing SelfIPs/subnet routes
-        e = self.taskflow_load(self._f5flows.ensure_selfips_and_subnet_routes(
-            expected_selfips, device_selfips, store=store), store=store)
+        # get and run the sync flow
+        store['existing_selfips'] = preexisting_selfips
+        store['existing_subnet_routes'] = preexisting_subnet_routes
+        sync_flow = self._f5flows.make_sync_selfips_and_subnet_routes_flow(
+            needed_selfips, subnets_that_need_routes, store)
+        e = self.taskflow_load(sync_flow, store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
@@ -255,7 +281,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             store = {'bigip': bigip, 'network': network}
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
             fs[self.executor.submit(self._do_sync_l2_selfips_and_subnet_routes_flow,
-                                    expected_selfips=selfips_for_host, store=store)] = bigip
+                                    needed_selfips=selfips_for_host, store=store)] = bigip
 
         done, not_done = futures.wait(fs, timeout=10)
         for f in done | not_done:
