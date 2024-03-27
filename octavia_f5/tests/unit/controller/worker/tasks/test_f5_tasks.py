@@ -154,78 +154,60 @@ class TestF5Tasks(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test_SyncSubnetRoutes(self, mock_get_subnet):
-        mock_subnets = [
-            network_models.Subnet(
-                id=uuidutils.generate_uuid(), gateway_ip='2.3.4.5',
-                cidr='2.3.4.0/24', network_id='test-network-id'),
-            network_models.Subnet(
-                id=uuidutils.generate_uuid(), gateway_ip='10.0.0.1',
-                cidr='10.0.0.0/24', network_id='test-network-id'),
-        ]
-        mock_get_subnet.side_effect = mock_subnets
+    def test_EnsureSubnetRoute(self, mock_get_subnet):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_subnet = network_models.Subnet(
+            id=uuidutils.generate_uuid(), gateway_ip='2.3.4.5',
+            cidr='2.3.4.0/24', network_id='test-network-id')
         mock_network = f5_network_models.Network(
             mtu=9000, id=uuidutils.generate_uuid(),
-            subnets=[subnet.id for subnet in mock_subnets],
+            subnets=mock_subnet,
             segments=[{'provider:physical_network': 'physnet',
                        'provider:segmentation_id': 1234}]
         )
+        subnet_route_name = "net_{}_sub_{}".format(
+            mock_network.id, mock_subnet.id)
+        mock_get_subnet.side_effect = [mock_subnet, mock_subnet]
+        mock_bigip.get.side_effect = [
+            test_f5_flows.MockResponse({}, 404),
+        ]
 
-        # Check that subnet route names always include the network ID as well as the subnet ID
-        subnet_route_name = f5_tasks.get_subnet_route_name(mock_network.id, mock_subnets[0].id)
-        self.assertTrue(mock_network.id in subnet_route_name
-                        or mock_network.id.replace('-', '_') in subnet_route_name)
-        self.assertTrue(mock_subnets[0].id in subnet_route_name
-                        or mock_subnets[0].id.replace('-', '_') in subnet_route_name)
-
-        # No subnet route shall be created when every subnet already has either a SelfIP or a subnet route
-        mock_route_response = test_f5_flows.MockResponse({
-            'items': [
-                {
-                    'name': f5_tasks.get_subnet_route_name(mock_network.id, mock_subnets[1].id),
-                    'tmInterface': 'vlan-1234',
-                    'network': '10.0.0.2%1234/24'
-                }
-            ]
-        }, status_code=200)
-
-        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_bigip.get.return_value = mock_route_response
-        mock_selfip = network_models.Port(
-            name=f"local-bigipmockhost-test-subnet-id",
-            fixed_ips=[network_models.FixedIP(
-                ip_address='2.3.4.255',
-                subnet_id=mock_subnets[0].id)
-            ]
-        )
-
-        engines.run(f5_tasks.EnsureSubnetRoutes(),
-                    store={'network': mock_network,
-                           'bigip': mock_bigip,
-                           'selfips': [mock_selfip]})
-
-        mock_bigip.get.assert_called_with(
-            path=f"/mgmt/tm/net/route?$filter=partition+eq+Common")
-        mock_bigip.post.assert_not_called()
+        # case: subnet route doesn't exist yet
+        store = {
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'subnet_id': mock_subnet.id,
+        }
+        engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
         mock_bigip.delete.assert_not_called()
-
-        # Check creating new route
-        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_route_response = test_f5_flows.MockResponse({'items': []}, status_code=200)
-        mock_bigip.get.return_value = mock_route_response
-        engines.run(f5_tasks.EnsureSubnetRoutes(),
-                    store={'network': mock_network,
-                           'bigip': mock_bigip,
-                           'selfips': [mock_selfip]})
-
         mock_bigip.get.assert_called_with(
-            path=f"/mgmt/tm/net/route?$filter=partition+eq+Common")
-        mock_bigip.delete.assert_not_called()
+            path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
         mock_bigip.post.assert_called_with(
             path='/mgmt/tm/net/route',
             json={
-                'name': f5_tasks.get_subnet_route_name(mock_network.id, mock_subnets[1].id),
-                'tmInterface': '/Common/vlan-1234',
-                'network': '2.3.4.0%1234/24'
-            }
-        )
+                'name': subnet_route_name,
+                'tmInterface': "/Common/vlan-1234",
+                'network': "2.3.4.0%1234/24",
+            })
+        mock_bigip.patch.assert_not_called()
+
+        # case: subnet route exists
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.get.side_effect = [
+            test_f5_flows.MockResponse({'name': subnet_route_name}, 200),
+        ]
+        store = {
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'subnet_id': mock_subnet.id,
+        }
+        engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
+        mock_bigip.delete.assert_not_called()
+        mock_bigip.get.assert_called_with(
+            path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        mock_bigip.patch.assert_called_with(
+            path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}",
+            json={'name': subnet_route_name,
+                  'tmInterface': '/Common/vlan-1234',
+                  'network': '2.3.4.0%1234/24'})
+        mock_bigip.post.assert_not_called()
