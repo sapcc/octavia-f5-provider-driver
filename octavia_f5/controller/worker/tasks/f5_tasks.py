@@ -213,6 +213,26 @@ class EnsureSelfIP(task.Task):
         # No Changes needed
         return device_selfip
 
+    @decorators.RaisesIControlRestError()
+    def revert(self, port: network_models.Port,
+               bigip: bigip_restclient.BigIPRestClient,
+               existing_selfips, *args, **kwargs):
+        selfip_port_name = f"port-{port.id}"
+
+        # don't remove the SelfIP if it existed before this task was executed
+        if port.id in [p.id for p in existing_selfips]:
+            LOG.warning("Reverting EnsureSelfIP: Not deleting SelfIP, since it existed before the task was run: "
+                        f"{selfip_port_name}")
+            return
+
+        # delete SelfIP, ignoring 404
+        LOG.warning(f"Reverting EnsureSelfIP: Deleting SelfIP: {selfip_port_name}")
+        device_response = bigip.delete(path=f"/mgmt/tm/net/self/{selfip_port_name}")
+        if device_response.status_code == 404:
+            LOG.warning(f"Reverting EnsureSelfIP: SelfIP {selfip_port_name} was already removed")
+        else:
+            device_response.raise_for_status()
+
 
 class GetExistingSelfIPsForVLAN(task.Task):
     default_provides = 'existing_selfips'
@@ -335,6 +355,27 @@ class EnsureSubnetRoute(task.Task):
         # No changes needed
         return device_subnet_route
 
+    @decorators.RaisesIControlRestError()
+    def revert(self, bigip: bigip_restclient.BigIPRestClient,
+               network: f5_network_models.Network,
+               subnet_id, existing_subnet_routes,
+               *args, **kwargs):
+        subnet_route_name = get_subnet_route_name(network.id, subnet_id)
+
+        # Don't remove the route if it existed before this task was executed
+        if subnet_route_name in [r['name'] for r in existing_subnet_routes]:
+            LOG.warning("Reverting EnsureSubnetRoute: Not deleting route, since it existed before the task was run: "
+                        f"{subnet_route_name}")
+            return
+
+        # delete subnet route, ignoring 404
+        LOG.warning(f"Reverting EnsureSubnetRoute: Deleting subnet route: {subnet_route_name}")
+        device_response = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        if device_response.status_code == 404:
+            LOG.warning(f"Reverting EnsureSubnetRoute: Subnet route {subnet_route_name} was already removed")
+        else:
+            device_response.raise_for_status()
+
 
 """ Removal Tasks """
 
@@ -377,6 +418,22 @@ class RemoveSubnetRoute(task.Task):
         else:
             res.raise_for_status()
 
+    @decorators.RaisesIControlRestError()
+    def revert(self, bigip: bigip_restclient.BigIPRestClient,
+               subnet_route, existing_subnet_routes,
+               *args, **kwargs):
+
+        # don't restore subnet route if it didn't exist before this task was executed
+        subnet_route_name = subnet_route['name']
+        if subnet_route_name not in [r['name'] for r in existing_subnet_routes]:
+            LOG.warning("Reverting RemoveSubnetRoute: Not restoring subnet route since it existed before the task "
+                        f"was run: {subnet_route_name}")
+            return
+
+        LOG.warning(f"Reverting RemoveSubnetRoute: Restoring subnet route: {subnet_route_name}")
+        res = bigip.post(path='/mgmt/tm/net/route', json=subnet_route)
+        res.raise_for_status()
+
 
 class RemoveSelfIP(task.Task):
 
@@ -390,6 +447,30 @@ class RemoveSelfIP(task.Task):
             LOG.warning(f"SelfIP port-{port.id} was already removed")
         else:
             res.raise_for_status()
+
+    @decorators.RaisesIControlRestError()
+    def revert(self, port: network_models.Port,
+               bigip: bigip_restclient.BigIPRestClient,
+               existing_selfips: [network_models.Port],
+               network, *args, **kwargs):
+
+        # don't restore SelfIP if it didn't exist before this task was executed
+        if port.id not in [p.id for p in existing_selfips]:
+            LOG.warning("Reverting RemoveSelfIP: Not restoring SelfIP since it existed before the task "
+                        f"was run: port-{port.id}")
+            return
+
+        network_driver = driver_utils.get_network_driver()
+        name = f"port-{port.id}"
+        vlan = f"/Common/vlan-{network.vlan_id}"
+        subnet = network_driver.get_subnet(port.fixed_ips[0].subnet_id)
+        ipnetwork = IPNetwork(subnet.cidr)
+        address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{ipnetwork.prefixlen}"
+        selfip = {'name': name, 'vlan': vlan, 'address': address}
+
+        LOG.warning(f"Reverting RemoveSelfIP: Restoring SelfIP: port-{port.id}")
+        res = bigip.post(path=f"/mgmt/tm/net/self/", json=selfip)
+        res.raise_for_status()
 
 
 class RemoveRouteDomain(task.Task):

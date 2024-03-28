@@ -177,6 +177,7 @@ class TestF5Tasks(base.TestCase):
             'bigip': mock_bigip,
             'network': mock_network,
             'subnet_id': mock_subnet.id,
+            'existing_subnet_routes': [],
         }
         engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
         mock_bigip.delete.assert_not_called()
@@ -200,6 +201,7 @@ class TestF5Tasks(base.TestCase):
             'bigip': mock_bigip,
             'network': mock_network,
             'subnet_id': mock_subnet.id,
+            'existing_subnet_routes': [],
         }
         engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
         mock_bigip.delete.assert_not_called()

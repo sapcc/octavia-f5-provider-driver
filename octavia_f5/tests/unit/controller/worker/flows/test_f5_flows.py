@@ -89,8 +89,10 @@ class TestF5Flows(base.TestCase):
 
         store = {'network': mock_network,
                  'bigip': mock_bigip,
-                 'subnet_id': selfip_fixed_ip.subnet_id}
-        ensure_l2_flow = f5flows.make_ensure_l2_flow([selfip_port], store=store)
+                 'subnet_id': selfip_fixed_ip.subnet_id,
+                 'existing_selfips': []}
+        needed_selfips = [selfip_port]
+        ensure_l2_flow = f5flows.make_ensure_l2_flow(needed_selfips, store=store)
         engines.run(ensure_l2_flow, store=store)
 
         # check that VLAN, RD, SelfIP, and default route have been created
@@ -167,8 +169,10 @@ class TestF5Flows(base.TestCase):
 
         store = {'network': mock_network,
                  'bigip': mock_bigip,
-                 'subnet_id': selfip_fixed_ip.subnet_id}
-        ensure_l2_flow = f5flows.make_ensure_l2_flow([selfip_port], store=store)
+                 'subnet_id': selfip_fixed_ip.subnet_id,
+                 'existing_selfips': []}
+        needed_selfips = [selfip_port]
+        ensure_l2_flow = f5flows.make_ensure_l2_flow(needed_selfips, store=store)
         engines.run(ensure_l2_flow, store=store)
 
         mock_bigip.get.assert_called()
