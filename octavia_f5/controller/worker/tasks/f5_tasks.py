@@ -409,12 +409,11 @@ class RemoveSubnetRoute(task.Task):
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
-                subnet_route, existing_subnet_routes):
-        route_name_name = subnet_route['name']
-        res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{route_name_name}")
+                subnet_route_name, existing_subnet_routes):
+        res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
 
         if res.status_code == 404:
-            LOG.warning(f"Subnet route {route_name_name} was already removed")
+            LOG.warning(f"Subnet route {subnet_route_name} was already removed")
         else:
             res.raise_for_status()
 
