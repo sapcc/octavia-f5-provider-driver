@@ -10,6 +10,7 @@ on:
 
 env:
   UPPER_CONSTRAINTS: "https://raw.githubusercontent.com/sapcc/requirements/stable/yoga-m3/upper-constraints.txt"
+  RECHEK: true
 
 jobs:
   build:
