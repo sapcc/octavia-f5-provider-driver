@@ -69,12 +69,22 @@ class BigIPRestClient(requests.Session):
         """
         try:
             r = self.get(self.get_url(BIGIP_DEVICE_PATH), timeout=3)
-        except requests.exceptions.RequestException:
+        except requests.exceptions.RequestException as err:
+            LOG.error("getting status from F5 device failed with error: %s", err)
             return self._active or False
 
-        self._active = any([device['name'] == self.hostname and
-                           device['failoverState'] == 'active'
-                           for device in r.json().get('items', [])])
+        statuses = r.json().get('items', [])
+        if not statuses:
+            LOG.error("F5 status response is empty, return cached status")
+            return self._active or False
+        if len(statuses) < 2:
+            LOG.error("F5 status response contain less than 2 devices: %s", statuses)
+        statuses = {d['name']: d['failoverState'] == 'active' for d in statuses}
+        LOG.debug("got F5 devices statuses: %s", statuses)
+        if not any(statuses.values()):
+            LOG.error("both F5 devices are not active! return cached status")
+            return self._active or False
+        self._active = statuses[self.hostname]
         return self._active
 
     def get(self, url=None, **kwargs):
