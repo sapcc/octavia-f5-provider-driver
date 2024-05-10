@@ -91,7 +91,7 @@ X_SSL_CLIENT_CN = """proc x509CNExtract { str } {
 when HTTP_REQUEST {
     if { [HTTP::has_responded] }{ return }
     if { [SSL::cert count] > 0 }{
-        set subject_cn [X509::issuer [SSL::cert 0]]
+        set subject_cn [X509::subject [SSL::cert 0]]
     }
     if { [info exists subject_cn] } {
         HTTP::header insert "X-SSL-Client-CN" [call x509CNExtract $subject_cn]
