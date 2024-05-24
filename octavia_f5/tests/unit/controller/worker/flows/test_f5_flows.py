@@ -65,7 +65,7 @@ class TestF5Flows(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test_f5_flow_ensure_l2(self, mock_get_subnet):
+    def test_ensure_l2_flow(self, mock_get_subnet):
         mock_get_subnet.return_value = network_models.Subnet(
             id='test-subnet-id', gateway_ip='1.2.3.1',
             cidr='1.2.3.0/24', network_id='test-network-id')
@@ -119,7 +119,7 @@ class TestF5Flows(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test_f5_flow_ensure_existing_l2(self, mock_get_subnet):
+    def test_ensure_l2_flow_existing_l2(self, mock_get_subnet):
         mock_get_subnet.return_value = network_models.Subnet(
             id='test-subnet-id', gateway_ip='1.2.3.1',
             cidr='1.2.3.0/24', network_id='test-network-id')
@@ -179,7 +179,7 @@ class TestF5Flows(base.TestCase):
         mock_bigip.patch.assert_not_called()
         mock_bigip.post.assert_not_called()
 
-    def test_f5_flow_ensure_vcmp_l2(self):
+    def test_ensure_vcmp_l2_flow(self):
         mock_network = f5_network_models.Network(
             mtu=9000, id='test-network-id', subnets=['test-subnet-id'],
             segments=[{'provider:physical_network': 'physnet',
@@ -204,7 +204,7 @@ class TestF5Flows(base.TestCase):
         mock_vcmp.patch.side_effect = empty_response
         f5flows = f5_flows.F5Flows()
 
-        engines.run(f5flows.ensure_vcmp_l2(),
+        engines.run(f5flows.make_ensure_vcmp_l2_flow(),
                     store={'network': mock_network,
                            'bigip': mock_vcmp,
                            'bigip_guest_names': ['test-host-1']})
@@ -231,7 +231,7 @@ class TestF5Flows(base.TestCase):
             path='/mgmt/tm/net/vlan'
         )
 
-    def test_f5_flow_remove_vcmp_l2(self):
+    def test_remove_vcmp_l2_flow(self):
         mock_network = f5_network_models.Network(
             mtu=9000, id='test-network-id', subnets=['test-subnet-id'],
             segments=[{'provider:physical_network': 'physnet',
@@ -250,7 +250,7 @@ class TestF5Flows(base.TestCase):
         mock_vcmp.get.side_effect = [mock_guests_response]
         f5flows = f5_flows.F5Flows()
 
-        engines.run(f5flows.remove_vcmp_l2(),
+        engines.run(f5flows.make_remove_vcmp_l2_flow(),
                     store={'network': mock_network,
                            'bigip': mock_vcmp,
                            'bigip_guest_names': ['test-host-1']})
@@ -260,7 +260,7 @@ class TestF5Flows(base.TestCase):
         mock_vcmp.patch.assert_called_with(json={'vlans': []},
                                            path='/mgmt/tm/vcmp/guest/test-host-1')
 
-    def test_f5_flow_remove_vcmp_l2_vlan_in_use(self):
+    def test_remove_vcmp_l2_flow_vlan_in_use(self):
         mock_network = f5_network_models.Network(
             mtu=9000, id='test-network-id', subnets=['test-subnet-id'],
             segments=[{'provider:physical_network': 'physnet',
@@ -277,7 +277,7 @@ class TestF5Flows(base.TestCase):
         mock_vcmp.get.side_effect = [mock_guests_response]
         f5flows = f5_flows.F5Flows()
 
-        engines.run(f5flows.remove_vcmp_l2(),
+        engines.run(f5flows.make_remove_vcmp_l2_flow(),
                     store={'network': mock_network,
                            'bigip': mock_vcmp,
                            'bigip_guest_names': ['test-host-1']})

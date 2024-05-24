@@ -43,7 +43,7 @@ class TestF5Tasks(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test_EnsureRoute(self, mock_get_subnet):
+    def test_EnsureDefaultRoute(self, mock_get_subnet):
         mock_get_subnet.return_value = network_models.Subnet(
             id='test-subnet-id', gateway_ip='2.3.4.5',
             cidr='2.3.4.0/24', network_id='test-network-id')

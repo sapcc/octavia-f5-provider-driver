@@ -220,7 +220,7 @@ class F5Flows(object):
 
         return get_existing_sip_sr_flow
 
-    def ensure_vcmp_l2(self) -> flow.Flow:
+    def make_ensure_vcmp_l2_flow(self) -> flow.Flow:
         ensure_vlan = f5_tasks.EnsureVLAN()
         ensure_vlan_interface = f5_tasks.EnsureVLANInterface()
         ensure_guest_vlan = f5_tasks.EnsureGuestVLAN()
@@ -231,7 +231,7 @@ class F5Flows(object):
                                 ensure_guest_vlan)
         return ensure_vcmp_l2_flow
 
-    def remove_vcmp_l2(self) -> flow.Flow:
+    def make_remove_vcmp_l2_flow(self) -> flow.Flow:
         get_vcmp_guests = f5_tasks.GetVCMPGuests()
         remove_guest_vlan = f5_tasks.RemoveGuestVLAN()
         remove_vlan_if_not_owned_by_guest = f5_tasks.RemoveVLANIfNotOwnedByGuest()

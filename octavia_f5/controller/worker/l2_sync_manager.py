@@ -102,7 +102,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             e.run()
 
     def _do_ensure_vcmp_l2_flow(self, store: dict):
-        e = self.taskflow_load(self._f5flows.ensure_vcmp_l2(), store=store)
+        e = self.taskflow_load(self._f5flows.make_ensure_vcmp_l2_flow(), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
@@ -159,7 +159,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             e.run()
 
     def _do_remove_vcmp_l2_flow(self, store: dict):
-        e = self.taskflow_load(self._f5flows.remove_vcmp_l2(), store=store)
+        e = self.taskflow_load(self._f5flows.make_remove_vcmp_l2_flow(), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
