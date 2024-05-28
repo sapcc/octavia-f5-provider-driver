@@ -186,14 +186,16 @@ class EnsureSelfIP(task.Task):
                 port: network_models.Port,
                 bigip: bigip_restclient.BigIPRestClient):
 
-        network_driver = driver_utils.get_network_driver()
+        # payload
         name = f"port-{port.id}"
         vlan = f"/Common/vlan-{network.vlan_id}"
+        network_driver = driver_utils.get_network_driver()
         subnet = network_driver.get_subnet(port.fixed_ips[0].subnet_id)
-        ipnetwork = IPNetwork(subnet.cidr)
-        address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{ipnetwork.prefixlen}"
+        subnet_cidr = IPNetwork(subnet.cidr)
+        address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{subnet_cidr.prefixlen}"
         selfip = {'name': name, 'vlan': vlan, 'address': address}
 
+        # Check whether SelfIP already exists
         device_response = bigip.get(path=f"/mgmt/tm/net/self/{name}")
 
         # Create selfip if not existing
@@ -329,26 +331,29 @@ class EnsureSubnetRoute(task.Task):
         if CONF.networking.route_on_active and not bigip.is_active:
             return
 
-        # common prefix for subnet routes of this network
+        # payload
+        route_name = get_subnet_route_name(network.id, subnet_id)
         network_driver = driver_utils.get_network_driver()
-        cidr = IPNetwork(network_driver.get_subnet(subnet_id).cidr)
-        name = get_subnet_route_name(network.id, subnet_id)
+        subnet = network_driver.get_subnet(subnet_id)
+        subnet_cidr = IPNetwork(subnet.cidr)
         vlan = f"/Common/vlan-{network.vlan_id}"
-        net = f"{cidr.ip}%{network.vlan_id}/{cidr.prefixlen}"
-        route = {'name': name, 'tmInterface': vlan, 'network': net}
+        net = f"{subnet_cidr.ip}%{network.vlan_id}/{subnet_cidr.prefixlen}"
+        subnet_route = {'name': route_name, 'tmInterface': vlan, 'network': net}
 
-        device_response = bigip.get(path=f"/mgmt/tm/net/route/~Common~{name}")
+        # Check whether subnet route already exists
+        device_response = bigip.get(path=f"/mgmt/tm/net/route/~Common~{route_name}")
 
         # Create subnet route if not existing
         if device_response.status_code == 404:
-            res = bigip.post(path='/mgmt/tm/net/route', json=route)
+            res = bigip.post(path='/mgmt/tm/net/route', json=subnet_route)
             res.raise_for_status()
             return res.json()
 
         # Otherwise update existing subnet route (if our route isn't a subset)
         device_subnet_route = device_response.json()
-        if not route.items() <= device_subnet_route.items():
-            res = bigip.patch(path=f"/mgmt/tm/net/route/~Common~{name}", json=route)
+        if not subnet_route.items() <= device_subnet_route.items():
+            res = bigip.patch(path=f"/mgmt/tm/net/route/~Common~{route_name}",
+                              json=subnet_route)
             res.raise_for_status()
             return res.json()
 
@@ -468,14 +473,16 @@ class RemoveSelfIP(task.Task):
                         f"was run: port-{port.id}")
             return
 
+        # payload
         network_driver = driver_utils.get_network_driver()
         name = f"port-{port.id}"
         vlan = f"/Common/vlan-{network.vlan_id}"
         subnet = network_driver.get_subnet(port.fixed_ips[0].subnet_id)
-        ipnetwork = IPNetwork(subnet.cidr)
-        address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{ipnetwork.prefixlen}"
+        subnet_cidr = IPNetwork(subnet.cidr)
+        address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{subnet_cidr.prefixlen}"
         selfip = {'name': name, 'vlan': vlan, 'address': address}
 
+        # restore SelfIP
         LOG.warning(f"Reverting RemoveSelfIP: Restoring SelfIP: port-{port.id}")
         res = bigip.post(path=f"/mgmt/tm/net/self/", json=selfip)
         res.raise_for_status()
