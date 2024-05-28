@@ -188,6 +188,54 @@ class TestF5Flows(base.TestCase):
         mock_bigip.patch.assert_not_called()
         mock_bigip.post.assert_not_called()
 
+    @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
+                ".get_subnet")
+    def test_ensure_selfip(self, mock_get_subnet):
+        """Test the flow returned by make_ensure_selfips_and_subnet_routes_flow
+        to create non-existent but needed SelfIP"""
+
+        # network with one subnet with an LB, no SelfIPs, and no routes
+        mock_network_id = 'test-network-id'
+        mock_subnet_id = 'test-subnet-id'
+        mock_get_subnet.return_value = network_models.Subnet(
+            id=mock_subnet_id, gateway_ip='1.2.3.1',
+            cidr='1.2.3.0/24', network_id=mock_network_id)
+        mock_network = f5_network_models.Network(
+            mtu=9000, id=mock_network_id, subnets=[mock_subnet_id],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+
+        # SelfIP port
+        selfip_fixed_ip = network_models.FixedIP(
+            ip_address='1.2.3.2', subnet_id=mock_subnet_id)
+        selfip_port = network_models.Port(
+            id='test-selfip-port-id', fixed_ips=[selfip_fixed_ip],
+        )
+
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.get.return_value = empty_response()
+
+        store = {'network': mock_network,
+                 'bigip': mock_bigip,
+                 'existing_selfips': [],
+                 'existing_subnet_routes': []}
+        needed_selfips = [selfip_port]
+        subnets_that_need_routes = []
+        f5flows = f5_flows.F5Flows()
+        ensure_selfips_and_subnet_routes_flow = f5flows.make_ensure_selfips_and_subnet_routes_flow(
+            needed_selfips, subnets_that_need_routes, store=store)
+        engines.run(ensure_selfips_and_subnet_routes_flow, store=store)
+
+        mock_bigip.get.assert_called()
+        mock_bigip.patch.assert_not_called()
+        mock_bigip.post.assert_called_with(
+            path=f"/mgmt/tm/net/self",
+            json={'name': f'port-{selfip_port.id}',
+                  'vlan': '/Common/vlan-1234',
+                  'address': '1.2.3.2%1234/24'}
+        )
+
     def test_ensure_vcmp_l2_flow(self):
         """Check that the ensure_vcmp_l2_flow flow correctly configures the VLAN"""
 
