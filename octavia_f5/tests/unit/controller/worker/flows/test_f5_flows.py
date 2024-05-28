@@ -276,6 +276,38 @@ class TestF5Flows(base.TestCase):
                   'network': '1.2.3.0%1234/24'}
         )
 
+    def test_remove_selfip(self):
+        """Test the flow returned by make_remove_selfips_and_subnet_routes_flow
+        to remove unneeded SelfIP"""
+
+        # network with one subnet supposedly deleted LB whose SelfIP still exists, and no routes
+        mock_network_id = 'test-network-id'
+        mock_network = f5_network_models.Network(id=mock_network_id)
+
+        # SelfIP port
+        selfip_port = network_models.Port(id='test-selfip-port-id')
+
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.get.return_value = empty_response()
+
+        store = {'network': mock_network,
+                 'bigip': mock_bigip,
+                 'existing_selfips': [selfip_port],
+                 'existing_subnet_routes': []}
+        needed_selfips = []
+        subnets_that_need_routes = []
+        f5flows = f5_flows.F5Flows()
+        ensure_selfips_and_subnet_routes_flow = f5flows.make_remove_selfips_and_subnet_routes_flow(
+            needed_selfips, subnets_that_need_routes, store=store)
+        engines.run(ensure_selfips_and_subnet_routes_flow, store=store)
+
+        mock_bigip.get.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+        mock_bigip.post.assert_not_called()
+        mock_bigip.delete.assert_called_with(
+            path=f"/mgmt/tm/net/self/port-{selfip_port.id}"
+        )
+
     def test_ensure_vcmp_l2_flow(self):
         """Check that the ensure_vcmp_l2_flow flow correctly configures the VLAN"""
 
