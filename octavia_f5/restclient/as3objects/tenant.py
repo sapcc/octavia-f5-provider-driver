@@ -16,6 +16,7 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia_lib.common import constants as lib_consts
+from octavia.common import exceptions as o_exceptions
 from octavia_f5.common import constants
 from octavia_f5.restclient import as3classes as as3
 from octavia_f5.restclient.as3classes import Application
@@ -61,8 +62,18 @@ def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_ma
         # Attach Octavia listeners as AS3 service objects
         for listener in loadbalancer.listeners:
             if not driver_utils.pending_delete(listener):
-                service_entities = m_service.get_service(listener, cert_manager, esd_repo)
-                app.add_entities(service_entities)
+                try:
+                    service_entities = m_service.get_service(listener, cert_manager, esd_repo)
+                    app.add_entities(service_entities)
+                except o_exceptions.CertificateRetrievalException as e:
+                    if getattr(e, 'status_code', 0) != 400:
+                        # Error connecting to keystore, skip tenant update
+                        raise e
+
+                    LOG.error("Could not retrieve certificate, assuming it is deleted, skipping listener '%s': %s", listener.id, e)
+                    if status_manager:
+                        # Key / Container not found in keystore
+                        status_manager.set_error(listener)
 
         # Attach pools
         for pool in loadbalancer.pools:
