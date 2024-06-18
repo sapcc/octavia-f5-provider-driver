@@ -22,13 +22,6 @@ PROXY_PROTOCOL_INITIATIOR = """when CLIENT_ACCEPTED {
 when SERVER_CONNECTED {
     TCP::respond $proxyheader
 }"""
-X_FORWARDED_HOST = """when HTTP_REQUEST priority 500 {
-    if { [HTTP::has_responded] }{ return }
-    if { [HTTP::header exists {X-Forwarded-Host}] } {
-        HTTP::header remove {X-Forwarded-Host}
-        HTTP::header insert {X-Forwarded-Host} [HTTP::host]
-    }
-}"""
 X_FORWARDED_FOR = """when HTTP_REQUEST {
     if { [HTTP::has_responded] }{ return }
     HTTP::header insert "X-Forwarded-For" [getfield [IP::remote_addr] "%" 1]
@@ -175,11 +168,6 @@ def get_header_irules(insert_headers):
     # Entities is a list of tuples, which each describe AS3 objects
     # which may reference each other but do not form a hierarchy.
     entities = []
-    if insert_headers.get('X-Forwarded-Host', False):
-        irule = IRule(X_FORWARDED_HOST,
-                      remark="Insert X-Forwarded-Host Header")
-        entities.append(('irule_x_forwarded_host', irule))
-
     if insert_headers.get('X-Forwarded-For', False):
         irule = IRule(X_FORWARDED_FOR,
                       remark="Insert X-Forwarded-For Header")
