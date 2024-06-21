@@ -374,9 +374,8 @@ class TestF5Tasks(base.TestCase):
 
         selfip_fixed_ip = network_models.FixedIP(
             ip_address='1.2.3.2', subnet_id=mock_subnet_id)
-        selfip_port = network_models.Port(
-            id='test-selfip-port-id', fixed_ips=[selfip_fixed_ip],
-        )
+        # SelfIPs to remove come from the GetExistingSelfIPsForVLAN task and thus only contain ID, nothing else
+        selfip_port = network_models.Port(id='test-selfip-port-id')
         selfip_name = f"port-{selfip_port.id}"
 
         # Revert before SelfIP deletion, so that we can check that post is called unconditionally
