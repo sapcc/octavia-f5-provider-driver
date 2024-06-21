@@ -31,8 +31,9 @@ class F5Flows(object):
 
         # make SelfIP creation subflow
         ensure_selfips_subflow = unordered_flow.Flow('ensure-selfips-subflow')
-        for selfip in selfips:
-            ensure_selfip_task = f5_tasks.EnsureSelfIP(name=f"ensure-selfip-{selfip.id}", inject={'port': selfip})
+        for selfip_port in selfips:
+            ensure_selfip_task = f5_tasks.EnsureSelfIP(
+                name=f"ensure-selfip-{selfip_port.id}", inject={'port': selfip_port})
             ensure_selfips_subflow.add(ensure_selfip_task)
 
         # create subnet routes for all subnets that don't have a SelfIP
@@ -76,7 +77,8 @@ class F5Flows(object):
         # remove SelfIPs
         remove_selfips_subflow = unordered_flow.Flow('remove-selfips-subflow')
         for selfip in existing_selfips:
-            remove_selfip_task = f5_tasks.RemoveSelfIP(name=f"remove-selfip-{selfip.id}", inject={'port': selfip})
+            remove_selfip_task = f5_tasks.RemoveSelfIP(name=f"remove-selfip-{selfip['port_id']}",
+                                                       inject={'selfip': selfip})
             remove_selfips_subflow.add(remove_selfip_task)
 
         # remove other L2 objects
@@ -122,7 +124,7 @@ class F5Flows(object):
                                                    store: dict) -> flow.Flow:
         """ Remove unneeded SelfIPs and subnet routes of a specific network
 
-        :param needed_selfips: SelfIPs that must exist
+        :param needed_selfips: Ports for SelfIPs that must exist
         :param subnets_that_need_routes: Subnets for which subnet routes must exist
         """
         host = store['bigip'].hostname
@@ -145,14 +147,14 @@ class F5Flows(object):
             remove_subnet_routes_subflow.add(remove_subnet_route_task)
 
         # remove SelfIPs that are existing but not needed
-        selfips_to_remove = [port for port in existing_selfips if port.id not in [p.id for p in needed_selfips]]
-        LOG.debug(f"{host}: SelfIPs to remove for network {network.id}: {[p.id for p in selfips_to_remove]}")
+        selfips_to_remove = [sip for sip in existing_selfips if sip['port_id'] not in [p.id for p in needed_selfips]]
+        LOG.debug(f"{host}: SelfIPs to remove for network {network.id}: {[sip['port_id'] for sip in selfips_to_remove]}")
 
         # make SelfIPs removal subflow
         remove_selfips_subflow = unordered_flow.Flow('remove-selfips-subflow')
-        for selfip_port in selfips_to_remove:
-            remove_selfip = f5_tasks.RemoveSelfIP(name=f"remove-selfip-{selfip_port.id}",
-                                                  inject={'port': selfip_port})
+        for selfip in selfips_to_remove:
+            remove_selfip = f5_tasks.RemoveSelfIP(name=f"remove-selfip-{selfip['port_id']}",
+                                                  inject={'selfip': selfip})
             remove_selfips_subflow.add(remove_selfip)
 
         # make and return flow
@@ -174,13 +176,15 @@ class F5Flows(object):
         preexisting_subnet_routes = store['existing_subnet_routes']
 
         # find SelfIPs that are expected but not existing
-        selfips_to_create = [port for port in needed_selfips if port.id not in [p.id for p in preexisting_selfips]]
+        selfips_to_create = [port for port in needed_selfips
+                             if port.id not in [sip['port_id'] for sip in preexisting_selfips]]
         LOG.debug(f"{host}: SelfIPs to add for network {network.id}: {[p.id for p in selfips_to_create]}")
 
         # make SelfIP creation subflow
         ensure_selfips_subflow = unordered_flow.Flow('ensure-selfips-subflow')
-        for selfip in selfips_to_create:
-            ensure_selfip_task = f5_tasks.EnsureSelfIP(name=f"ensure-selfip-{selfip.id}", inject={'port': selfip})
+        for selfip_port in selfips_to_create:
+            ensure_selfip_task = f5_tasks.EnsureSelfIP(
+                name=f"ensure-selfip-{selfip_port.id}", inject={'port': selfip_port})
             ensure_selfips_subflow.add(ensure_selfip_task)
 
         # find subnet routes for subnets that need them but don't have any yet
@@ -191,7 +195,8 @@ class F5Flows(object):
         ]
         subnets_to_create_routes_for = [s for s in subnets_that_need_routes
                                         if s not in subnets_of_preexisting_subnet_routes]
-        LOG.debug(f"{host}: Subnet of network {network.id} for which routes will be created: {subnets_to_create_routes_for}")
+        LOG.debug(f"{host}: Subnet of network {network.id} for which routes will be created: "
+                  f"{subnets_to_create_routes_for}")
 
         # make subnet route creation subflow
         ensure_subnet_routes_subflow = unordered_flow.Flow('ensure-subnet-routes-subflow')

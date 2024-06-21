@@ -144,7 +144,7 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         # log the current and desired state
         hostname = store['bigip'].hostname
-        LOG.debug(f"{hostname}: The preexisting SelfIPs for network {network.id} are: {[sip.id for sip in existing_selfips]}")
+        LOG.debug(f"{hostname}: The preexisting SelfIPs for network {network.id} are: {[sip['port_id'] for sip in existing_selfips]}")
         LOG.debug(f"{hostname}: The expected SelfIPs for network {network.id} are: {[sip.id for sip in needed_selfips]}")
         LOG.debug(f"{hostname}: The preexisting subnet routes for network {network.id} are: {[r['name'] for r in existing_subnet_routes]}")
         LOG.debug(f"{hostname}: The expected subnet routes for network {network.id} are for these subnets: {subnets_that_need_routes}")

@@ -292,7 +292,7 @@ class TestF5Flows(base.TestCase):
 
         store = {'network': mock_network,
                  'bigip': mock_bigip,
-                 'existing_selfips': [selfip_port],
+                 'existing_selfips': [{'name': f"port-{selfip_port.id}", 'port_id': selfip_port.id}],
                  'existing_subnet_routes': []}
         needed_selfips = []
         subnets_that_need_routes = []
@@ -371,7 +371,7 @@ class TestF5Flows(base.TestCase):
 
         store = {'network': mock_network,
                  'bigip': mock_bigip,
-                 'existing_selfips': [selfip_port],
+                 'existing_selfips': [{'name': f"port-{selfip_port.id}", 'port_id': selfip_port.id}],
                  'existing_subnet_routes': []}
         needed_selfips = []
         subnets_that_need_routes = [mock_subnet_id]

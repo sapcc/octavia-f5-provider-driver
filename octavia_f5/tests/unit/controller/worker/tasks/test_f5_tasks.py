@@ -372,8 +372,6 @@ class TestF5Tasks(base.TestCase):
                        'provider:segmentation_id': 1234}]
         )
 
-        selfip_fixed_ip = network_models.FixedIP(
-            ip_address='1.2.3.2', subnet_id=mock_subnet_id)
         # SelfIPs to remove come from the GetExistingSelfIPsForVLAN task and thus only contain ID, nothing else
         selfip_port = network_models.Port(id='test-selfip-port-id')
         selfip_name = f"port-{selfip_port.id}"
@@ -384,10 +382,16 @@ class TestF5Tasks(base.TestCase):
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_bigip.delete.side_effect = TestException(
             "Test exception to trigger rollback of EnsureSelfIP")
+        selfip_port_dict = {
+            'name': f"port-{selfip_port.id}",
+            'port_id': selfip_port.id,
+            'address': "1.2.3.2%1234/24",
+            'vlan': '/Common/vlan-1234',
+        }
         store = {
             'bigip': mock_bigip,
-            'existing_selfips': [selfip_port],
-            'port': selfip_port,
+            'existing_selfips': [selfip_port_dict],
+            'selfip': selfip_port_dict,
             'network': mock_network,
         }
 

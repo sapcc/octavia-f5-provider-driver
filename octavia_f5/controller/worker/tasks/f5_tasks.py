@@ -222,7 +222,7 @@ class EnsureSelfIP(task.Task):
         selfip_name = f"port-{port.id}"
 
         # don't remove the SelfIP if it existed before this task was executed
-        if port.id in [p.id for p in existing_selfips]:
+        if port.id in [p['port_id'] for p in existing_selfips]:
             LOG.warning("Reverting EnsureSelfIP: Not deleting SelfIP, since it existed before the task was run: "
                         f"{selfip_name}")
             return
@@ -239,21 +239,24 @@ class EnsureSelfIP(task.Task):
 class GetExistingSelfIPsForVLAN(task.Task):
     default_provides = 'existing_selfips'
 
-    @staticmethod
-    def _remove_port_prefix(name: str):
-        return name[len('port-'):]
-
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network):
-        vlan = f"/Common/vlan-{network.vlan_id}"
+
+        # get items
         device_response = bigip.get(path='/mgmt/tm/net/self?$select=vlan,name')
         device_response.raise_for_status()
         items = device_response.json().get('items', [])
-        return [network_models.Port(id=self._remove_port_prefix(item['name']))
-                for item in items
-                if item['vlan'] == vlan
-                and item['name'].startswith('port-')]
+
+        # filter for VLAN
+        vlan = f"/Common/vlan-{network.vlan_id}"
+        items = [i for i in items if i['vlan'] == vlan and i['name'].startswith('port-')]
+
+        # we have to get the port ID oftentimes, so inject it for ease of use
+        for i in items:
+            i['port_id'] = i['name'][len('port-'):]
+
+        return items
 
 
 class GetExistingSubnetRoutesForNetwork(task.Task):
@@ -451,39 +454,28 @@ class RemoveSubnetRoute(task.Task):
 class RemoveSelfIP(task.Task):
 
     @decorators.RaisesIControlRestError()
-    def execute(self, bigip: bigip_restclient.BigIPRestClient,
-                port: network_models.Port):
-        res = bigip.delete(path=f"/mgmt/tm/net/self/port-{port.id}")
+    def execute(self, bigip: bigip_restclient.BigIPRestClient, selfip: dict):
+        res = bigip.delete(path=f"/mgmt/tm/net/self/port-{selfip['port_id']}")
 
         if res.status_code == 404:
-            LOG.warning(f"SelfIP port-{port.id} was already removed")
+            LOG.warning(f"SelfIP port-{selfip['port_id']} was already removed")
         else:
             res.raise_for_status()
 
     @decorators.RaisesIControlRestError()
-    def revert(self, port: network_models.Port,
-               bigip: bigip_restclient.BigIPRestClient,
-               existing_selfips: [network_models.Port],
-               network, *args, **kwargs):
+    def revert(self, bigip: bigip_restclient.BigIPRestClient,
+               selfip: dict, existing_selfips: [dict], *args, **kwargs):
 
         # don't restore SelfIP if it didn't exist before this task was executed
-        if port.id not in [p.id for p in existing_selfips]:
+        if selfip['name'] not in [sip['name'] for sip in existing_selfips]:
             LOG.warning("Reverting RemoveSelfIP: Not restoring SelfIP since it didn't exist before the task "
-                        f"was run: port-{port.id}")
+                        f"was run: {selfip['name']}")
             return
 
-        # payload
-        network_driver = driver_utils.get_network_driver()
-        name = f"port-{port.id}"
-        vlan = f"/Common/vlan-{network.vlan_id}"
-        subnet = network_driver.get_subnet(port.fixed_ips[0].subnet_id)
-        subnet_cidr = IPNetwork(subnet.cidr)
-        address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{subnet_cidr.prefixlen}"
-        selfip = {'name': name, 'vlan': vlan, 'address': address}
-
         # restore SelfIP
-        LOG.warning(f"Reverting RemoveSelfIP: Restoring SelfIP: port-{port.id}")
-        res = bigip.post(path=f"/mgmt/tm/net/self/", json=selfip)
+        payload = {'name': selfip['name'], 'vlan': selfip['vlan'], 'address': selfip['address']}
+        LOG.warning(f"Reverting RemoveSelfIP: Restoring SelfIP: {selfip['name']}")
+        res = bigip.post(path=f"/mgmt/tm/net/self/", json=payload)
         res.raise_for_status()
 
 
