@@ -244,7 +244,7 @@ class GetExistingSelfIPsForVLAN(task.Task):
                 network: f5_network_models.Network):
 
         # get items
-        device_response = bigip.get(path='/mgmt/tm/net/self?$select=vlan,name')
+        device_response = bigip.get(path='/mgmt/tm/net/self?$select=vlan,name,address')
         device_response.raise_for_status()
         items = device_response.json().get('items', [])
 
