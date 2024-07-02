@@ -69,9 +69,9 @@ class F5Flows(object):
 
         # remove subnet routes
         remove_subnet_routes_subflow = unordered_flow.Flow('remove-subnet-routes-subflow')
-        for subnet_route_name in existing_subnet_routes:
-            remove_subnet_route_task = f5_tasks.RemoveSubnetRoute(name=f"remove-subnet-route-{subnet_route_name}",
-                                                                  inject={'subnet_route_name': subnet_route_name})
+        for subnet_route in existing_subnet_routes:
+            remove_subnet_route_task = f5_tasks.RemoveSubnetRoute(name=f"remove-subnet-route-{subnet_route['name']}",
+                                                                  inject={'subnet_route': subnet_route})
             remove_subnet_routes_subflow.add(remove_subnet_route_task)
 
         # remove SelfIPs
@@ -134,16 +134,16 @@ class F5Flows(object):
 
         # remove subnet routes that are existing but don't belong to one of the subnets that need routes
         subnet_route_network_part = f5_tasks.get_subnet_route_name(network.id, '')
-        subnet_routes_to_remove = [r['name'] for r in existing_subnet_routes
+        subnet_routes_to_remove = [r for r in existing_subnet_routes
                                    if r['name'].startswith(subnet_route_network_part)
                                    and r['name'][len(subnet_route_network_part):] not in subnets_that_need_routes]
-        LOG.debug(f"{host}: Subnet routes to remove for network {network.id} (subnet IDs): {subnet_routes_to_remove}")
+        LOG.debug(f"{host}: Subnet routes to remove for network {network.id} (subnet IDs): {[r['name'] for r in subnet_routes_to_remove]}")
 
         # make subnet routes removal subflow
         remove_subnet_routes_subflow = unordered_flow.Flow('remove-subnet-routes-subflow')
-        for subnet_route_name in subnet_routes_to_remove:
-            remove_subnet_route_task = f5_tasks.RemoveSubnetRoute(name=f"remove-subnet-route-{subnet_route_name}",
-                                                                  inject={'subnet_route_name': subnet_route_name})
+        for subnet_route in subnet_routes_to_remove:
+            remove_subnet_route_task = f5_tasks.RemoveSubnetRoute(name=f"remove-subnet-route-{subnet_route['name']}",
+                                                                  inject={'subnet_route': subnet_route})
             remove_subnet_routes_subflow.add(remove_subnet_route_task)
 
         # remove SelfIPs that are existing but not needed

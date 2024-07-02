@@ -437,7 +437,9 @@ class TestF5Tasks(base.TestCase):
         )
 
         subnet_route_name = f'net_{mock_network_id}_sub_{mock_subnet_id}'
-        subnet_route = {'name': subnet_route_name}
+        subnet_route = {'name': subnet_route_name,
+                        'tmInterface': 'original_subnet_route_tmInterface',
+                        'network': 'original_subnet_route_network'}
 
         # Revert before SelfIP deletion, so that we can check that post is called unconditionally
         class TestException(Exception):
@@ -447,7 +449,7 @@ class TestF5Tasks(base.TestCase):
             "Test exception to trigger rollback of EnsureSubnetRoute")
         store = {
             'bigip': mock_bigip,
-            'subnet_route_name': subnet_route_name,
+            'subnet_route': subnet_route,
             'existing_subnet_routes': [subnet_route],
             'network': mock_network,
         }
@@ -459,8 +461,8 @@ class TestF5Tasks(base.TestCase):
             path=f"/mgmt/tm/net/route",
             json={
                 'name': subnet_route_name,
-                'tmInterface': "/Common/vlan-1234",
-                'network': "2.3.4.0%1234/24",
+                'tmInterface': "original_subnet_route_tmInterface",
+                'network': "original_subnet_route_network",
             },
         )
         mock_bigip.get.assert_not_called()

@@ -417,7 +417,8 @@ class RemoveSubnetRoute(task.Task):
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
-                subnet_route_name):
+                subnet_route):
+        subnet_route_name = subnet_route['name']
         res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
 
         if res.status_code == 404:
@@ -427,8 +428,9 @@ class RemoveSubnetRoute(task.Task):
 
     @decorators.RaisesIControlRestError()
     def revert(self, bigip: bigip_restclient.BigIPRestClient,
-               subnet_route_name, existing_subnet_routes, network,
+               subnet_route, existing_subnet_routes, network,
                *args, **kwargs):
+        subnet_route_name = subnet_route['name']
 
         # don't restore subnet route if it didn't exist before this task was executed
         if subnet_route_name not in [r['name'] for r in existing_subnet_routes]:
@@ -436,18 +438,12 @@ class RemoveSubnetRoute(task.Task):
                         f"was run: {subnet_route_name}")
             return
 
-        # payload
-        network_driver = driver_utils.get_network_driver()
-        subnet_id = subnet_route_name.split('_')[-1]
-        subnet = network_driver.get_subnet(subnet_id)
-        subnet_cidr = IPNetwork(subnet.cidr)
-        vlan = f"/Common/vlan-{network.vlan_id}"
-        net = f"{subnet_cidr.ip}%{network.vlan_id}/{subnet_cidr.prefixlen}"
-        subnet_route = {'name': subnet_route_name, 'tmInterface': vlan, 'network': net}
-
         # restore subnet route
+        payload = {'name': subnet_route_name,
+                   'tmInterface': subnet_route['tmInterface'],
+                   'network': subnet_route['network']}
         LOG.warning(f"Reverting RemoveSubnetRoute: Restoring subnet route: {subnet_route_name}")
-        res = bigip.post(path='/mgmt/tm/net/route', json=subnet_route)
+        res = bigip.post(path='/mgmt/tm/net/route', json=payload)
         res.raise_for_status()
 
 
