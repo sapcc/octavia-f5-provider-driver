@@ -438,6 +438,12 @@ class RemoveSubnetRoute(task.Task):
                         f"was run: {subnet_route_name}")
             return
 
+        # don't restore subnet route if it wasn't removed
+        res = bigip.get(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        if res.status_code != 404:
+            LOG.warning(f"Reverting RemoveSubnetRoute: Subnet route {subnet_route_name} was not removed, no need to restore")
+            return
+
         # restore subnet route
         payload = {'name': subnet_route_name,
                    'tmInterface': subnet_route['tmInterface'],
@@ -466,6 +472,12 @@ class RemoveSelfIP(task.Task):
         if selfip['name'] not in [sip['name'] for sip in existing_selfips]:
             LOG.warning("Reverting RemoveSelfIP: Not restoring SelfIP since it didn't exist before the task "
                         f"was run: {selfip['name']}")
+            return
+
+        # don't restore SelfIP if it wasn't removed
+        res = bigip.get(path=f"/mgmt/tm/net/self/{selfip['port_id']}")
+        if res.status_code != 404:
+            LOG.warning(f"Reverting RemoveSelfIP: SelfIP {selfip['name']} was not removed, no need to restore")
             return
 
         # restore SelfIP

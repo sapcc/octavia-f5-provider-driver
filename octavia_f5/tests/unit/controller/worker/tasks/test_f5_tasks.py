@@ -376,12 +376,6 @@ class TestF5Tasks(base.TestCase):
         selfip_port = network_models.Port(id='test-selfip-port-id')
         selfip_name = f"port-{selfip_port.id}"
 
-        # Revert before SelfIP deletion, so that we can check that post is called unconditionally
-        class TestException(Exception):
-            pass
-        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_bigip.delete.side_effect = TestException(
-            "Test exception to trigger rollback of EnsureSelfIP")
         selfip_port_dict = {
             'name': f"port-{selfip_port.id}",
             'port_id': selfip_port.id,
@@ -389,15 +383,31 @@ class TestF5Tasks(base.TestCase):
             'vlan': '/Common/vlan-1234',
         }
         store = {
-            'bigip': mock_bigip,
-            'existing_selfips': [selfip_port_dict],
             'selfip': selfip_port_dict,
             'network': mock_network,
         }
+        # exception to be thrown during task execution
+        class TestException(Exception):
+            pass
 
-        # Case: SelfIP existed before the task, so it has to be restored
+        # The SelfIP only has to be restored if did exist before but doesn't
+        # exist anymore (because deletion worked). So we have to test three cases:
+        # 1) SelfIP is gone, but existed before => restore
+        # 2) SelfIP is gone, and didn't exist before => NOP
+        # 3) SelfIP is still there => NOP
+
+        # Case 1: SelfIP is gone, but existed before => restore
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSelfIP (case 1)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
+        store['bigip'] = mock_bigip
+        store['existing_selfips'] = [selfip_port_dict]
         self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
+        # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
+        # calls in revert()
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_port.id}")
         mock_bigip.post.assert_called_with(
             path=f"/mgmt/tm/net/self/",
             json={
@@ -406,19 +416,36 @@ class TestF5Tasks(base.TestCase):
                 'address': "1.2.3.2%1234/24",
             },
         )
-        mock_bigip.get.assert_not_called()
         mock_bigip.patch.assert_not_called()
 
-        # Case: SelfIP didn't exist before the task, so it shouldn't be restored
+        # Case 2: SelfIP is gone, and didn't exist before => NOP
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_bigip.delete.side_effect = TestException(
-            "Test exception to trigger rollback of EnsureSelfIP")
+            "Test exception to trigger rollback of EnsureSelfIP (case 2)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
         store['bigip'] = mock_bigip
         store['existing_selfips'] = []
         self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
+        # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
-        mock_bigip.post.assert_not_called()
+        # calls in revert()
         mock_bigip.get.assert_not_called()
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+
+        # Case 3: SelfIP is still there => NOP
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSelfIP (case 3)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)] # only HTTP code matters
+        store['bigip'] = mock_bigip
+        store['existing_selfips'] = [selfip_port_dict]
+        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
+        # calls in execute()
+        mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
+        # calls in revert()
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_port.id}")
+        mock_bigip.post.assert_not_called()
         mock_bigip.patch.assert_not_called()
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
@@ -440,42 +467,70 @@ class TestF5Tasks(base.TestCase):
         subnet_route = {'name': subnet_route_name,
                         'tmInterface': 'original_subnet_route_tmInterface',
                         'network': 'original_subnet_route_network'}
-
-        # Revert before SelfIP deletion, so that we can check that post is called unconditionally
-        class TestException(Exception):
-            pass
-        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_bigip.delete.side_effect = TestException(
-            "Test exception to trigger rollback of EnsureSubnetRoute")
         store = {
-            'bigip': mock_bigip,
             'subnet_route': subnet_route,
-            'existing_subnet_routes': [subnet_route],
             'network': mock_network,
         }
+        # exception to be thrown during task execution
+        class TestException(Exception):
+            pass
 
-        # Case: Subnet route existed before the task, so it has to be restored
+        # The subnet route only has to be restored if did exist before but
+        # doesn't exist anymore (because deletion worked). So we have to test
+        # three cases:
+        # 1) Subnet route is gone, but existed before => restore
+        # 2) Subnet route is gone, and didn't exist before => NOP
+        # 3) Subnet route is still there => NOP
+
+        # Case 1: Subnet route is gone, but existed before => restore
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSubnetRoute (case 1)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
+        store['bigip'] = mock_bigip
+        store['existing_subnet_routes'] = [subnet_route]
         self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
+        # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        # calls in revert()
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
         mock_bigip.post.assert_called_with(
             path=f"/mgmt/tm/net/route",
             json={
                 'name': subnet_route_name,
-                'tmInterface': "original_subnet_route_tmInterface",
-                'network': "original_subnet_route_network",
+                'tmInterface': subnet_route['tmInterface'],
+                'network': subnet_route['network'],
             },
         )
-        mock_bigip.get.assert_not_called()
         mock_bigip.patch.assert_not_called()
 
-        # Case: Subnet route didn't exist before the task, so it shouldn't be restored
+        # Case 2: Subnet route is gone, and didn't exist before => NOP
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_bigip.delete.side_effect = TestException(
-            "Test exception to trigger rollback of EnsureSelfIP")
+            "Test exception to trigger rollback of EnsureSubnetRoute (case 2)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
         store['bigip'] = mock_bigip
         store['existing_subnet_routes'] = []
         self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
+        # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
-        mock_bigip.post.assert_not_called()
+        # calls in revert()
         mock_bigip.get.assert_not_called()
+        mock_bigip.post.assert_not_called()
         mock_bigip.patch.assert_not_called()
+
+        # Case 3: Subnet route is still there => NOP
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSubnetRoute (case 3)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)] # only HTTP code matters
+        store['bigip'] = mock_bigip
+        store['existing_subnet_routes'] = [subnet_route]
+        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
+        # calls in execute()
+        mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        # calls in revert()
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+
