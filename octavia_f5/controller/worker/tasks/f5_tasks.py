@@ -204,7 +204,7 @@ class EnsureSelfIP(task.Task):
             res.raise_for_status()
             return res.json()
 
-        # Otherwise update existing subnet route (if our route isn't a subset)
+        # Otherwise update existing selfip (if our selfip isn't a subset)
         device_selfip = device_response.json()
         if not selfip.items() <= device_selfip.items():
             res = bigip.patch(path='/mgmt/tm/net/self/{}'.format(device_selfip['name']),
