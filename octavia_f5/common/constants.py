@@ -61,6 +61,7 @@ SERVICE_HTTP_TYPES = (SERVICE_HTTP, SERVICE_HTTPS)
 
 # special listener tags
 LISTENER_TAG_NO_SNAT = 'ccloud_special_l4_deactivate_snat'
+LISTENER_TAG_MIRRORING = 'ccloud_special_tcp_mirror'
 
 ROLE_MASTER = 'MASTER'
 ROLE_BACKUP = 'BACKUP'

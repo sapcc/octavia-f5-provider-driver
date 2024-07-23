@@ -408,6 +408,10 @@ def get_service(listener, cert_manager, esd_repository):
     elif CONF.f5_agent.snat_virtual:
         service_args['snat'] = 'self'
 
+    # Use session mirroring for TCP listeners
+    if f5_const.LISTENER_TAG_MIRRORING in listener.tags and listener.protocol == lib_consts.PROTOCOL_TCP:
+        service_args['mirroring'] = 'L4'
+
     # create service object and fill in additional fields
     service = as3.Service(**service_args)
 
