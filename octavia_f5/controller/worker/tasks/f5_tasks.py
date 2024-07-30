@@ -28,10 +28,10 @@ LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
 
-def subnet_in_selfips(subnet, selfips):
+def selfip_for_subnet_exists(subnet_id, selfips):
     for selfip in selfips:
         for fixed_ip in selfip.fixed_ips:
-            if fixed_ip.subnet_id == subnet:
+            if fixed_ip.subnet_id == subnet_id:
                 return True
     return False
 
@@ -53,8 +53,7 @@ class EnsureVLAN(task.Task):
     )
     def execute(self,
                 bigip: bigip_restclient.BigIPRestClient,
-                network: f5_network_models.Network,
-                *args, **kwargs):
+                network: f5_network_models.Network):
 
         vlan = {
             'name': f'vlan-{network.vlan_id}',
@@ -89,8 +88,7 @@ class EnsureVLANInterface(task.Task):
     @decorators.RaisesIControlRestError()
     def execute(self,
                 bigip: bigip_restclient.BigIPRestClient,
-                device_vlan: dict,
-                *args, **kwargs):
+                device_vlan: dict):
         network_driver = driver_utils.get_network_driver()
         interface = {
             'name': device_vlan['name'],
@@ -122,8 +120,7 @@ class EnsureGuestVLAN(task.Task):
     def execute(self,
                 bigip: bigip_restclient.BigIPRestClient,
                 bigip_guest_names: [str],
-                device_vlan: dict,
-                *args, **kwargs):
+                device_vlan: dict):
 
         device_guest = None
         device_response = bigip.get(path='/mgmt/tm/vcmp/guest')
@@ -185,19 +182,20 @@ class EnsureSelfIP(task.Task):
     """ Task to create or update Self-IP if needed """
 
     @decorators.RaisesIControlRestError()
-    def execute(self, network: f5_network_models.Network,
-                port: network_models.Port,
-                bigip: bigip_restclient.BigIPRestClient,
-                *args, **kwargs):
+    def execute(self, bigip: bigip_restclient.BigIPRestClient,
+                network: f5_network_models.Network,
+                port: network_models.Port):
 
-        network_driver = driver_utils.get_network_driver()
+        # payload
         name = f"port-{port.id}"
         vlan = f"/Common/vlan-{network.vlan_id}"
+        network_driver = driver_utils.get_network_driver()
         subnet = network_driver.get_subnet(port.fixed_ips[0].subnet_id)
-        ipnetwork = IPNetwork(subnet.cidr)
-        address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{ipnetwork.prefixlen}"
+        subnet_cidr = IPNetwork(subnet.cidr)
+        address = f"{port.fixed_ips[0].ip_address}%{network.vlan_id}/{subnet_cidr.prefixlen}"
         selfip = {'name': name, 'vlan': vlan, 'address': address}
 
+        # Check whether SelfIP already exists
         device_response = bigip.get(path=f"/mgmt/tm/net/self/{name}")
 
         # Create selfip if not existing
@@ -206,7 +204,7 @@ class EnsureSelfIP(task.Task):
             res.raise_for_status()
             return res.json()
 
-        # Update if dict differs from on-device state
+        # Otherwise update existing selfip (if our selfip isn't a subset)
         device_selfip = device_response.json()
         if not selfip.items() <= device_selfip.items():
             res = bigip.patch(path='/mgmt/tm/net/self/{}'.format(device_selfip['name']),
@@ -217,25 +215,64 @@ class EnsureSelfIP(task.Task):
         # No Changes needed
         return device_selfip
 
+    @decorators.RaisesIControlRestError()
+    def revert(self, port: network_models.Port,
+               bigip: bigip_restclient.BigIPRestClient,
+               existing_selfips, *args, **kwargs):
+        selfip_name = f"port-{port.id}"
 
-class GetAllSelfIPsForVLAN(task.Task):
-    default_provides = 'selfips'
+        # don't remove the SelfIP if it existed before this task was executed
+        if port.id in [p['port_id'] for p in existing_selfips]:
+            LOG.warning("Reverting EnsureSelfIP: Not deleting SelfIP, since it existed before the task was run: "
+                        f"{selfip_name}")
+            return
 
-    @staticmethod
-    def _remove_port_prefix(name: str):
-        return name[len('port-'):]
+        # delete SelfIP, ignoring 404
+        LOG.warning(f"Reverting EnsureSelfIP: Deleting SelfIP: {selfip_name}")
+        device_response = bigip.delete(path=f"/mgmt/tm/net/self/{selfip_name}")
+        if device_response.status_code == 404:
+            LOG.warning(f"Reverting EnsureSelfIP: SelfIP {selfip_name} was already removed")
+        else:
+            device_response.raise_for_status()
+
+
+class GetExistingSelfIPsForVLAN(task.Task):
+    default_provides = 'existing_selfips'
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network):
-        vlan = f"/Common/vlan-{network.vlan_id}"
-        device_response = bigip.get(path='/mgmt/tm/net/self?$select=vlan,name')
+
+        # get items
+        device_response = bigip.get(path='/mgmt/tm/net/self?$select=vlan,name,address')
         device_response.raise_for_status()
         items = device_response.json().get('items', [])
-        return [network_models.Port(id=self._remove_port_prefix(item['name']))
-                for item in items
-                if item['vlan'] == vlan
-                and item['name'].startswith('port-')]
+
+        # filter for VLAN
+        vlan = f"/Common/vlan-{network.vlan_id}"
+        items = [i for i in items if i['vlan'] == vlan and i['name'].startswith('port-')]
+
+        # we have to get the port ID oftentimes, so inject it for ease of use
+        for i in items:
+            i['port_id'] = i['name'][len('port-'):]
+
+        return items
+
+
+class GetExistingSubnetRoutesForNetwork(task.Task):
+    default_provides = 'existing_subnet_routes'
+
+    @decorators.RaisesIControlRestError()
+    def execute(self, bigip: bigip_restclient.BigIPRestClient,
+                network: f5_network_models.Network):
+
+        # get all routes
+        response = bigip.get(path=f"/mgmt/tm/net/route").json()
+        routes = response.get('items', [])
+
+        # filter for only the subnet routes belonging to this network
+        subnet_route_network_part = get_subnet_route_name(network.id, '')
+        return [r for r in routes if r['name'].startswith(subnet_route_network_part)]
 
 
 class EnsureDefaultRoute(task.Task):
@@ -285,59 +322,73 @@ class EnsureDefaultRoute(task.Task):
         return device_route
 
 
-class EnsureSubnetRoutes(task.Task):
-    """ Task to create missing needed static subnet routes"""
+class EnsureSubnetRoute(task.Task):
+    """ Task to make sure a subnet route exists. """
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
-                selfips: [network_models.Port],
-                network: f5_network_models.Network):
+                network: f5_network_models.Network,
+                subnet_id):
 
         # Skip passive device if route_on_active is enabled
         if CONF.networking.route_on_active and not bigip.is_active:
-            return None
+            return
 
-        # Fetch existing routes
-        response = bigip.get(path=f"/mgmt/tm/net/route?$filter=partition+eq+Common").json()
-        existing_routes = response.get('items', [])
-
-        # subnet routes that must exist (routes already exist for SelfIPs)
-        subnets_that_need_routes = [subnet for subnet in network.subnets if not subnet_in_selfips(subnet, selfips)]
-
-        # common prefix for subnet routes of this network
-        subnet_route_network_part = get_subnet_route_name(network.id, '')
-
-        # delete existing subnet routes that aren't needed anymore - we'll only provision the missing ones
-        for existing_route in existing_routes:
-            existing_route_name = existing_route['name']
-
-            # ignore routes that are not subnet routes of this network
-            if not existing_route_name.startswith(subnet_route_network_part):
-                continue
-
-            existing_route_subnet = existing_route_name[len(subnet_route_network_part):]
-            if existing_route_subnet in subnets_that_need_routes:
-                # if the subnet route is a needed one there's no need to provision it again
-                subnets_that_need_routes.remove(existing_route_subnet)
-
-        # Add missing subnet routes
+        # payload
+        subnet_route_name = get_subnet_route_name(network.id, subnet_id)
         network_driver = driver_utils.get_network_driver()
-        for subnet_id in subnets_that_need_routes:
-            cidr = IPNetwork(network_driver.get_subnet(subnet_id).cidr)
+        subnet = network_driver.get_subnet(subnet_id)
+        subnet_cidr = IPNetwork(subnet.cidr)
+        vlan = f"/Common/vlan-{network.vlan_id}"
+        net = f"{subnet_cidr.ip}%{network.vlan_id}/{subnet_cidr.prefixlen}"
+        subnet_route = {'name': subnet_route_name, 'tmInterface': vlan, 'network': net}
 
-            name = get_subnet_route_name(network.id, subnet_id)
-            vlan = f"/Common/vlan-{network.vlan_id}"
-            net = f"{cidr.ip}%{network.vlan_id}/{cidr.prefixlen}"
-            route = {'name': name, 'tmInterface': vlan, 'network': net}
+        # Check whether subnet route already exists
+        device_response = bigip.get(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
 
-            res = bigip.post(path='/mgmt/tm/net/route', json=route)
+        # Create subnet route if not existing
+        if device_response.status_code == 404:
+            res = bigip.post(path='/mgmt/tm/net/route', json=subnet_route)
             res.raise_for_status()
+            return res.json()
+
+        # Otherwise update existing subnet route (if our route isn't a subset)
+        device_subnet_route = device_response.json()
+        if not subnet_route.items() <= device_subnet_route.items():
+            res = bigip.patch(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}",
+                              json=subnet_route)
+            res.raise_for_status()
+            return res.json()
+
+        # No changes needed
+        return device_subnet_route
+
+    @decorators.RaisesIControlRestError()
+    def revert(self, bigip: bigip_restclient.BigIPRestClient,
+               network: f5_network_models.Network,
+               subnet_id, existing_subnet_routes,
+               *args, **kwargs):
+        subnet_route_name = get_subnet_route_name(network.id, subnet_id)
+
+        # Don't remove the route if it existed before this task was executed
+        if subnet_route_name in [r['name'] for r in existing_subnet_routes]:
+            LOG.warning("Reverting EnsureSubnetRoute: Not deleting route, since it existed before the task was run: "
+                        f"{subnet_route_name}")
+            return
+
+        # delete subnet route, ignoring 404
+        LOG.warning(f"Reverting EnsureSubnetRoute: Deleting subnet route: {subnet_route_name}")
+        device_response = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        if device_response.status_code == 404:
+            LOG.warning(f"Reverting EnsureSubnetRoute: Subnet route {subnet_route_name} was already removed")
+        else:
+            device_response.raise_for_status()
 
 
-""" Cleanup Tasks """
+""" Removal Tasks """
 
 
-class CleanupDefaultRoute(task.Task):
+class RemoveDefaultRoute(task.Task):
 
     @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
@@ -356,58 +407,87 @@ class CleanupDefaultRoute(task.Task):
                 break
 
         if res and not res.ok:
-            LOG.warning("%s: Failed cleanup Route for network_id=%s vlan=%s "
+            LOG.warning("%s: Failed removing route for network_id=%s vlan=%s "
                         "(could be already done by autosync): %s",
                         bigip.hostname, network.id, network.vlan_id, res.content)
 
 
-class CleanupSubnetRoutes(task.Task):
-    """Task to clean up static subnet routes. If the network is to be deleted, set delete_all=True.
-    Else only the unneeded subnet routes of this network are deleted."""
+class RemoveSubnetRoute(task.Task):
+    """Task to remove a static subnet route."""
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
-                selfips: [network_models.Port],
-                network: f5_network_models.Network,
-                delete_all=False):
+                subnet_route):
+        subnet_route_name = subnet_route['name']
+        res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
 
-        subnets_that_need_routes = []
-        if not delete_all:
-            subnets_that_need_routes = [subnet for subnet in network.subnets if not subnet_in_selfips(subnet, selfips)]
+        if res.status_code == 404:
+            LOG.warning(f"Subnet route {subnet_route_name} was already removed")
+        else:
+            res.raise_for_status()
 
-        # prefix of subnet routes that belong to this network
-        subnet_route_network_part = get_subnet_route_name(network.id, '')
+    @decorators.RaisesIControlRestError()
+    def revert(self, bigip: bigip_restclient.BigIPRestClient,
+               subnet_route, existing_subnet_routes, network,
+               *args, **kwargs):
+        subnet_route_name = subnet_route['name']
 
-        # Fetch existing routes in the partition
-        response = bigip.get(path=f"/mgmt/tm/net/route").json()
-        existing_routes = response.get('items', [])
+        # don't restore subnet route if it didn't exist before this task was executed
+        if subnet_route_name not in [r['name'] for r in existing_subnet_routes]:
+            LOG.warning("Reverting RemoveSubnetRoute: Not restoring subnet route since it didn't exist before the task "
+                        f"was run: {subnet_route_name}")
+            return
 
-        # delete routes from this network
-        for existing_route in existing_routes:
-            existing_route_name = existing_route['name']
+        # don't restore subnet route if it wasn't removed
+        res = bigip.get(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        if res.status_code != 404:
+            LOG.warning(f"Reverting RemoveSubnetRoute: Subnet route {subnet_route_name} was not removed, no need to restore")
+            return
 
-            # ignore routes that are not subnet routes of this network
-            if not existing_route_name.startswith(subnet_route_network_part):
-                continue
-
-            # delete subnet route if it's not needed
-            existing_route_subnet = existing_route_name[len(subnet_route_network_part):]
-            if existing_route_subnet not in subnets_that_need_routes:
-                res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{existing_route_name}")
-                res.raise_for_status()
+        # restore subnet route
+        payload = {'name': subnet_route_name,
+                   'tmInterface': subnet_route['tmInterface'],
+                   'network': subnet_route['network']}
+        LOG.warning(f"Reverting RemoveSubnetRoute: Restoring subnet route: {subnet_route_name}")
+        res = bigip.post(path='/mgmt/tm/net/route', json=payload)
+        res.raise_for_status()
 
 
 class RemoveSelfIP(task.Task):
-    def execute(self, port: network_models.Port,
-                bigip: bigip_restclient.BigIPRestClient):
-        """ Task to delete SelfIP """
-        res = bigip.delete(path=f"/mgmt/tm/net/self/port-{port.id}")
-        if not res.ok:
-            LOG.warning("%s: Failed cleanup SelfIP %s: %s",
-                        port.id, bigip.hostname, res.content)
+
+    @decorators.RaisesIControlRestError()
+    def execute(self, bigip: bigip_restclient.BigIPRestClient, selfip: dict):
+        res = bigip.delete(path=f"/mgmt/tm/net/self/port-{selfip['port_id']}")
+
+        if res.status_code == 404:
+            LOG.warning(f"SelfIP port-{selfip['port_id']} was already removed")
+        else:
+            res.raise_for_status()
+
+    @decorators.RaisesIControlRestError()
+    def revert(self, bigip: bigip_restclient.BigIPRestClient,
+               selfip: dict, existing_selfips: [dict], *args, **kwargs):
+
+        # don't restore SelfIP if it didn't exist before this task was executed
+        if selfip['name'] not in [sip['name'] for sip in existing_selfips]:
+            LOG.warning("Reverting RemoveSelfIP: Not restoring SelfIP since it didn't exist before the task "
+                        f"was run: {selfip['name']}")
+            return
+
+        # don't restore SelfIP if it wasn't removed
+        res = bigip.get(path=f"/mgmt/tm/net/self/{selfip['port_id']}")
+        if res.status_code != 404:
+            LOG.warning(f"Reverting RemoveSelfIP: SelfIP {selfip['name']} was not removed, no need to restore")
+            return
+
+        # restore SelfIP
+        payload = {'name': selfip['name'], 'vlan': selfip['vlan'], 'address': selfip['address']}
+        LOG.warning(f"Reverting RemoveSelfIP: Restoring SelfIP: {selfip['name']}")
+        res = bigip.post(path=f"/mgmt/tm/net/self/", json=payload)
+        res.raise_for_status()
 
 
-class CleanupRouteDomain(task.Task):
+class RemoveRouteDomain(task.Task):
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient):
 
@@ -424,18 +504,18 @@ class CleanupRouteDomain(task.Task):
                 break
 
         if res and not res.ok:
-            LOG.warning("%s: Failed cleanup RouteDomain for network_id=%s vlan_id=%s: %s",
+            LOG.warning("%s: Failed removing route domain for network_id=%s vlan_id=%s: %s",
                         bigip.hostname, network.id, network.vlan_id, res.content)
 
 
-class CleanupVLAN(task.Task):
+class RemoveVLAN(task.Task):
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient):
         """ Task to delete VLAN """
         name = f'vlan-{network.vlan_id}'
         res = bigip.delete(path=f"/mgmt/tm/net/vlan/~Common~{name}")
         if not res.ok:
-            LOG.warning("%s: Failed CleanupVLAN for vlan_id=%s: %s",
+            LOG.warning("%s: Failed removing VLAN for vlan_id=%s: %s",
                         bigip.hostname, network.vlan_id, res.content)
 
 
@@ -452,7 +532,7 @@ class GetVCMPGuests(task.Task):
         return device_response.json()['items']
 
 
-class CleanupVLANIfNotOwnedByGuest(task.Task):
+class RemoveVLANIfNotOwnedByGuest(task.Task):
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
                 bigip_guest_names: [str],
@@ -471,11 +551,11 @@ class CleanupVLANIfNotOwnedByGuest(task.Task):
 
         res = bigip.delete(path=f"/mgmt/tm/net/vlan/{name}")
         if not res.ok:
-            LOG.warning("%s: Failed CleanupVLANIfNotOwnedByGuest for vlan_id=%s: %s",
+            LOG.warning("%s: Failed RemoveVLANIfNotOwnedByGuest for vlan_id=%s: %s",
                         bigip.hostname, network.vlan_id, res.content)
 
 
-class CleanupGuestVLAN(task.Task):
+class RemoveGuestVLAN(task.Task):
     """ Removes vlan assignment of a VCMP Guest """
     @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
@@ -501,5 +581,5 @@ class CleanupGuestVLAN(task.Task):
                 path=f"/mgmt/tm/vcmp/guest/{guest['name']}",
                 json={'vlans': vlans})
             if not res.ok:
-                LOG.warning("%s: Failed CleanupGuestVLAN for vlan_id=%s: %s",
+                LOG.warning("%s: Failed removing guest VLAN for vlan_id=%s: %s",
                             bigip.hostname, network.vlan_id, res.content)

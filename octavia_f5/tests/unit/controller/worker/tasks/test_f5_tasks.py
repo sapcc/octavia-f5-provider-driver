@@ -43,7 +43,7 @@ class TestF5Tasks(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test_EnsureRoute(self, mock_get_subnet):
+    def test_EnsureDefaultRoute(self, mock_get_subnet):
         mock_get_subnet.return_value = network_models.Subnet(
             id='test-subnet-id', gateway_ip='2.3.4.5',
             cidr='2.3.4.0/24', network_id='test-network-id')
@@ -76,7 +76,7 @@ class TestF5Tasks(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test_EnsureRoute_legacy(self, mock_get_subnet):
+    def test_EnsureDefaultRoute_legacy(self, mock_get_subnet):
         mock_get_subnet.return_value = network_models.Subnet(
             id='test-subnet-id', gateway_ip='1.2.3.1',
             cidr='1.2.3.0/24', network_id='test-network-id')
@@ -112,7 +112,7 @@ class TestF5Tasks(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test_EnsureRoute_legacy_conflict(self, mock_get_subnet):
+    def test_EnsureDefaultRoute_legacy_conflict(self, mock_get_subnet):
         mock_get_subnet.return_value = network_models.Subnet(
             id='test-subnet-id', gateway_ip='8.8.8.8',
             cidr='1.2.3.0/24', network_id='test-network-id')
@@ -154,78 +154,383 @@ class TestF5Tasks(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test_SyncSubnetRoutes(self, mock_get_subnet):
-        mock_subnets = [
-            network_models.Subnet(
-                id=uuidutils.generate_uuid(), gateway_ip='2.3.4.5',
-                cidr='2.3.4.0/24', network_id='test-network-id'),
-            network_models.Subnet(
-                id=uuidutils.generate_uuid(), gateway_ip='10.0.0.1',
-                cidr='10.0.0.0/24', network_id='test-network-id'),
-        ]
-        mock_get_subnet.side_effect = mock_subnets
+    def test_EnsureSelfIP(self, mock_get_subnet):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_network_id = 'test-network-id'
+        mock_subnet_id = 'test-subnet-id'
+        mock_get_subnet.return_value = network_models.Subnet(
+            id=mock_subnet_id, gateway_ip='2.3.4.5',
+            cidr='2.3.4.0/24', network_id='test-network-id')
         mock_network = f5_network_models.Network(
-            mtu=9000, id=uuidutils.generate_uuid(),
-            subnets=[subnet.id for subnet in mock_subnets],
+            mtu=9000, id=mock_network_id,
+            subnets=[mock_subnet_id],
             segments=[{'provider:physical_network': 'physnet',
                        'provider:segmentation_id': 1234}]
         )
 
-        # Check that subnet route names always include the network ID as well as the subnet ID
-        subnet_route_name = f5_tasks.get_subnet_route_name(mock_network.id, mock_subnets[0].id)
-        self.assertTrue(mock_network.id in subnet_route_name
-                        or mock_network.id.replace('-', '_') in subnet_route_name)
-        self.assertTrue(mock_subnets[0].id in subnet_route_name
-                        or mock_subnets[0].id.replace('-', '_') in subnet_route_name)
-
-        # No subnet route shall be created when every subnet already has either a SelfIP or a subnet route
-        mock_route_response = test_f5_flows.MockResponse({
-            'items': [
-                {
-                    'name': f5_tasks.get_subnet_route_name(mock_network.id, mock_subnets[1].id),
-                    'tmInterface': 'vlan-1234',
-                    'network': '10.0.0.2%1234/24'
-                }
-            ]
-        }, status_code=200)
-
-        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_bigip.get.return_value = mock_route_response
-        mock_selfip = network_models.Port(
-            name=f"local-bigipmockhost-test-subnet-id",
-            fixed_ips=[network_models.FixedIP(
-                ip_address='2.3.4.255',
-                subnet_id=mock_subnets[0].id)
-            ]
+        selfip_fixed_ip = network_models.FixedIP(
+            ip_address='1.2.3.2', subnet_id=mock_subnet_id)
+        selfip_port = network_models.Port(
+            id='test-selfip-port-id', fixed_ips=[selfip_fixed_ip],
         )
+        selfip_name = f"port-{selfip_port.id}"
 
-        engines.run(f5_tasks.EnsureSubnetRoutes(),
-                    store={'network': mock_network,
-                           'bigip': mock_bigip,
-                           'selfips': [mock_selfip]})
+        mock_bigip.get.side_effect = [
+            test_f5_flows.MockResponse({}, 404),
+        ]
 
-        mock_bigip.get.assert_called_with(
-            path=f"/mgmt/tm/net/route?$filter=partition+eq+Common")
-        mock_bigip.post.assert_not_called()
+        # case: SelfIP doesn't exist yet
+        store = {
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'port': selfip_port,
+            'existing_selfips': [],
+        }
+        engines.run(f5_tasks.EnsureSelfIP(), store=store)
         mock_bigip.delete.assert_not_called()
+        mock_bigip.get.assert_called_with(
+            path=f"/mgmt/tm/net/self/{selfip_name}")
+        mock_bigip.post.assert_called_with(
+            path=f"/mgmt/tm/net/self",
+            json={
+                'name': selfip_name,
+                'vlan': "/Common/vlan-1234",
+                'address': "1.2.3.2%1234/24",
+            })
+        mock_bigip.patch.assert_not_called()
 
-        # Check creating new route
+        # case: SelfIP exists
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
-        mock_route_response = test_f5_flows.MockResponse({'items': []}, status_code=200)
-        mock_bigip.get.return_value = mock_route_response
-        engines.run(f5_tasks.EnsureSubnetRoutes(),
-                    store={'network': mock_network,
-                           'bigip': mock_bigip,
-                           'selfips': [mock_selfip]})
-
-        mock_bigip.get.assert_called_with(
-            path=f"/mgmt/tm/net/route?$filter=partition+eq+Common")
+        mock_bigip.get.side_effect = [
+            test_f5_flows.MockResponse({'name': selfip_name}, 200),
+        ]
+        store['bigip'] = mock_bigip
+        engines.run(f5_tasks.EnsureSelfIP(), store=store)
         mock_bigip.delete.assert_not_called()
+        mock_bigip.get.assert_called_with(
+            path=f"/mgmt/tm/net/self/{selfip_name}")
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_called_with(
+            path=f"/mgmt/tm/net/self/{selfip_name}",
+            json={
+                'name': selfip_name,
+                'vlan': "/Common/vlan-1234",
+                'address': "1.2.3.2%1234/24",
+            })
+
+    @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
+                ".get_subnet")
+    def test_EnsureSubnetRoute(self, mock_get_subnet):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_network_id = 'test-network-id'
+        mock_subnet = network_models.Subnet(
+            id=uuidutils.generate_uuid(), gateway_ip='2.3.4.5',
+            cidr='2.3.4.0/24', network_id=mock_network_id)
+        mock_network = f5_network_models.Network(
+            mtu=9000, id=mock_network_id,
+            subnets=mock_subnet,
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+        subnet_route_name = "net_{}_sub_{}".format(
+            mock_network.id, mock_subnet.id)
+        mock_get_subnet.side_effect = [mock_subnet, mock_subnet]
+        mock_bigip.get.side_effect = [
+            test_f5_flows.MockResponse({}, 404),
+        ]
+
+        # case: subnet route doesn't exist yet
+        store = {
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'subnet_id': mock_subnet.id,
+            'existing_subnet_routes': [],
+        }
+        engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
+        mock_bigip.delete.assert_not_called()
+        mock_bigip.get.assert_called_with(
+            path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
         mock_bigip.post.assert_called_with(
             path='/mgmt/tm/net/route',
             json={
-                'name': f5_tasks.get_subnet_route_name(mock_network.id, mock_subnets[1].id),
-                'tmInterface': '/Common/vlan-1234',
-                'network': '2.3.4.0%1234/24'
-            }
+                'name': subnet_route_name,
+                'tmInterface': "/Common/vlan-1234",
+                'network': "2.3.4.0%1234/24",
+            })
+        mock_bigip.patch.assert_not_called()
+
+        # case: subnet route exists
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.get.side_effect = [
+            test_f5_flows.MockResponse({'name': subnet_route_name}, 200),
+        ]
+        store['bigip'] = mock_bigip
+        engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
+        mock_bigip.delete.assert_not_called()
+        mock_bigip.get.assert_called_with(
+            path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        mock_bigip.patch.assert_called_with(
+            path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}",
+            json={'name': subnet_route_name,
+                  'tmInterface': '/Common/vlan-1234',
+                  'network': '2.3.4.0%1234/24'})
+        mock_bigip.post.assert_not_called()
+
+    @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
+                ".get_subnet")
+    def test_revert_EnsureSelfIP(self, mock_get_subnet):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_network_id = 'test-network-id'
+        mock_subnet_id = 'test-subnet-id'
+        mock_get_subnet.return_value = network_models.Subnet(
+            id=mock_subnet_id, gateway_ip='2.3.4.5',
+            cidr='2.3.4.0/24', network_id='test-network-id')
+        mock_network = f5_network_models.Network(
+            mtu=9000, id=mock_network_id,
+            subnets=[mock_subnet_id],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
         )
+
+        selfip_fixed_ip = network_models.FixedIP(
+            ip_address='1.2.3.2', subnet_id=mock_subnet_id)
+        selfip_port = network_models.Port(
+            id='test-selfip-port-id', fixed_ips=[selfip_fixed_ip],
+        )
+        selfip_name = f"port-{selfip_port.id}"
+
+        # Revert before SelfIP creation, so that we can check that delete is called unconditionaly
+        class TestException(Exception):
+            pass
+        mock_bigip.get.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSelfIP")
+        store = {
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'port': selfip_port,
+            'existing_selfips': [],
+        }
+        self.assertRaises(TestException, engines.run, f5_tasks.EnsureSelfIP(), store=store)
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
+        # delete is always called during rollback, ignoring 404
+        mock_bigip.delete.assert_called_with(
+            path=f"/mgmt/tm/net/self/{selfip_name}"
+        )
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+
+    @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
+                ".get_subnet")
+    def test_revert_EnsureSubnetRoute(self, mock_get_subnet):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_network_id = 'test-network-id'
+        mock_subnet_id = 'test-subnet-id'
+        mock_get_subnet.return_value = network_models.Subnet(
+            id=mock_subnet_id, gateway_ip='2.3.4.5',
+            cidr='2.3.4.0/24', network_id='test-network-id')
+        mock_network = f5_network_models.Network(
+            mtu=9000, id=mock_network_id,
+            subnets=[mock_subnet_id],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+
+        subnet_route_name = f'net_{mock_network_id}_sub_{mock_subnet_id}'
+
+        # Revert before subnet route creation, so that we can check that delete is called unconditionaly
+        class TestException(Exception):
+            pass
+        mock_bigip.get.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSubnetRoute")
+        store = {
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'subnet_id': mock_subnet_id,
+            'existing_subnet_routes': [],
+        }
+        self.assertRaises(TestException, engines.run, f5_tasks.EnsureSubnetRoute(), store=store)
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        # delete is always called during rollback, ignoring 404
+        mock_bigip.delete.assert_called_with(
+            path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}"
+        )
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+
+    @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
+                ".get_subnet")
+    def test_revert_RemoveSelfIP(self, mock_get_subnet):
+        mock_network_id = 'test-network-id'
+        mock_subnet_id = 'test-subnet-id'
+        mock_get_subnet.return_value = network_models.Subnet(
+            id=mock_subnet_id, gateway_ip='2.3.4.5',
+            cidr='2.3.4.0/24', network_id='test-network-id')
+        mock_network = f5_network_models.Network(
+            mtu=9000, id=mock_network_id,
+            subnets=[mock_subnet_id],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+
+        # SelfIPs to remove come from the GetExistingSelfIPsForVLAN task and thus only contain ID, nothing else
+        selfip_port = network_models.Port(id='test-selfip-port-id')
+        selfip_name = f"port-{selfip_port.id}"
+
+        selfip_port_dict = {
+            'name': f"port-{selfip_port.id}",
+            'port_id': selfip_port.id,
+            'address': "1.2.3.2%1234/24",
+            'vlan': '/Common/vlan-1234',
+        }
+        store = {
+            'selfip': selfip_port_dict,
+            'network': mock_network,
+        }
+        # exception to be thrown during task execution
+        class TestException(Exception):
+            pass
+
+        # The SelfIP only has to be restored if did exist before but doesn't
+        # exist anymore (because deletion worked). So we have to test three cases:
+        # 1) SelfIP is gone, but existed before => restore
+        # 2) SelfIP is gone, and didn't exist before => NOP
+        # 3) SelfIP is still there => NOP
+
+        # Case 1: SelfIP is gone, but existed before => restore
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSelfIP (case 1)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
+        store['bigip'] = mock_bigip
+        store['existing_selfips'] = [selfip_port_dict]
+        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
+        # calls in execute()
+        mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
+        # calls in revert()
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_port.id}")
+        mock_bigip.post.assert_called_with(
+            path=f"/mgmt/tm/net/self/",
+            json={
+                'name': selfip_name,
+                'vlan': "/Common/vlan-1234",
+                'address': "1.2.3.2%1234/24",
+            },
+        )
+        mock_bigip.patch.assert_not_called()
+
+        # Case 2: SelfIP is gone, and didn't exist before => NOP
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSelfIP (case 2)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
+        store['bigip'] = mock_bigip
+        store['existing_selfips'] = []
+        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
+        # calls in execute()
+        mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
+        # calls in revert()
+        mock_bigip.get.assert_not_called()
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+
+        # Case 3: SelfIP is still there => NOP
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSelfIP (case 3)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)] # only HTTP code matters
+        store['bigip'] = mock_bigip
+        store['existing_selfips'] = [selfip_port_dict]
+        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
+        # calls in execute()
+        mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
+        # calls in revert()
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_port.id}")
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+
+    @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
+                ".get_subnet")
+    def test_revert_RemoveSubnetRoute(self, mock_get_subnet):
+        mock_network_id = 'test-network-id'
+        mock_subnet_id = 'test-subnet-id'
+        mock_get_subnet.return_value = network_models.Subnet(
+            id=mock_subnet_id, gateway_ip='2.3.4.5',
+            cidr='2.3.4.0/24', network_id='test-network-id')
+        mock_network = f5_network_models.Network(
+            mtu=9000, id=mock_network_id,
+            subnets=[mock_subnet_id],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+
+        subnet_route_name = f'net_{mock_network_id}_sub_{mock_subnet_id}'
+        subnet_route = {'name': subnet_route_name,
+                        'tmInterface': 'original_subnet_route_tmInterface',
+                        'network': 'original_subnet_route_network'}
+        store = {
+            'subnet_route': subnet_route,
+            'network': mock_network,
+        }
+        # exception to be thrown during task execution
+        class TestException(Exception):
+            pass
+
+        # The subnet route only has to be restored if did exist before but
+        # doesn't exist anymore (because deletion worked). So we have to test
+        # three cases:
+        # 1) Subnet route is gone, but existed before => restore
+        # 2) Subnet route is gone, and didn't exist before => NOP
+        # 3) Subnet route is still there => NOP
+
+        # Case 1: Subnet route is gone, but existed before => restore
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSubnetRoute (case 1)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
+        store['bigip'] = mock_bigip
+        store['existing_subnet_routes'] = [subnet_route]
+        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
+        # calls in execute()
+        mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        # calls in revert()
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        mock_bigip.post.assert_called_with(
+            path=f"/mgmt/tm/net/route",
+            json={
+                'name': subnet_route_name,
+                'tmInterface': subnet_route['tmInterface'],
+                'network': subnet_route['network'],
+            },
+        )
+        mock_bigip.patch.assert_not_called()
+
+        # Case 2: Subnet route is gone, and didn't exist before => NOP
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSubnetRoute (case 2)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
+        store['bigip'] = mock_bigip
+        store['existing_subnet_routes'] = []
+        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
+        # calls in execute()
+        mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        # calls in revert()
+        mock_bigip.get.assert_not_called()
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+
+        # Case 3: Subnet route is still there => NOP
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.delete.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureSubnetRoute (case 3)")
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)] # only HTTP code matters
+        store['bigip'] = mock_bigip
+        store['existing_subnet_routes'] = [subnet_route]
+        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
+        # calls in execute()
+        mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        # calls in revert()
+        mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+
