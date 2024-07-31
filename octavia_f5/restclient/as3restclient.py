@@ -156,8 +156,8 @@ class AS3RestClient(bigip_restclient.BigIPRestClient):
         params = {}
         if CONF.f5_agent.async_mode:
             params['async'] = 'true'
-        if CONF.f5_agent.unsafe_mode:
-            params['unsafe'] = 'true'
+        if CONF.f5_agent.unchecked_mode:
+            params['unchecked'] = 'true'
         return super(AS3RestClient, self).post(url, json=payload.to_dict(), params=params)
 
     @_metric_patch_exceptions.count_exceptions()
