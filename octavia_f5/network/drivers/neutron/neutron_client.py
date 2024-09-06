@@ -348,6 +348,10 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
 
         raise Exception(f"Hostname not found for host {host}")
 
+    def _get_subnets_chunks(self, subnets: list, max_size: int = 100):
+        for i in range(0, len(subnets), max_size):
+            yield subnets[i:i + max_size]
+
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(
             (neutron_client_exceptions.Conflict,
@@ -396,14 +400,17 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         else:
             hosts_id = [agent]
 
-        all_subnets = set(lb.vip.subnet_id for lb in load_balancers)
+        all_subnets = list(set(lb.vip.subnet_id for lb in load_balancers))
         needed_subnets = set(lb.vip.subnet_id for lb in load_balancers
                              if lb.provisioning_status != lib_consts.PENDING_DELETE)
-        filter = {'device_owner': [constants.DEVICE_OWNER_SELFIP,
-                                   constants.DEVICE_OWNER_LEGACY],
-                  'binding:host_id': hosts_id,
-                  'fixed_ips': [f'subnet_id={subnet}' for subnet in all_subnets]}
-        selfips = self.neutron_client.list_ports(**filter).get('ports', [])
+        subnets_in_chunks = list(self._get_subnets_chunks(all_subnets))
+        selfips = []
+        for chunk in subnets_in_chunks:
+            filter = {'device_owner': [constants.DEVICE_OWNER_SELFIP,
+                                       constants.DEVICE_OWNER_LEGACY],
+                      'binding:host_id': hosts_id,
+                      'fixed_ips': [f'subnet_id={subnet}' for subnet in chunk]}
+            selfips += self.neutron_client.list_ports(**filter).get('ports', [])
 
         # For every subnet and f5host, we expect a selfip
         f5hosts = {host: set() for host in self._get_f5_hostnames(hosts_id[0])}
