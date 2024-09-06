@@ -348,7 +348,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
 
         raise Exception(f"Hostname not found for host {host}")
 
-    def _get_subnets_chunks(self, subnets: list, max_size: int=100):
+    def _get_subnets_chunks(self, subnets: list, max_size: int = 100):
         for i in range(0, len(subnets), max_size):
             yield subnets[i:i + max_size]
 
