@@ -77,24 +77,13 @@ X_SSL_CLIENT_DN = """when HTTP_REQUEST {
         HTTP::header insert "X-SSL-Client-DN" $subject_dn
     }
 }"""
-X_SSL_CLIENT_CN = """proc x509CNExtract { str } {
-    set res "CN notFound"
-    foreach field [ split $str " "] {
-        foreach { fname  fval } [ split $field "=" ]  break
-        if { $fname eq "CN" } {
-            set res $fval
-            break
-        }
-    }
-    return $res
-}
-when HTTP_REQUEST {
+X_SSL_CLIENT_CN = """when HTTP_REQUEST {
     if { [HTTP::has_responded] }{ return }
     if { [SSL::cert count] > 0 }{
-        set subject_cn [X509::subject [SSL::cert 0]]
+        set subject_cn [X509::subject [SSL::cert 0] commonName]
     }
     if { [info exists subject_cn] } {
-        HTTP::header insert "X-SSL-Client-CN" [call x509CNExtract $subject_cn]
+        HTTP::header insert "X-SSL-Client-CN" $subject_cn
     }
 }"""
 X_SSL_CLIENT_SHA1 = """when HTTP_REQUEST {
