@@ -205,6 +205,10 @@ f5_networking_opts = [
                 item_type=cfg.types.URI(schemes=['http', 'https']),
                 default=[],
                 help=_('The URL of the bigip vcmp host devices')),
+    cfg.BoolOpt('vcmp_rseries',
+                default=False,
+                help=_("Whether the BigIP vcmp host device belongs to the "
+                    "r-Series and thus uses the F5OS-A API")),
     cfg.ListOpt('override_vcmp_guest_names',
                 default=[],
                 help=_('List of vcmp guest names to use for identifying the '

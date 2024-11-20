@@ -46,12 +46,13 @@ class L2SyncManager(BaseTaskFlowEngine):
     def __init__(self):
         super(L2SyncManager).__init__()
         self._bigips = list(self.initialize_bigips(CONF.f5_agent.bigip_urls))
-        self._vcmps = list(self.initialize_bigips(CONF.networking.vcmp_urls))
+        self._vcmps = list(self.initialize_bigips(CONF.networking.vcmp_urls,
+            r_series_vcmp_host=CONF.networking.vcmp_rseries))
         self._f5flows = f5_flows.F5Flows()
         self._network_driver = driver_utils.get_network_driver()
         self.executor = futures.ThreadPoolExecutor(max_workers=CONF.networking.max_workers)
 
-    def initialize_bigips(self, bigip_urls: [str]):
+    def initialize_bigips(self, bigip_urls: [str], r_series_vcmp_host=False):
         if CONF.f5_agent.dry_run:
             return []
 
@@ -63,11 +64,11 @@ class L2SyncManager(BaseTaskFlowEngine):
                       'verify': CONF.f5_agent.bigip_verify}
 
             if CONF.f5_agent.bigip_token:
-                kwargs['auth'] = bigip_auth.BigIPTokenAuth(bigip_url)
+                kwargs['auth'] = bigip_auth.BigIPTokenAuth(bigip_url, f5os_a=r_series_vcmp_host)
             else:
                 kwargs['auth'] = bigip_auth.BigIPBasicAuth(bigip_url)
 
-            instance = BigIPRestClient(**kwargs)
+            instance = BigIPRestClient(**kwargs, f5os_a=r_series_vcmp_host)
             instances.append(instance)
         return instances
 
@@ -213,9 +214,9 @@ class L2SyncManager(BaseTaskFlowEngine):
             self._do_ensure_l2_flow,
             data=ensure_l2_flow_data)] = self._bigips
 
-        # run VCMP l2 flow for all VCMPs in parallel
+        # run VCMP l2 flow for all VCMP hosts in parallel
         for vcmp in self._vcmps:
-            store = {'bigip': vcmp, 'network': network}
+            store = {'bigip': vcmp, 'network': network, 'rSeries': CONF.networking.vcmp_rseries}
             if CONF.networking.override_vcmp_guest_names:
                 store['bigip_guest_names'] = CONF.networking.override_vcmp_guest_names
             else:
