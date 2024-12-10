@@ -52,6 +52,6 @@ def get_response_log(response):
             # No valid json
             msg += response.text
     else:
-        msg += response.txt
+        msg += response.text
 
     return msg.strip()
