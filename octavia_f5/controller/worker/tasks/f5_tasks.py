@@ -152,6 +152,11 @@ class EnsureRouteDomain(task.Task):
     """ Task to create or update Route Domain if needed """
 
     @decorators.RaisesIControlRestError()
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(requests.HTTPError),
+        wait=tenacity.wait_fixed(2),
+        stop=tenacity.stop_after_attempt(3)
+    )
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient):
 

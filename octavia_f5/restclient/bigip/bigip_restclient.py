@@ -14,6 +14,7 @@
 
 from urllib import parse
 
+import prometheus_client as prometheus
 import requests
 from oslo_log import log as logging
 from urllib3.util.retry import Retry
@@ -27,6 +28,17 @@ BIGIP_CM_PATH = '/mgmt/tm/cm'
 
 
 class BigIPRestClient(requests.Session):
+    _metric_get_exceptions = prometheus.metrics.Counter(
+        'octavia_bigip_get_exceptions', 'Number of exceptions at GET requests sent to Big IP')
+    _metric_post_exceptions = prometheus.metrics.Counter(
+        'octavia_bigip_post_exceptions', 'Number of exceptions at POST requests sent to Big IP')
+    _metric_put_exceptions = prometheus.metrics.Counter(
+        'octavia_bigip_put_exceptions', 'Number of exceptions at PUT request sent to Big IP')
+    _metric_patch_exceptions = prometheus.metrics.Counter(
+        'octavia_bigip_patch_exceptions', 'Number of exceptions at PATCH request sent to Big IP')
+    _metric_delete_exceptions = prometheus.metrics.Counter(
+        'octavia_bigip_delete_exceptions', 'Number of exceptions at DELETE request sent to Big IP')
+
     def __init__(self, bigip_url, verify=True, auth=None):
         super(BigIPRestClient, self).__init__()
         self.url = parse.urlparse(bigip_url, allow_fragments=False)
@@ -87,6 +99,7 @@ class BigIPRestClient(requests.Session):
         self._active = statuses[self.hostname]
         return self._active
 
+    @_metric_get_exceptions.count_exceptions()
     def get(self, url=None, **kwargs):
         """ Override get for baseurl compatbility
         """
@@ -95,6 +108,7 @@ class BigIPRestClient(requests.Session):
 
         return super(BigIPRestClient, self).get(url, **kwargs)
 
+    @_metric_post_exceptions.count_exceptions()
     def post(self, url=None, **kwargs):
         """ Override get for baseurl compatbility
         """
@@ -103,6 +117,7 @@ class BigIPRestClient(requests.Session):
 
         return super(BigIPRestClient, self).post(url, **kwargs)
 
+    @_metric_delete_exceptions.count_exceptions()
     def delete(self, url=None, **kwargs):
         """ Override get for baseurl compatbility
         """
@@ -111,6 +126,7 @@ class BigIPRestClient(requests.Session):
 
         return super(BigIPRestClient, self).delete(url, **kwargs)
 
+    @_metric_patch_exceptions.count_exceptions()
     def patch(self, url=None, **kwargs):
         """ Override get for baseurl compatbility
         """
@@ -119,6 +135,7 @@ class BigIPRestClient(requests.Session):
 
         return super(BigIPRestClient, self).patch(url, **kwargs)
 
+    @_metric_put_exceptions.count_exceptions()
     def put(self, url=None, **kwargs):
         """ Override get for baseurl compatbility
         """
