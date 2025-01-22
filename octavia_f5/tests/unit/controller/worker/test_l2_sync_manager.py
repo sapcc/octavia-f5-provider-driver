@@ -24,6 +24,8 @@ from octavia.network import data_models as network_models
 # pylint: disable=unused-import
 from octavia_f5.common import config  # noqa
 from octavia_f5.controller.worker import l2_sync_manager
+from octavia_f5.network import data_models as f5_network_models
+from octavia_f5.restclient import as3restclient
 
 CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
@@ -38,6 +40,20 @@ MOCK_SELFIP = network_models.Port(
     name=f"local-{MOCK_BIGIP_HOSTNAME}-{MOCK_FIXED_IP.subnet_id}",
     fixed_ips=[MOCK_FIXED_IP]
 )
+
+
+class MockResponse:
+    def __init__(self, json_data, status_code):
+        self.json_data = json_data
+        self.status_code = status_code
+        self.ok = status_code < 400
+
+    def json(self):
+        return self.json_data
+
+    def raise_for_status(self):
+        if self.status_code > 500:
+            raise Exception('Boom!')
 
 
 class TestL2SyncManager(base.TestCase):
@@ -68,9 +84,12 @@ class TestL2SyncManager(base.TestCase):
         other_selfip = network_models.Port(
             name=f"local-OTHER_HOST-{uuidutils.generate_uuid()}")
         self.manager.ensure_l2_flow([MOCK_SELFIP, other_selfip], 'test-network-id')
-        mock_l2_flow.assert_called_once_with(selfips=[MOCK_SELFIP],
-            store={'bigip': self.manager._bigips[0], 'network': mock_get_network.return_value,
-                   'subnet_id': MOCK_FIXED_IP.subnet_id})
+        mock_l2_flow.assert_called_once_with(data={
+            'test-guest-hostname': {
+                'selfips': [MOCK_SELFIP],
+                'store': {'bigip': self.manager._bigips[0],
+                          'network': mock_get_network.return_value,
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}}})
         mock_vcmp_l2_flow.assert_called_once_with(
             store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                    'bigip_guest_names': [MOCK_BIGIP_HOSTNAME]})
@@ -88,9 +107,12 @@ class TestL2SyncManager(base.TestCase):
                     override_vcmp_guest_names=['test-host-2'])
 
         self.manager.ensure_l2_flow([MOCK_SELFIP], 'test-network-id')
-        mock_l2_flow.assert_called_once_with(selfips=[MOCK_SELFIP],
-            store={'bigip': self.manager._bigips[0], 'network': mock_get_network.return_value,
-                   'subnet_id': MOCK_FIXED_IP.subnet_id})
+        mock_l2_flow.assert_called_once_with(data={
+            'test-guest-hostname': {
+                'selfips': [MOCK_SELFIP],
+                'store': {'bigip': self.manager._bigips[0],
+                          'network': mock_get_network.return_value,
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}}})
         mock_vcmp_l2_flow.assert_called_once_with(
             store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                    'bigip_guest_names': ['test-host-2']})
@@ -109,9 +131,154 @@ class TestL2SyncManager(base.TestCase):
             self.assertEqual("Failed ensure_l2_flow for all vcmp devices of network_id=test-network-id",
                              e.args[0])
 
-        mock_l2_flow.assert_called_once_with(selfips=[MOCK_SELFIP],
-            store={'bigip': self.manager._bigips[0], 'network': mock_get_network.return_value,
-                   'subnet_id': MOCK_FIXED_IP.subnet_id})
+        mock_l2_flow.assert_called_once_with(data={
+            'test-guest-hostname': {
+                'selfips': [MOCK_SELFIP],
+                'store': {'bigip': self.manager._bigips[0],
+                          'network': mock_get_network.return_value,
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}}})
         mock_vcmp_l2_flow.assert_called_once_with(
             store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                    'bigip_guest_names': [MOCK_BIGIP_HOSTNAME]})
+
+    @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
+                ".get_subnet")
+    def test__do_ensure_l2_flow_nothing_exist_no_errors(self, mock_get_subnet):
+        mock_get_subnet.return_value = network_models.Subnet(
+            id='test-subnet-id', gateway_ip='1.2.3.1',
+            cidr='1.2.3.0/24', network_id='test-network-id')
+        mock_network = f5_network_models.Network(
+            mtu=9000, id='test-network-id', subnets=['test-subnet-id'],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+        selfip_fixed_ip = network_models.FixedIP(
+            ip_address='1.2.3.2', subnet_id='test-subnet-id-2')
+        selfip_port = network_models.Port(
+            id='test-selfip-port-id', fixed_ips=[selfip_fixed_ip],
+        )
+        mock_bigips = []
+        for i in range(0, 2):
+            mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+            mock_bigip.hostname = f'hostname-{i}'
+            mock_bigip.get.side_effect = [
+                MockResponse({}, 404) for _ in range(9)]
+            mock_bigips.append(mock_bigip)
+        mock_bigips[0].is_active = True
+        data = {
+            mock_bigips[0].hostname: {
+                'selfips': [selfip_port],
+                'store': {
+                    'network': mock_network,
+                    'bigip': mock_bigips[0],
+                    'subnet_id': 'test-subnet-id',
+                    'existing_selfips': []
+                }
+            },
+            mock_bigips[1].hostname: {
+                'selfips': [selfip_port],
+                'store': {
+                    'network': mock_network,
+                    'bigip': mock_bigips[1],
+                    'subnet_id': 'test-subnet-id',
+                    'existing_selfips': []
+                }
+            }
+        }
+        self.manager._do_ensure_l2_flow(data=data)
+        # check thath both devices were called and REVERT task were not called
+        self.assertEqual(mock_bigips[0].get.call_count, 9)
+        self.assertEqual(mock_bigips[1].get.call_count, 9)
+        self.assertEqual(mock_bigips[0].post.call_count, 5)
+        self.assertEqual(mock_bigips[1].post.call_count, 5)
+        self.assertEqual(mock_bigips[0].delete.call_count, 0)
+        self.assertEqual(mock_bigips[1].delete.call_count, 0)
+
+    @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
+                ".get_subnet")
+    def test__do_ensure_l2_flow_nothing_exist_route_domain_failed_on_second_device(
+            self, mock_get_subnet):
+        mock_get_subnet.return_value = network_models.Subnet(
+            id='test-subnet-id', gateway_ip='1.2.3.1',
+            cidr='1.2.3.0/24', network_id='test-network-id')
+        mock_network = f5_network_models.Network(
+            mtu=9000, id='test-network-id', subnets=['test-subnet-id'],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+        selfip_fixed_ip = network_models.FixedIP(
+            ip_address='1.2.3.2', subnet_id='test-subnet-id-2')
+        selfip_port = network_models.Port(
+            id='test-selfip-port-id', fixed_ips=[selfip_fixed_ip],
+        )
+        mock_bigip_1 = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip_1.hostname = 'hostname-1'
+        mock_bigip_1.is_active = True
+        mock_bigip_1.get.side_effect = [
+            MockResponse({}, 404),
+            MockResponse({}, 404),
+            MockResponse({}, 404),
+            MockResponse({}, 404),
+            MockResponse({}, 404),
+            MockResponse({}, 404),
+            MockResponse({}, 404),
+            MockResponse({}, 404),
+            MockResponse({}, 404),
+            MockResponse({}, 200),
+        ]
+        mock_bigip_2 = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip_2.hostname = 'hostname-2'
+        mock_bigip_2.get.side_effect = [
+            MockResponse({}, 404) for _ in range(8)]
+        mock_bigip_2.post.side_effect = [
+            # VLAN creation
+            MockResponse({}, 202),
+            # Route Domain creation
+            MockResponse({}, 502)
+        ]
+        data = {
+            'hostname-1': {
+                'selfips': [selfip_port],
+                'store': {
+                    'network': mock_network,
+                    'bigip': mock_bigip_1,
+                    'subnet_id': 'test-subnet-id',
+                    'existing_selfips': []
+                }
+            },
+            'hostname-2': {
+                'selfips': [selfip_port],
+                'store': {
+                    'network': mock_network,
+                    'bigip': mock_bigip_2,
+                    'subnet_id': 'test-subnet-id',
+                    'existing_selfips': []
+                }
+            }
+        }
+        # self.manager._do_ensure_l2_flow(data=data)
+        self.assertRaises(Exception, self.manager._do_ensure_l2_flow, data=data)
+        # check thath both devices were called and REVERT task were not called
+        self.assertEqual(mock_bigip_1.get.call_count, 10)
+        self.assertEqual(mock_bigip_2.get.call_count, 7)
+        self.assertEqual(mock_bigip_1.post.call_count, 5)
+        self.assertEqual(mock_bigip_2.post.call_count, 2)
+        self.assertEqual(mock_bigip_1.delete.call_count, 4)
+        self.assertEqual(mock_bigip_2.delete.call_count, 1)
+        bigip_1_delete_calls = [
+            # check that VLAN reverted
+            mock.call(path='/mgmt/tm/net/vlan/~Common~vlan-1234'),
+            # check that Route Domaun was reverted
+            mock.call(path='/mgmt/tm/net/route-domain/vlan-1234'),
+            # Check that Self IP was reverted
+            mock.call(path='/mgmt/tm/net/self/port-test-selfip-port-id'),
+            # check that Subnet Route was reverted
+            mock.call(path='/mgmt/tm/net/route/~Common~net_test-network-id_sub_test-subnet-id')
+        ]
+        mock_bigip_1.delete.assert_has_calls(bigip_1_delete_calls, any_order=True)
+        bigip_2_delete_calls = [
+            # check that VLAN reverted
+            mock.call(path='/mgmt/tm/net/vlan/~Common~vlan-1234'),
+        ]
+        mock_bigip_2.delete.assert_has_calls(bigip_2_delete_calls, any_order=True)
+

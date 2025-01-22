@@ -20,6 +20,7 @@ import requests
 from oslo_config import cfg
 from oslo_log import log as logging
 from taskflow.listeners import logging as tf_logging
+from taskflow.patterns import graph_flow
 
 from octavia.common import data_models as octavia_models
 from octavia.common.base_taskflow import BaseTaskFlowEngine
@@ -83,21 +84,26 @@ class L2SyncManager(BaseTaskFlowEngine):
         for bigip in self._bigips:
             bigip.update_status()
 
-    def _do_ensure_l2_flow(self, selfips: [network_models.Port], store: dict):
+    def _do_ensure_l2_flow(self, data: dict):
+        ensure_l2_flow = graph_flow.Flow('ensure-l2-flow-from-all-devices')
+        for flow_data in data.values():
+            # get existing SelfIPs and subnet routes - they are needed to determine,
+            # which ones have to be created and which already exist
+            e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(),
+                                   store=flow_data['store'])
+            with tf_logging.LoggingListener(e, log=LOG):
+                e.run()
 
-        # get existing SelfIPs and subnet routes - they are needed to determine,
-        # which ones have to be created and which already exist
-        e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
-        with tf_logging.LoggingListener(e, log=LOG):
-            e.run()
+            # info about existing SelfIPs and subnet routes could be needed for either
+            # flow construction or in the tasks themselves, or both
+            flow_data['store']['existing_selfips'] = e.storage.get('get-existing-selfips')
+            flow_data['store']['existing_subnet_routes'] = e.storage.get('get-existing-subnet-routes')
 
-        # info about existing SelfIPs and subnet routes could be needed for either
-        # flow construction or in the tasks themselves, or both
-        store['existing_selfips'] = e.storage.get('get-existing-selfips')
-        store['existing_subnet_routes'] = e.storage.get('get-existing-subnet-routes')
+            ensure_l2_flow.add(
+                self._f5flows.make_ensure_l2_flow(
+                    flow_data['selfips'], store=flow_data['store']))
 
-        ensure_l2_flow = self._f5flows.make_ensure_l2_flow(selfips, store=store)
-        e = self.taskflow_load(ensure_l2_flow, store=store)
+        e = self.taskflow_load(ensure_l2_flow)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
@@ -180,14 +186,20 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         # run l2 flow for all devices in parallel
         fs = {}
+        ensure_l2_flow_data = {}
         for bigip in self._bigips:
             if device and bigip.hostname != device:
                 continue
 
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
             subnet_ids = set(sip.fixed_ips[0].subnet_id for sip in selfips_for_host)
-            store = {'bigip': bigip, 'network': network, 'subnet_id': subnet_ids.pop()}
-            fs[self.executor.submit(self._do_ensure_l2_flow, selfips=selfips_for_host, store=store)] = bigip
+            ensure_l2_flow_data[bigip.hostname] = {
+                'store': {'bigip': bigip, 'network': network, 'subnet_id': subnet_ids.pop()},
+                'selfips': selfips_for_host,
+            }
+        fs[self.executor.submit(
+            self._do_ensure_l2_flow,
+            data=ensure_l2_flow_data)] = ','.join(ensure_l2_flow_data.keys())
 
         # run VCMP l2 flow for all VCMPs in parallel
         for vcmp in self._vcmps:
