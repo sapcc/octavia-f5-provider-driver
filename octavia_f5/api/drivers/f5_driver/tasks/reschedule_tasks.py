@@ -133,6 +133,8 @@ class RewriteLoadBalancerEntry(RescheduleTasks):
             LOG.error("RewriteLoadBalancerEntry: Unable to update loadbalancer %s",
                       load_balancer.id)
             return
-        LOG.warning("RewriteLoadBalancerEntry: Reverting host change of loadbalancer %s from '%s' to '%s'",
-                    load_balancer.id, candidate, removal_host)
-        self._loadbalancer_repo.update(db_apis.get_session(), load_balancer.id, server_group_id=removal_host)
+
+        LOG.warning("RewriteLoadBalancerEntry: Reverting host change of loadbalancer %s: Changing host from '%s' to '%s' and availability zone back to '%s'.",
+                    load_balancer.id, candidate, removal_host, load_balancer.availability_zone)
+        self._loadbalancer_repo.update(db_apis.get_session(), load_balancer.id,
+                server_group_id=removal_host, availability_zone=load_balancer.availability_zone)
