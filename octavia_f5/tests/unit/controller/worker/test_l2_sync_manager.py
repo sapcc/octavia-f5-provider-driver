@@ -148,7 +148,7 @@ class TestL2SyncManager(base.TestCase):
             id='test-subnet-id', gateway_ip='1.2.3.1',
             cidr='1.2.3.0/24', network_id='test-network-id')
         mock_network = f5_network_models.Network(
-            mtu=9000, id='test-network-id', subnets=['test-subnet-id'],
+            mtu=8950, id='test-network-id', subnets=['test-subnet-id'],
             segments=[{'provider:physical_network': 'physnet',
                        'provider:segmentation_id': 1234}]
         )
@@ -186,7 +186,7 @@ class TestL2SyncManager(base.TestCase):
             }
         }
         self.manager._do_ensure_l2_flow(data=data)
-        # check thath both devices were called and REVERT task were not called
+        # check thath both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigips[0].get.call_count, 9)
         self.assertEqual(mock_bigips[1].get.call_count, 9)
         self.assertEqual(mock_bigips[0].post.call_count, 5)
@@ -202,7 +202,7 @@ class TestL2SyncManager(base.TestCase):
             id='test-subnet-id', gateway_ip='1.2.3.1',
             cidr='1.2.3.0/24', network_id='test-network-id')
         mock_network = f5_network_models.Network(
-            mtu=9000, id='test-network-id', subnets=['test-subnet-id'],
+            mtu=8950, id='test-network-id', subnets=['test-subnet-id'],
             segments=[{'provider:physical_network': 'physnet',
                        'provider:segmentation_id': 1234}]
         )
@@ -258,7 +258,7 @@ class TestL2SyncManager(base.TestCase):
         }
         # self.manager._do_ensure_l2_flow(data=data)
         self.assertRaises(Exception, self.manager._do_ensure_l2_flow, data=data)
-        # check thath both devices were called and REVERT task were not called
+        # check thath both devices were called and REVERT tasks were also called
         self.assertEqual(mock_bigip_1.get.call_count, 10)
         self.assertEqual(mock_bigip_2.get.call_count, 7)
         self.assertEqual(mock_bigip_1.post.call_count, 5)

@@ -103,6 +103,10 @@ class L2SyncManager(BaseTaskFlowEngine):
                 self._f5flows.make_ensure_l2_flow(
                     flow_data['selfips'], store=flow_data['store']))
 
+        # We have to inject all required variables to each flow/task because these flows will
+        # be running as part of Graph flow and storage contains equal variables but for two F5
+        # devices, their variables' names overlap. Also in graph flow, every subflow/task should
+        # have a unique name that's why we have to add BigIP hostname.
         e = self.taskflow_load(ensure_l2_flow)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()

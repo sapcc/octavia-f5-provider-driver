@@ -89,8 +89,9 @@ class EnsureVLAN(task.Task):
             return
         res = bigip.delete(path=f"/mgmt/tm/net/vlan/~Common~vlan-{network.vlan_id}")
         if not res.ok:
-            LOG.warning("%s: Failed removing VLAN for vlan_id=%s: %s",
-                        bigip.hostname, network.vlan_id, res.content)
+            LOG.warning("Reverting EnsureVLAN: Failed removing VLAN on the device %s for "
+                        "vlan_id=%s: %s", bigip.hostname, network.vlan_id, res.content)
+            res.raise_for_status()
 
 
 class EnsureVLANInterface(task.Task):
@@ -201,7 +202,6 @@ class EnsureRouteDomain(task.Task):
                         f"the task was run: {existing_route_domain}")
             return
 
-        """ Task to delete Route Domain """
         res = None
         for path in paths:
             if bigip.get(path=path).ok:
@@ -209,8 +209,10 @@ class EnsureRouteDomain(task.Task):
                 break
 
         if res and not res.ok:
-            LOG.warning("%s: Failed removing route domain for network_id=%s vlan_id=%s: %s",
+            LOG.warning("Reverting EnsureRouteDomain: Failed removing route domain on the device %s "
+                        "for network_id=%s vlan_id=%s: %s",
                         bigip.hostname, network.id, network.vlan_id, res.content)
+            res.raise_for_status()
 
 
 class EnsureSelfIP(task.Task):
