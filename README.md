@@ -43,7 +43,7 @@ Instead, otherwise unused tables/columns are used in a specific way:
 - The **load_balancer** table is used like this:
   - `server_group_id` holds the name of the device the load balancer is scheduled to. Compare with `compute_flavor` in the `amphora` table below. Note that `server_group_id` is not shown by the CLI when running `openstack loadbalancer show`.
 - The **amphora** table is used in two ways:
-  - For each load balancer an amphora entry is created. This is done [to prevent problems with Octavias health manager](./octavia_f5/controller/worker/controller_worker.py#L249-L251), which makes assumptions about amphora entries.
+  - For each load balancer an amphora entry is created. This is done [to prevent problems with Octavias health manager](./octavia_f5/controller/worker/controller_worker.py#L251-L253), which makes assumptions about amphora entries.
     - `compute_flavor` holds the name of the device the load balancer is scheduled to. Compare with `server_group_id` in the `load_balancer` table above. This can be used to query the device via `openstack loadbalancer amphora show $LB_ID`.
     - Since an amphora table entry is never updated as long as its respective load balancer lives, the `updated_at` field will always be `null` until the load balancer is being deleted, [which will update the amphora entry status to `DELETED` as well](octavia_f5/controller/worker/status_manager.py#L158).
   - For each F5 device that is managed by a provider driver worker a special entry is created in the `amphora` table.
