@@ -18,7 +18,6 @@ import time
 import futurist
 import oslo_messaging as messaging
 import prometheus_client as prometheus
-import requests
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
