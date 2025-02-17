@@ -58,7 +58,7 @@ class F5Flows(object):
         for subnet_id in subnets_to_create_routes_for:
             subnet_route_name = f5_tasks.get_subnet_route_name(network.id, subnet_id)
             ensure_subnet_route_task = f5_tasks.EnsureSubnetRoute(
-                name=f'ensure-subnet-route-{subnet_route_name}-{bigip_hostname}',
+                name=f'ensure-subnet-route-{bigip_hostname}-{subnet_route_name}',
                 inject={
                     'subnet_id': subnet_id,
                     **store
