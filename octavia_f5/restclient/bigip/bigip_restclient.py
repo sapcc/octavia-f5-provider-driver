@@ -54,6 +54,11 @@ class BigIPRestClient(requests.Session):
         self.auth = auth
         self._active = None
 
+    def __format__(self, format_spec):
+        """How to represent this object in e. g. log lines"""
+        classname = f"{self.__class__}".split('.')[-1].rstrip("'>")
+        return f"{classname}({self.url})"
+
     def get_url(self, url):
         """Create the URL based off this partial path."""
         url_tuple = parse.SplitResult(
