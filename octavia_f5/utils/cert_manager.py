@@ -21,6 +21,7 @@ from oslo_config import cfg
 from oslo_context import context as oslo_context
 from stevedore import driver as stevedore_driver
 
+from octavia.common import exceptions as octavia_exc
 from octavia.common.tls_utils import cert_parser
 from octavia_f5.common import constants
 from octavia_f5.restclient.as3objects import certificate as m_cert
@@ -42,8 +43,7 @@ class CertManagerWrapper(object):
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(
-            (urllib_exc.NewConnectionError,
-             requests_exc.ConnectionError)),
+            (octavia_exc.CertificateRetrievalException)),
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
@@ -84,8 +84,7 @@ class CertManagerWrapper(object):
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(
-            (urllib_exc.NewConnectionError,
-             requests_exc.ConnectionError)),
+            (octavia_exc.CertificateRetrievalException)),
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
