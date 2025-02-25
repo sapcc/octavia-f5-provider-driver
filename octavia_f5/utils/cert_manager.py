@@ -14,8 +14,6 @@
 
 import hashlib
 import tenacity
-from requests import exceptions as requests_exc
-from urllib3 import exceptions as urllib_exc
 
 from oslo_config import cfg
 from oslo_context import context as oslo_context
