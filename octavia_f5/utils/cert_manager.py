@@ -41,7 +41,7 @@ class CertManagerWrapper(object):
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(
-            (octavia_exc.CertificateRetrievalException)),
+            octavia_exc.CertificateRetrievalException),
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
@@ -82,7 +82,7 @@ class CertManagerWrapper(object):
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(
-            (octavia_exc.CertificateRetrievalException)),
+            octavia_exc.CertificateRetrievalException),
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
