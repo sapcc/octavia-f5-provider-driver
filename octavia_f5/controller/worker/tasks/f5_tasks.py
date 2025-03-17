@@ -274,7 +274,6 @@ class EnsureSelfIP(task.Task):
 class GetExistingVLAN(task.Task):
     default_provides = 'existing_vlan'
 
-    @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network):
         device_response = bigip.get(path=f"/mgmt/tm/net/vlan/~Common~vlan-{network.vlan_id}?expandSubcollections=true")
@@ -286,7 +285,6 @@ class GetExistingVLAN(task.Task):
 class GetExistingRouteDomain(task.Task):
     default_provides = 'existing_route_domain'
 
-    @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network):
         device_response = bigip.get(path=f"/mgmt/tm/net/route-domain/vlan-{network.vlan_id}")
