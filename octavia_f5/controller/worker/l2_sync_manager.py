@@ -197,6 +197,7 @@ class L2SyncManager(BaseTaskFlowEngine):
 
             # Check if device available by symple GET request
             if not bigip.is_available(timeout=CONF.status_manager.failover_timeout):
+                LOG.debug(f"Device {bigip.hostname} is unreachable for API requests.")
                 continue
 
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
