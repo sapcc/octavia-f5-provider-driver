@@ -72,7 +72,7 @@ class BigIPRestClient(requests.Session):
     @property
     def is_active(self):
         """
-        Get active device which is MASTER device in F5 devices pair.
+        Get active device which is active device in F5 devices pair.
         """
         self.update_status()
         return self._active
