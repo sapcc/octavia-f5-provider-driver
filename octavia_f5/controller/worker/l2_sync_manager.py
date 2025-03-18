@@ -20,7 +20,7 @@ import requests
 from oslo_config import cfg
 from oslo_log import log as logging
 from taskflow.listeners import logging as tf_logging
-from taskflow.patterns import graph_flow
+from taskflow.patterns import unordered_flow
 
 from octavia.common import data_models as octavia_models
 from octavia.common.base_taskflow import BaseTaskFlowEngine
@@ -85,7 +85,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             bigip.update_status()
 
     def _do_ensure_l2_flow(self, data: dict):
-        ensure_l2_flow = graph_flow.Flow('ensure-l2-flow-from-all-devices')
+        ensure_l2_flow = unordered_flow.Flow('ensure-l2-flow-from-all-devices')
         for flow_data in data.values():
             # get existing SelfIPs and subnet routes - they are needed to determine,
             # which ones have to be created and which already exist
