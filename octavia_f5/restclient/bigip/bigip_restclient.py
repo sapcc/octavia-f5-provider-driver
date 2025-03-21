@@ -71,8 +71,25 @@ class BigIPRestClient(requests.Session):
 
     @property
     def is_active(self):
+        """
+        Get active device which is active device in F5 devices pair.
+        """
         self.update_status()
         return self._active
+
+    def is_available(self, timeout: int):
+        """
+        Check if BigIP device is available for communications.
+        """
+        available = True
+        try:
+            requests.get(self.url.scheme + '://' + self.url.hostname, timeout=timeout, verify=False)
+            LOG.info('Found device with URL {}'.format(self.url.hostname))
+        except requests.exceptions.Timeout:
+            LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
+                     timeout, self.url.hostname))
+            available = False
+        return available
 
     def update_status(self):
         """ Update status if device is active or not

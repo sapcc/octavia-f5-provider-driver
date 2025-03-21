@@ -18,7 +18,6 @@ import time
 import futurist
 import oslo_messaging as messaging
 import prometheus_client as prometheus
-import requests
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
@@ -192,14 +191,7 @@ class StatusManager(object):
             timeout = CONF.status_manager.failover_timeout
 
             # Try reaching device
-            available = True
-            try:
-                requests.get(bigip.scheme + '://' + bigip.hostname, timeout=timeout, verify=False)
-                LOG.info('Found device with URL {}'.format(bigip.hostname))
-            except requests.exceptions.Timeout:
-                LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
-                         timeout, bigip.hostname))
-                available = False
+            available = bigip.is_available(timeout)
 
             if self.bigip_status[bigip.hostname] != available:
                 # Update database entry

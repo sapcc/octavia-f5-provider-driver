@@ -53,8 +53,8 @@ class EnsureVLAN(task.Task):
     )
     def execute(self,
                 bigip: bigip_restclient.BigIPRestClient,
-                network: f5_network_models.Network):
-
+                network: f5_network_models.Network,
+                existing_vlan: dict):
         vlan = {
             'name': f'vlan-{network.vlan_id}',
             'tag': network.vlan_id,
@@ -64,22 +64,34 @@ class EnsureVLAN(task.Task):
             'syncacheThreshold': CONF.networking.syncache_threshold
         }
 
-        device_response = bigip.get(path=f"/mgmt/tm/net/vlan/~Common~{vlan['name']}?expandSubcollections=true")
         # Create vlan if not existing
-        if device_response.status_code == 404:
+        if existing_vlan is None:
             res = bigip.post(path='/mgmt/tm/net/vlan', json=vlan)
             res.raise_for_status()
             return res.json()
 
-        device_vlan = device_response.json()
-        if not vlan.items() <= device_vlan.items():
+        if not vlan.items() <= existing_vlan.items():
             res = bigip.patch(path=f"/mgmt/tm/net/vlan/~Common~{vlan['name']}",
                               json=vlan)
             res.raise_for_status()
             return res.json()
 
         # No Changes needed
-        return device_vlan
+        return existing_vlan
+
+    @decorators.RaisesIControlRestError()
+    def revert(self, network: f5_network_models.Network,
+               bigip: bigip_restclient.BigIPRestClient,
+               existing_vlan, *args, **kwargs):
+        if existing_vlan is not None:
+            LOG.warning(f"Reverting EnsureVLAN: Not deleting VLAN, since it existed before "
+                        f"the task was run: {existing_vlan}")
+            return
+        res = bigip.delete(path=f"/mgmt/tm/net/vlan/~Common~vlan-{network.vlan_id}")
+        if not res.ok:
+            LOG.warning("Reverting EnsureVLAN: Failed removing VLAN on the device %s for "
+                        "vlan_id=%s: %s", bigip.hostname, network.vlan_id, res.content)
+            res.raise_for_status()
 
 
 class EnsureVLANInterface(task.Task):
@@ -158,29 +170,49 @@ class EnsureRouteDomain(task.Task):
         stop=tenacity.stop_after_attempt(3)
     )
     def execute(self, network: f5_network_models.Network,
-                bigip: bigip_restclient.BigIPRestClient):
-
+                bigip: bigip_restclient.BigIPRestClient,
+                existing_route_domain: dict):
         vlans = [f"/Common/vlan-{network.vlan_id}"]
         rd = {'name': f"vlan-{network.vlan_id}", 'vlans': vlans, 'id': network.vlan_id}
 
-        device_response = bigip.get(path=f"/mgmt/tm/net/route-domain/{rd['name']}")
-        if device_response.status_code == 404:
-            path = f"/mgmt/tm/net/route-domain/net-{network.id}"
-            device_response = bigip.get(path=path)
-
         # Create route_domain if not existing
-        if device_response.status_code == 404:
+        if existing_route_domain is None:
             res = bigip.post(path='/mgmt/tm/net/route-domain', json=rd)
             res.raise_for_status()
             return res.json()
 
-        device_rd = device_response.json()
-        if device_rd.get('vlans', []) != vlans:
-            res = bigip.patch(path=f"/mgmt/tm/net/route-domain/{device_rd['fullPath']}",
+        if existing_route_domain.get('vlans', []) != vlans:
+            res = bigip.patch(path=f"/mgmt/tm/net/route-domain/{existing_route_domain['fullPath']}",
                               json={'vlans': vlans})
             res.raise_for_status()
             return res.json()
-        return device_rd
+
+        return existing_route_domain
+
+    @decorators.RaisesIControlRestError()
+    def revert(self, network: f5_network_models.Network,
+               bigip: bigip_restclient.BigIPRestClient,
+               existing_route_domain, *args, **kwargs):
+        paths = [
+            f"/mgmt/tm/net/route-domain/vlan-{network.vlan_id}",
+            f"/mgmt/tm/net/route-domain/net-{network.id}"
+        ]
+        if existing_route_domain is not None:
+            LOG.warning(f"Reverting EnsureRouteDomain: Not deleting RouteDomain, since it existed before "
+                        f"the task was run: {existing_route_domain}")
+            return
+
+        res = None
+        for path in paths:
+            if bigip.get(path=path).ok:
+                res = bigip.delete(path=path)
+                break
+
+        if res and not res.ok:
+            LOG.warning("Reverting EnsureRouteDomain: Failed removing route domain on the device %s "
+                        "for network_id=%s vlan_id=%s: %s",
+                        bigip.hostname, network.id, network.vlan_id, res.content)
+            res.raise_for_status()
 
 
 class EnsureSelfIP(task.Task):
@@ -190,7 +222,6 @@ class EnsureSelfIP(task.Task):
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network,
                 port: network_models.Port):
-
         # payload
         name = f"port-{port.id}"
         vlan = f"/Common/vlan-{network.vlan_id}"
@@ -225,7 +256,6 @@ class EnsureSelfIP(task.Task):
                bigip: bigip_restclient.BigIPRestClient,
                existing_selfips, *args, **kwargs):
         selfip_name = f"port-{port.id}"
-
         # don't remove the SelfIP if it existed before this task was executed
         if port.id in [p['port_id'] for p in existing_selfips]:
             LOG.warning("Reverting EnsureSelfIP: Not deleting SelfIP, since it existed before the task was run: "
@@ -239,6 +269,32 @@ class EnsureSelfIP(task.Task):
             LOG.warning(f"Reverting EnsureSelfIP: SelfIP {selfip_name} was already removed")
         else:
             device_response.raise_for_status()
+
+
+class GetExistingVLAN(task.Task):
+    default_provides = 'existing_vlan'
+
+    def execute(self, bigip: bigip_restclient.BigIPRestClient,
+                network: f5_network_models.Network):
+        device_response = bigip.get(path=f"/mgmt/tm/net/vlan/~Common~vlan-{network.vlan_id}?expandSubcollections=true")
+        if device_response.status_code == 404:
+            return None
+        return device_response.json()
+
+
+class GetExistingRouteDomain(task.Task):
+    default_provides = 'existing_route_domain'
+
+    def execute(self, bigip: bigip_restclient.BigIPRestClient,
+                network: f5_network_models.Network):
+        device_response = bigip.get(path=f"/mgmt/tm/net/route-domain/vlan-{network.vlan_id}")
+        if device_response.status_code == 404:
+            path = f"/mgmt/tm/net/route-domain/net-{network.id}"
+            device_response = bigip.get(path=path)
+
+        if device_response.status_code == 404:
+            return None
+        return device_response.json()
 
 
 class GetExistingSelfIPsForVLAN(task.Task):
@@ -289,7 +345,6 @@ class EnsureDefaultRoute(task.Task):
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
                 subnet_id: str,
                 network: f5_network_models.Network):
-
         if CONF.networking.route_on_active and not bigip.is_active:
             # Skip passive device if route_on_active is enabled
             return None
@@ -334,7 +389,6 @@ class EnsureSubnetRoute(task.Task):
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network,
                 subnet_id):
-
         # Skip passive device if route_on_active is enabled
         if CONF.networking.route_on_active and not bigip.is_active:
             return
@@ -374,7 +428,6 @@ class EnsureSubnetRoute(task.Task):
                subnet_id, existing_subnet_routes,
                *args, **kwargs):
         subnet_route_name = get_subnet_route_name(network.id, subnet_id)
-
         # Don't remove the route if it existed before this task was executed
         if subnet_route_name in [r['name'] for r in existing_subnet_routes]:
             LOG.warning("Reverting EnsureSubnetRoute: Not deleting route, since it existed before the task was run: "

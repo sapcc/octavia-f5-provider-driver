@@ -27,34 +27,65 @@ class F5Flows(object):
         """
         Construct and return a flow to ensure complete L2 configuration for a new partition.
         The flow assumes that no L2 objects exist yet for the network so nothing is cleaned up.
-        """
 
+        We have to inject all required variables to each flow/task because these flows will
+        be running as part of Graph flow and storage contains equal variables but for two F5
+        devices, their variables' names overlap. Also in graph flow, every subflow/task should
+        have a unique name that's why we have to add BigIP hostname.
+        """
+        bigip_hostname = store["bigip"].hostname
         # make SelfIP creation subflow
-        ensure_selfips_subflow = unordered_flow.Flow('ensure-selfips-subflow')
+        ensure_selfips_subflow = unordered_flow.Flow(
+            f'ensure-selfips-subflow-{bigip_hostname}')
         for selfip_port in selfips:
             ensure_selfip_task = f5_tasks.EnsureSelfIP(
-                name=f"ensure-selfip-{selfip_port.id}", inject={'port': selfip_port})
+                name=f'ensure-selfip-{bigip_hostname}-{selfip_port.id}',
+                inject={
+                    'port': selfip_port,
+                    **store
+                }
+            )
             ensure_selfips_subflow.add(ensure_selfip_task)
 
         # create subnet routes for all subnets that don't have a SelfIP
         network = store['network']
         subnets_to_create_routes_for = [subnet for subnet in network.subnets
                                         if not f5_tasks.selfip_for_subnet_exists(subnet, selfips)]
-        ensure_subnet_routes_subflow = unordered_flow.Flow('ensure-subnet-routes-subflow')
+        ensure_subnet_routes_subflow = unordered_flow.Flow(
+            f'ensure-subnet-routes-subflow-{bigip_hostname}')
 
         # make subnet route creation subflow
         for subnet_id in subnets_to_create_routes_for:
             subnet_route_name = f5_tasks.get_subnet_route_name(network.id, subnet_id)
-            ensure_subnet_route_task = f5_tasks.EnsureSubnetRoute(name=f"ensure-subnet-route-{subnet_route_name}",
-                                                                  inject={'subnet_id': subnet_id})
+            ensure_subnet_route_task = f5_tasks.EnsureSubnetRoute(
+                name=f'ensure-subnet-route-{bigip_hostname}-{subnet_route_name}',
+                inject={
+                    'subnet_id': subnet_id,
+                    **store
+                }
+            )
             ensure_subnet_routes_subflow.add(ensure_subnet_route_task)
 
-        ensure_route_domain = f5_tasks.EnsureRouteDomain()
-        ensure_default_route = f5_tasks.EnsureDefaultRoute()
-        ensure_vlan = f5_tasks.EnsureVLAN()
+        get_existing_route_domain = f5_tasks.GetExistingRouteDomain(
+            name=f'get-existing-route-domain-{bigip_hostname}',
+            inject=store)
+        ensure_route_domain = f5_tasks.EnsureRouteDomain(
+            name=f'ensure-route-domain-{bigip_hostname}',
+            inject=store)
+        ensure_default_route = f5_tasks.EnsureDefaultRoute(
+            name=f'ensure-default-route-{bigip_hostname}',
+            inject=store)
+        get_existing_vlan = f5_tasks.GetExistingVLAN(
+            name=f'get-existing-vlan-{bigip_hostname}',
+            inject=store)
+        ensure_vlan = f5_tasks.EnsureVLAN(
+            name=f'ensure-vlan-{bigip_hostname}',
+            inject=store)
 
-        ensure_l2_flow = linear_flow.Flow('ensure-l2-flow')
-        ensure_l2_flow.add(ensure_vlan,
+        ensure_l2_flow = linear_flow.Flow(f'ensure-l2-flow-{bigip_hostname}')
+        ensure_l2_flow.add(get_existing_vlan,
+                           ensure_vlan,
+                           get_existing_route_domain,
                            ensure_route_domain,
                            # SelfIPs must be present for routes to work
                            ensure_selfips_subflow,
@@ -184,7 +215,8 @@ class F5Flows(object):
         ensure_selfips_subflow = unordered_flow.Flow('ensure-selfips-subflow')
         for selfip_port in selfips_to_create:
             ensure_selfip_task = f5_tasks.EnsureSelfIP(
-                name=f"ensure-selfip-{selfip_port.id}", inject={'port': selfip_port})
+                name=f'ensure-selfip-{store["bigip"].hostname}-{selfip_port.id}',
+                inject={'port': selfip_port})
             ensure_selfips_subflow.add(ensure_selfip_task)
 
         # find subnet routes for subnets that need them but don't have any yet
@@ -226,12 +258,14 @@ class F5Flows(object):
         return get_existing_sip_sr_flow
 
     def make_ensure_vcmp_l2_flow(self) -> flow.Flow:
+        get_existing_vlan = f5_tasks.GetExistingVLAN()
         ensure_vlan = f5_tasks.EnsureVLAN()
         ensure_vlan_interface = f5_tasks.EnsureVLANInterface()
         ensure_guest_vlan = f5_tasks.EnsureGuestVLAN()
 
         ensure_vcmp_l2_flow = linear_flow.Flow('ensure-vcmp-l2-flow')
-        ensure_vcmp_l2_flow.add(ensure_vlan,
+        ensure_vcmp_l2_flow.add(get_existing_vlan,
+                                ensure_vlan,
                                 ensure_vlan_interface,
                                 ensure_guest_vlan)
         return ensure_vcmp_l2_flow
