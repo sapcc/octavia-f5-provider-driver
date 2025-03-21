@@ -94,35 +94,69 @@ class F5Flows(object):
         return ensure_l2_flow
 
     def make_remove_l2_flow(self, store: dict) -> flow.Flow:
-        """Construct and return a flow to remove complete L2 configuration of a partition."""
+        """
+        Construct and return a flow to remove complete L2 configuration of a partition.
+
+        We have to inject all required variables to each flow/task because these flows will
+        be running as part of main flow and storage contains equal variables but for two F5
+        devices, their variables' names overlap. Also in one flow, every subflow/task should
+        have a unique name that's why we have to add BigIP hostname.
+        """
+        bigip_hostname = store["bigip"].hostname
+
         existing_selfips = store['existing_selfips']
         existing_subnet_routes = store['existing_subnet_routes']
 
         # remove subnet routes
-        remove_subnet_routes_subflow = unordered_flow.Flow('remove-subnet-routes-subflow')
+        remove_subnet_routes_subflow = unordered_flow.Flow(
+            f'remove-subnet-routes-subflow-{bigip_hostname}')
         for subnet_route in existing_subnet_routes:
-            remove_subnet_route_task = f5_tasks.RemoveSubnetRoute(name=f"remove-subnet-route-{subnet_route['name']}",
-                                                                  inject={'subnet_route': subnet_route})
+            remove_subnet_route_task = f5_tasks.RemoveSubnetRoute(
+                name=f"remove-subnet-route-{bigip_hostname}-{subnet_route['name']}",
+                inject={
+                    'subnet_route': subnet_route,
+                    **store
+                }
+            )
             remove_subnet_routes_subflow.add(remove_subnet_route_task)
 
         # remove SelfIPs
-        remove_selfips_subflow = unordered_flow.Flow('remove-selfips-subflow')
+        remove_selfips_subflow = unordered_flow.Flow(f'remove-selfips-subflow-{bigip_hostname}')
         for selfip in existing_selfips:
-            remove_selfip_task = f5_tasks.RemoveSelfIP(name=f"remove-selfip-{selfip['port_id']}",
-                                                       inject={'selfip': selfip})
+            remove_selfip_task = f5_tasks.RemoveSelfIP(
+                name=f"remove-selfip-{bigip_hostname}-{selfip['port_id']}",
+                inject={
+                    'selfip': selfip,
+                    **store
+                }
+            )
             remove_selfips_subflow.add(remove_selfip_task)
 
         # remove other L2 objects
-        remove_default_route_task = f5_tasks.RemoveDefaultRoute()
-        remove_route_domain_task = f5_tasks.RemoveRouteDomain()
-        remove_vlan_task = f5_tasks.RemoveVLAN()
+        remove_default_route_task = f5_tasks.RemoveDefaultRoute(
+            name=f'remove-defult-route-{bigip_hostname}',
+            inject=store)
+        get_existing_route_domain = f5_tasks.GetExistingRouteDomain(
+            name=f'get-existing-route-domain-{bigip_hostname}',
+            inject=store)
+        remove_route_domain_task = f5_tasks.RemoveRouteDomain(
+            name=f'remove-route-domain-{bigip_hostname}',
+            inject=store)
+        get_existing_vlan = f5_tasks.GetExistingVLAN(
+            name=f'get-existing-vlan-{bigip_hostname}',
+            inject=store)
+        remove_vlan_task = f5_tasks.RemoveVLAN(
+            name=f'remove-vlan-{bigip_hostname}',
+            inject=store)
 
-        remove_l2_flow = linear_flow.Flow('remove-l2-flow')
+        remove_l2_flow = linear_flow.Flow(f'remove-l2-flow-{bigip_hostname}')
         remove_l2_flow.add(remove_subnet_routes_subflow,
                            remove_default_route_task,
                            # SelfIPs must be deleted after routes, otherwise a route would be unreachable
                            remove_selfips_subflow,
+                           get_existing_route_domain,
                            remove_route_domain_task,
+                           get_existing_vlan,
                            remove_vlan_task)
         return remove_l2_flow
 
