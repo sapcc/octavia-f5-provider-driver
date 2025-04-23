@@ -7,7 +7,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       matrix:
-        python-version: [3.8]
+        python-version: [3.12]
     steps:
     - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
@@ -16,8 +16,9 @@ jobs:
         python-version: ${{ matrix.python-version }}
     - name: Install dependencies
       run: |
+        set -xe
         python -m pip install --upgrade pip
-        pip install -r test-requirements.txt -c https://raw.githubusercontent.com/sapcc/requirements/stable/yoga/upper-constraints.txt
+        pip install -r test-requirements.txt -c https://raw.githubusercontent.com/sapcc/requirements/stable/2025.1-m3/upper-constraints.txt
     - name: Analysing the code with pylint
       run: |
         tools/coding-checks.sh --pylint
