@@ -31,8 +31,9 @@ from oslo_utils import excutils, uuidutils
 from requests import HTTPError
 from sqlalchemy.orm import exc as db_exceptions
 
+from octavia.common import constants as octavia_consts
 from octavia.db import repositories as repo
-from octavia_f5.common import constants
+from octavia_f5.common import constants as octavia_f5_consts
 from octavia_f5.controller.worker import status_manager, sync_manager, l2_sync_manager
 from octavia_f5.controller.worker.set_queue import SetQueue
 from octavia_f5.db import api as db_apis
@@ -166,7 +167,7 @@ class ControllerWorker(object):
                 # Get all loadbalancers of this host
                 for tenant_name, applications in tenants.items():
                     # Convert tenant_name to network_id
-                    network_id = tenant_name.replace(constants.PREFIX_NETWORK, '').replace('_', '-')
+                    network_id = tenant_name.replace(octavia_f5_consts.PREFIX_NETWORK, '').replace('_', '-')
 
                     # Fetch active loadbalancers for this network
                     octavia_lb_ids = [lb.id for lb in self._loadbalancer_repo.get_all_by_network(
@@ -188,7 +189,7 @@ class ControllerWorker(object):
             compute_flavor=CONF.host, load_balancer_id=None)
 
         for device in booting_devices[0]:
-            if CONF.f5_agent.migration and device.role != constants.ROLE_BACKUP:
+            if CONF.f5_agent.migration and device.role != octavia_f5_consts.ROLE_BACKUP:
                 LOG.warning("[Migration Mode] Skipping full sync of active device %s", device.cached_zone)
                 continue
 
@@ -312,28 +313,37 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def create_load_balancer(self, load_balancer_id, flavor=None, availability_zone=None):
-        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
+    def create_load_balancer(self, loadbalancer, flavor=None,
+                             availability_zone=None):
+        db_lb = self._loadbalancer_repo.get(
+            db_apis.get_session(),
+            id=loadbalancer[octavia_consts.LOADBALANCER_ID])
         # We are retrying to fetch load-balancer since API could
         # be still busy inserting the LB into the database.
-        if not lb:
+        if not db_lb:
             LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
-                        '60 seconds.', 'load_balancer', load_balancer_id)
+                        '60 seconds.', 'load_balancer',
+                        loadbalancer[octavia_consts.LOADBALANCER_ID])
             raise db_exceptions.NoResultFound
 
-        self.ensure_amphora_exists(lb.id)
-        self.ensure_host_set(lb)
-        self.queue.put((lb.vip.network_id, None))
+        self.ensure_amphora_exists(db_lb.id)
+        self.ensure_host_set(db_lb)
+        self.queue.put((db_lb.vip.network_id, None))
 
-    def update_load_balancer(self, load_balancer_id, load_balancer_updates):
-        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
-        self.queue.put((lb.vip.network_id, None))
+    def update_load_balancer(self, original_load_balancer,
+                             load_balancer_updates):
+        db_lb = self._loadbalancer_repo.get(
+            db_apis.get_session(),
+            id=original_load_balancer[octavia_consts.LOADBALANCER_ID])
+        self.queue.put((db_lb.vip.network_id, None))
 
-    def delete_load_balancer(self, load_balancer_id, cascade=False):
-        lb = self._loadbalancer_repo.get(db_apis.get_session(), id=load_balancer_id)
+    def delete_load_balancer(self, load_balancer, cascade=False):
+        db_lb = self._loadbalancer_repo.get(
+            db_apis.get_session(),
+            id=load_balancer[octavia_consts.LOADBALANCER_ID])
         # could be deleted by sync-loop meanwhile
-        if lb:
-            self.queue.put((lb.vip.network_id, None))
+        if db_lb:
+            self.queue.put((db_lb.vip.network_id, None))
 
     """
     Listener
@@ -344,27 +354,31 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def create_listener(self, listener_id):
-        listener = self._listener_repo.get(db_apis.get_session(),
-                                           id=listener_id)
-        if not listener:
+    def create_listener(self, listener):
+        db_listener = self._listener_repo.get(
+            db_apis.get_session(),
+            id=listener[octavia_consts.LISTENER_ID])
+        if not db_listener:
             LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
-                        '60 seconds.', 'listener', listener_id)
+                        '60 seconds.', 'listener',
+                        listener[octavia_consts.LISTENER_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((listener.load_balancer.vip.network_id, None))
+        self.queue.put((db_listener.load_balancer.vip.network_id, None))
 
-    def update_listener(self, listener_id, listener_updates):
-        listener = self._listener_repo.get(db_apis.get_session(),
-                                           id=listener_id)
-        self.queue.put((listener.load_balancer.vip.network_id, None))
+    def update_listener(self, listener, listener_updates):
+        db_listener = self._listener_repo.get(
+            db_apis.get_session(),
+            id=listener[octavia_consts.LISTENER_ID])
+        self.queue.put((db_listener.load_balancer.vip.network_id, None))
 
-    def delete_listener(self, listener_id):
-        listener = self._listener_repo.get(db_apis.get_session(),
-                                           id=listener_id)
+    def delete_listener(self, listener):
+        db_listener = self._listener_repo.get(
+            db_apis.get_session(),
+            id=listener[octavia_consts.LISTENER_ID])
         # could be deleted by sync-loop meanwhile
-        if listener:
-            self.queue.put((listener.load_balancer.vip.network_id, None))
+        if db_listener:
+            self.queue.put((db_listener.load_balancer.vip.network_id, None))
 
     """
     Pool
@@ -375,27 +389,31 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def create_pool(self, pool_id):
-        pool = self._pool_repo.get(db_apis.get_session(),
-                                   id=pool_id)
-        if not pool:
+    def create_pool(self, pool):
+        db_pool = self._pool_repo.get(
+            db_apis.get_session(),
+            id=pool[octavia_consts.POOL_ID])
+        if not db_pool:
             LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
-                        '60 seconds.', 'pool', pool_id)
+                        '60 seconds.', 'pool',
+                        pool[octavia_consts.POOL_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((pool.load_balancer.vip.network_id, None))
+        self.queue.put((db_pool.load_balancer.vip.network_id, None))
 
-    def update_pool(self, pool_id, pool_updates):
-        pool = self._pool_repo.get(db_apis.get_session(),
-                                   id=pool_id)
-        self.queue.put((pool.load_balancer.vip.network_id, None))
+    def update_pool(self, origin_pool, pool_updates):
+        db_pool = self._pool_repo.get(
+            db_apis.get_session(),
+            id=origin_pool[octavia_consts.POOL_ID])
+        self.queue.put((db_pool.load_balancer.vip.network_id, None))
 
-    def delete_pool(self, pool_id):
-        pool = self._pool_repo.get(db_apis.get_session(),
-                                   id=pool_id)
+    def delete_pool(self, pool):
+        db_pool = self._pool_repo.get(
+            db_apis.get_session(),
+            id=pool[octavia_consts.POOL_ID])
         # could be deleted by sync-loop meanwhile
-        if pool:
-            self.queue.put((pool.load_balancer.vip.network_id, None))
+        if db_pool:
+            self.queue.put((db_pool.load_balancer.vip.network_id, None))
 
     """
     Member
@@ -406,72 +424,105 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def create_member(self, member_id):
-        member = self._member_repo.get(db_apis.get_session(),
-                                       id=member_id)
-        if not member:
+    def create_member(self, member):
+        db_member = self._member_repo.get(
+            db_apis.get_session(),
+            id=member[octavia_consts.MEMBER_ID])
+        if not db_member:
             LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
-                        '60 seconds.', 'member', member_id)
+                        '60 seconds.', 'member',
+                        member[octavia_consts.MEMBER_ID])
             raise db_exceptions.NoResultFound
 
-        self.ensure_amphora_exists(member.pool.load_balancer.id)
-        self.queue.put((member.pool.load_balancer.vip.network_id, None))
+        self.ensure_amphora_exists(db_member.pool.load_balancer.id)
+        self.queue.put((db_member.pool.load_balancer.vip.network_id, None))
 
-    def batch_update_members(self, old_member_ids, new_member_ids,
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
+        wait=tenacity.wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    def batch_update_members(self, old_members, new_members,
                              updated_members):
-        old_members = [self._member_repo.get(db_apis.get_session(), id=mid)
-                       for mid in old_member_ids]
-        new_members = [self._member_repo.get(db_apis.get_session(), id=mid)
-                       for mid in new_member_ids]
+        old_members = [
+            self._member_repo.get(
+                db_apis.get_session(), id=mid[octavia_consts.MEMBER_ID])
+            for mid in old_members]
+        db_new_members = [
+            self._member_repo.get(
+                db_apis.get_session(), id=mid[octavia_consts.MEMBER_ID])
+            for mid in new_members]
+        # The API may not have committed all of the new member records yet.
+        # Make sure we retry looking them up.
+        if None in db_new_members or len(db_new_members) != len(new_members):
+            LOG.warning('Failed to fetch one of the new members from DB. '
+                        'Retrying for up to 60 seconds.')
+            raise db_exceptions.NoResultFound
         updated_members = [
-            (self._member_repo.get(db_apis.get_session(), id=m.get('id')), m)
+            (self._member_repo.get(
+                db_apis.get_session(), id=m.get(octavia_consts.MEMBER_ID)), m)
             for m in updated_members]
         if old_members:
-            pool = old_members[0].pool
+            pool = old_members[0][octavia_consts.POOL_ID]
         elif new_members:
-            pool = new_members[0].pool
+            pool = new_members[0][octavia_consts.POOL_ID]
         elif updated_members:
-            pool = updated_members[0][0].pool
+            pool = updated_members[0][0][octavia_consts.POOL_ID]
         else:
             return
         self.queue.put((pool.load_balancer.vip.network_id, None))
 
-    def update_member(self, member_id, member_updates):
-        member = self._member_repo.get(db_apis.get_session(),
-                                       id=member_id)
-        self.queue.put((member.pool.load_balancer.vip.network_id, None))
+    def update_member(self, member, member_updates):
+        db_member = self._member_repo.get(
+            db_apis.get_session(),
+            id=member[octavia_consts.MEMBER_ID])
+        self.queue.put((db_member.pool.load_balancer.vip.network_id, None))
 
-    def delete_member(self, member_id):
-        member = self._member_repo.get(db_apis.get_session(),
-                                       id=member_id)
+    def delete_member(self, member):
+        db_member = self._member_repo.get(
+            db_apis.get_session(),
+            id=member[octavia_consts.MEMBER_ID])
         # could be deleted by sync-loop meanwhile
-        self.queue.put((member.pool.load_balancer.vip.network_id, None))
+        self.queue.put((db_member.pool.load_balancer.vip.network_id, None))
 
     """
     Health Monitor
     """
 
-    def create_health_monitor(self, health_monitor_id):
-        health_mon = self._health_mon_repo.get(db_apis.get_session(),
-                                               id=health_monitor_id)
-        if not health_mon:
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
+        wait=tenacity.wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    def create_health_monitor(self, health_monitor):
+        db_health_monitor = self._health_mon_repo.get(
+            db_apis.get_session(),
+            id=health_monitor[octavia_consts.HEALTHMONITOR_ID])
+        if not db_health_monitor:
             LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
-                        '60 seconds.', 'health_monitor', health_monitor_id)
+                        '60 seconds.', 'health_monitor',
+                        health_monitor[octavia_consts.HEALTHMONITOR_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((health_mon.pool.load_balancer.vip.network_id, None))
+        self.queue.put((db_health_monitor.pool.load_balancer.vip.network_id,
+                        None))
 
-    def update_health_monitor(self, health_monitor_id, health_monitor_updates):
-        health_mon = self._health_mon_repo.get(db_apis.get_session(),
-                                               id=health_monitor_id)
-        self.queue.put((health_mon.pool.load_balancer.vip.network_id, None))
+    def update_health_monitor(self, original_health_monitor,
+                              health_monitor_updates):
+        db_health_monitor = self._health_mon_repo.get(
+            db_apis.get_session(),
+            id=original_health_monitor[octavia_consts.HEALTHMONITOR_ID])
+        self.queue.put((db_health_monitor.pool.load_balancer.vip.network_id,
+                        None))
 
-    def delete_health_monitor(self, health_monitor_id):
-        health_mon = self._health_mon_repo.get(db_apis.get_session(),
-                                               id=health_monitor_id)
+    def delete_health_monitor(self, health_monitor):
+        db_health_monitor = self._health_mon_repo.get(
+            db_apis.get_session(),
+            id=health_monitor[octavia_consts.HEALTHMONITOR_ID])
         # could be deleted by sync-loop meanwhile
-        if health_mon:
-            self.queue.put((health_mon.pool.load_balancer.vip.network_id, None))
+        if db_health_monitor:
+            self.queue.put((db_health_monitor.pool.load_balancer.vip.network_id,
+                            None))
 
     """
     l7policy
@@ -482,27 +533,34 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def create_l7policy(self, l7policy_id):
-        l7policy = self._l7policy_repo.get(db_apis.get_session(),
-                                           id=l7policy_id)
-        if not l7policy:
+    def create_l7policy(self, l7policy):
+        db_l7policy = self._l7policy_repo.get(
+            db_apis.get_session(),
+            id=l7policy[octavia_consts.L7POLICY_ID])
+        if not db_l7policy:
             LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
-                        '60 seconds.', 'l7policy', l7policy_id)
+                        '60 seconds.', 'l7policy',
+                        l7policy[octavia_consts.L7POLICY_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((l7policy.listener.load_balancer.vip.network_id, None))
+        self.queue.put((db_l7policy.listener.load_balancer.vip.network_id,
+                        None))
 
-    def update_l7policy(self, l7policy_id, l7policy_updates):
-        l7policy = self._l7policy_repo.get(db_apis.get_session(),
-                                           id=l7policy_id)
-        self.queue.put((l7policy.listener.load_balancer.vip.network_id, None))
+    def update_l7policy(self, original_l7policy, l7policy_updates):
+        db_l7policy = self._l7policy_repo.get(
+            db_apis.get_session(),
+            id=original_l7policy[octavia_consts.L7POLICY_ID])
+        self.queue.put((db_l7policy.listener.load_balancer.vip.network_id,
+                        None))
 
-    def delete_l7policy(self, l7policy_id):
-        l7policy = self._l7policy_repo.get(db_apis.get_session(),
-                                           id=l7policy_id)
+    def delete_l7policy(self, l7policy):
+        db_l7policy = self._l7policy_repo.get(
+            db_apis.get_session(),
+            id=l7policy[octavia_consts.L7POLICY_ID])
         # could be deleted by sync-loop meanwhile
-        if l7policy:
-            self.queue.put((l7policy.listener.load_balancer.vip.network_id, None))
+        if db_l7policy:
+            self.queue.put((db_l7policy.listener.load_balancer.vip.network_id,
+                            None))
 
     """
     l7rule
@@ -513,27 +571,31 @@ class ControllerWorker(object):
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
-    def create_l7rule(self, l7rule_id):
-        l7rule = self._l7rule_repo.get(db_apis.get_session(),
-                                       id=l7rule_id)
-        if not l7rule:
+    def create_l7rule(self, l7rule):
+        db_l7rule = self._l7rule_repo.get(
+            db_apis.get_session(),
+            id=l7rule[octavia_consts.L7RULE_ID])
+        if not db_l7rule:
             LOG.warning('Failed to fetch %s %s from DB. Retrying for up to '
-                        '60 seconds.', 'l7rule', l7rule_id)
+                        '60 seconds.', 'l7rule',
+                        l7rule[octavia_consts.L7RULE_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((l7rule.l7policy.listener.load_balancer.vip.network_id, None))
+        self.queue.put((db_l7rule.l7policy.listener.load_balancer.vip.network_id, None))
 
-    def update_l7rule(self, l7rule_id, l7rule_updates):
-        l7rule = self._l7rule_repo.get(db_apis.get_session(),
-                                       id=l7rule_id)
-        self.queue.put((l7rule.l7policy.listener.load_balancer.vip.network_id, None))
+    def update_l7rule(self, original_l7rule, l7rule_updates):
+        db_l7rule = self._l7rule_repo.get(
+            db_apis.get_session(),
+            id=original_l7rule[octavia_consts.L7RULE_ID])
+        self.queue.put((db_l7rule.l7policy.listener.load_balancer.vip.network_id, None))
 
-    def delete_l7rule(self, l7rule_id):
-        l7rule = self._l7rule_repo.get(db_apis.get_session(),
-                                       id=l7rule_id)
+    def delete_l7rule(self, l7rule):
+        db_l7rule = self._l7rule_repo.get(
+            db_apis.get_session(),
+            id=l7rule[octavia_consts.L7RULE_ID])
         # could be deleted by sync-loop meanwhile
-        if l7rule:
-            self.queue.put((l7rule.l7policy.listener.load_balancer.vip.network_id, None))
+        if db_l7rule:
+            self.queue.put((db_l7rule.l7policy.listener.load_balancer.vip.network_id, None))
 
     """
     Amphora

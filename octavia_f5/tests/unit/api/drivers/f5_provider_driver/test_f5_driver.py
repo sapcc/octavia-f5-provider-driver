@@ -53,7 +53,7 @@ class TestF5Driver(base.TestRpc):
         provider_lb = driver_dm.LoadBalancer(
             loadbalancer_id=self.sample_data.lb_id)
         self.amp_driver.loadbalancer_create(provider_lb)
-        payload = {consts.LOAD_BALANCER_ID: self.sample_data.lb_id,
+        payload = {consts.LOADBALANCER: {'loadbalancer_id': self.sample_data.lb_id, 'flavor': None},
                    consts.FLAVOR: None}
         mock_cast.assert_called_with({}, 'create_load_balancer', **payload)
 
@@ -62,7 +62,7 @@ class TestF5Driver(base.TestRpc):
         provider_lb = driver_dm.LoadBalancer(
             loadbalancer_id=self.sample_data.lb_id)
         self.amp_driver.loadbalancer_delete(provider_lb)
-        payload = {consts.LOAD_BALANCER_ID: self.sample_data.lb_id,
+        payload = {consts.LOADBALANCER: {'loadbalancer_id': self.sample_data.lb_id},
                    'cascade': False}
         mock_cast.assert_called_with({}, 'delete_load_balancer', **payload)
 
@@ -72,7 +72,7 @@ class TestF5Driver(base.TestRpc):
         provider_listener = driver_dm.Listener(
             listener_id=self.sample_data.listener1_id)
         self.amp_driver.listener_create(provider_listener)
-        payload = {consts.LISTENER_ID: self.sample_data.listener1_id}
+        payload = {consts.LISTENER: {'listener_id': self.sample_data.listener1_id}}
         mock_cast.assert_called_with({}, 'create_listener', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -80,7 +80,7 @@ class TestF5Driver(base.TestRpc):
         provider_listener = driver_dm.Listener(
             listener_id=self.sample_data.listener1_id)
         self.amp_driver.listener_delete(provider_listener)
-        payload = {consts.LISTENER_ID: self.sample_data.listener1_id}
+        payload = {consts.LISTENER: {'listener_id': self.sample_data.listener1_id}}
         mock_cast.assert_called_with({}, 'delete_listener', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -91,7 +91,7 @@ class TestF5Driver(base.TestRpc):
             listener_id=self.sample_data.listener1_id, admin_state_up=False)
         self.amp_driver.listener_update(old_provider_listener,
                                         provider_listener)
-        payload = {consts.LISTENER_ID: self.sample_data.listener1_id,
+        payload = {consts.ORIGINAL_LISTENER: {'listener_id': self.sample_data.listener1_id},
                    consts.LISTENER_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_listener', **payload)
 
@@ -103,7 +103,7 @@ class TestF5Driver(base.TestRpc):
             listener_id=self.sample_data.listener1_id, name='Great Listener')
         self.amp_driver.listener_update(old_provider_listener,
                                         provider_listener)
-        payload = {consts.LISTENER_ID: self.sample_data.listener1_id,
+        payload = {consts.ORIGINAL_LISTENER: {'listener_id': self.sample_data.listener1_id},
                    consts.LISTENER_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_listener', **payload)
 
@@ -113,7 +113,7 @@ class TestF5Driver(base.TestRpc):
         provider_pool = driver_dm.Pool(
             pool_id=self.sample_data.pool1_id)
         self.amp_driver.pool_create(provider_pool)
-        payload = {consts.POOL_ID: self.sample_data.pool1_id}
+        payload = {consts.POOL: {'pool_id': self.sample_data.pool1_id}}
         mock_cast.assert_called_with({}, 'create_pool', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -121,7 +121,7 @@ class TestF5Driver(base.TestRpc):
         provider_pool = driver_dm.Pool(
             pool_id=self.sample_data.pool1_id)
         self.amp_driver.pool_delete(provider_pool)
-        payload = {consts.POOL_ID: self.sample_data.pool1_id}
+        payload = {consts.POOL: {'pool_id': self.sample_data.pool1_id}}
         mock_cast.assert_called_with({}, 'delete_pool', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -131,7 +131,7 @@ class TestF5Driver(base.TestRpc):
         provider_pool = driver_dm.Pool(
             pool_id=self.sample_data.pool1_id, admin_state_up=True)
         self.amp_driver.pool_update(old_provider_pool, provider_pool)
-        payload = {consts.POOL_ID: self.sample_data.pool1_id,
+        payload = {consts.ORIGINAL_POOL: {'pool_id': self.sample_data.pool1_id},
                    consts.POOL_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_pool', **payload)
 
@@ -142,7 +142,7 @@ class TestF5Driver(base.TestRpc):
         provider_member = driver_dm.Member(
             member_id=self.sample_data.member1_id)
         self.amp_driver.member_create(provider_member)
-        payload = {consts.MEMBER_ID: self.sample_data.member1_id}
+        payload = {consts.MEMBER: {'member_id': self.sample_data.member1_id}}
         mock_cast.assert_called_with({}, 'create_member', **payload)
 
     @mock.patch('octavia.db.repositories.PoolRepository.get')
@@ -162,7 +162,7 @@ class TestF5Driver(base.TestRpc):
             member_id=self.sample_data.member1_id,
             address="192.0.2.1")
         self.amp_driver.member_create(provider_member)
-        payload = {consts.MEMBER_ID: self.sample_data.member1_id}
+        payload = {consts.MEMBER: {'member_id': self.sample_data.member1_id, 'address': '192.0.2.1'}}
         mock_cast.assert_called_with({}, 'create_member', **payload)
 
     @mock.patch('octavia.db.repositories.PoolRepository.get')
@@ -182,7 +182,7 @@ class TestF5Driver(base.TestRpc):
             member_id=self.sample_data.member1_id,
             address="192.0.2.1")
         self.amp_driver.member_create(provider_member)
-        payload = {consts.MEMBER_ID: self.sample_data.member1_id}
+        payload = {consts.MEMBER: {'member_id': self.sample_data.member1_id, 'address': '192.0.2.1'}}
         mock_cast.assert_called_with({}, 'create_member', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -190,7 +190,7 @@ class TestF5Driver(base.TestRpc):
         provider_member = driver_dm.Member(
             member_id=self.sample_data.member1_id)
         self.amp_driver.member_delete(provider_member)
-        payload = {consts.MEMBER_ID: self.sample_data.member1_id}
+        payload = {consts.MEMBER: {'member_id': self.sample_data.member1_id}}
         mock_cast.assert_called_with({}, 'delete_member', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -200,7 +200,7 @@ class TestF5Driver(base.TestRpc):
         provider_member = driver_dm.Member(
             member_id=self.sample_data.member1_id, admin_state_up=True)
         self.amp_driver.member_update(old_provider_member, provider_member)
-        payload = {consts.MEMBER_ID: self.sample_data.member1_id,
+        payload = {consts.ORIGINAL_MEMBER: {'member_id': self.sample_data.member1_id},
                    consts.MEMBER_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_member', **payload)
 
@@ -210,7 +210,7 @@ class TestF5Driver(base.TestRpc):
         provider_l7policy = driver_dm.L7Policy(
             l7policy_id=self.sample_data.l7policy1_id)
         self.amp_driver.l7policy_create(provider_l7policy)
-        payload = {consts.L7POLICY_ID: self.sample_data.l7policy1_id}
+        payload = {consts.L7POLICY: {'l7policy_id': self.sample_data.l7policy1_id}}
         mock_cast.assert_called_with({}, 'create_l7policy', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -218,7 +218,7 @@ class TestF5Driver(base.TestRpc):
         provider_l7policy = driver_dm.L7Policy(
             l7policy_id=self.sample_data.l7policy1_id)
         self.amp_driver.l7policy_delete(provider_l7policy)
-        payload = {consts.L7POLICY_ID: self.sample_data.l7policy1_id}
+        payload = {consts.L7POLICY: {'l7policy_id': self.sample_data.l7policy1_id}}
         mock_cast.assert_called_with({}, 'delete_l7policy', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -229,7 +229,7 @@ class TestF5Driver(base.TestRpc):
             l7policy_id=self.sample_data.l7policy1_id, admin_state_up=True)
         self.amp_driver.l7policy_update(old_provider_l7policy,
                                         provider_l7policy)
-        payload = {consts.L7POLICY_ID: self.sample_data.l7policy1_id,
+        payload = {consts.ORIGINAL_L7POLICY: {'l7policy_id': self.sample_data.l7policy1_id},
                    consts.L7POLICY_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_l7policy', **payload)
 
@@ -239,7 +239,7 @@ class TestF5Driver(base.TestRpc):
         provider_HM = driver_dm.HealthMonitor(
             healthmonitor_id=self.sample_data.hm1_id)
         self.amp_driver.health_monitor_create(provider_HM)
-        payload = {consts.HEALTH_MONITOR_ID: self.sample_data.hm1_id}
+        payload = {consts.HEALTH_MONITOR: {'healthmonitor_id': self.sample_data.hm1_id}}
         mock_cast.assert_called_with({}, 'create_health_monitor', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -255,7 +255,7 @@ class TestF5Driver(base.TestRpc):
         provider_HM = driver_dm.HealthMonitor(
             healthmonitor_id=self.sample_data.hm1_id)
         self.amp_driver.health_monitor_update(provider_HM, provider_HM)
-        payload = {consts.HEALTH_MONITOR_ID: self.sample_data.hm1_id}
+        payload = {consts.ORIGINAL_HEALTH_MONITOR: {'healthmonitor_id': self.sample_data.hm1_id}}
         mock_cast.assert_called_with({}, 'update_health_monitor', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -272,7 +272,7 @@ class TestF5Driver(base.TestRpc):
         provider_HM = driver_dm.HealthMonitor(
             healthmonitor_id=self.sample_data.hm1_id)
         self.amp_driver.health_monitor_delete(provider_HM)
-        payload = {consts.HEALTH_MONITOR_ID: self.sample_data.hm1_id}
+        payload = {consts.HEALTH_MONITOR: {'healthmonitor_id': self.sample_data.hm1_id}}
         mock_cast.assert_called_with({}, 'delete_health_monitor', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -283,7 +283,7 @@ class TestF5Driver(base.TestRpc):
             healthmonitor_id=self.sample_data.hm1_id, admin_state_up=True,
             max_retries=1, max_retries_down=2)
         self.amp_driver.health_monitor_update(old_provider_hm, provider_hm)
-        payload = {consts.HEALTH_MONITOR_ID: self.sample_data.hm1_id,
+        payload = {consts.ORIGINAL_HEALTH_MONITOR: {'healthmonitor_id': self.sample_data.hm1_id},
                    consts.HEALTH_MONITOR_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_health_monitor', **payload)
 
@@ -293,7 +293,7 @@ class TestF5Driver(base.TestRpc):
         provider_l7rule = driver_dm.L7Rule(
             l7rule_id=self.sample_data.l7rule1_id)
         self.amp_driver.l7rule_create(provider_l7rule)
-        payload = {consts.L7RULE_ID: self.sample_data.l7rule1_id}
+        payload = {consts.L7RULE: {'l7rule_id': self.sample_data.l7rule1_id}}
         mock_cast.assert_called_with({}, 'create_l7rule', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -301,7 +301,7 @@ class TestF5Driver(base.TestRpc):
         provider_l7rule = driver_dm.L7Rule(
             l7rule_id=self.sample_data.l7rule1_id)
         self.amp_driver.l7rule_delete(provider_l7rule)
-        payload = {consts.L7RULE_ID: self.sample_data.l7rule1_id}
+        payload = {consts.L7RULE: {'l7rule_id': self.sample_data.l7rule1_id}}
         mock_cast.assert_called_with({}, 'delete_l7rule', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
@@ -311,7 +311,7 @@ class TestF5Driver(base.TestRpc):
         provider_l7rule = driver_dm.L7Rule(
             l7rule_id=self.sample_data.l7rule1_id, admin_state_up=True)
         self.amp_driver.l7rule_update(old_provider_l7rule, provider_l7rule)
-        payload = {consts.L7RULE_ID: self.sample_data.l7rule1_id,
+        payload = {consts.ORIGINAL_L7RULE: {'l7rule_id': self.sample_data.l7rule1_id},
                    consts.L7RULE_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_l7rule', **payload)
 
@@ -322,6 +322,6 @@ class TestF5Driver(base.TestRpc):
         provider_l7rule = driver_dm.L7Rule(
             l7rule_id=self.sample_data.l7rule1_id, invert=True)
         self.amp_driver.l7rule_update(old_provider_l7rule, provider_l7rule)
-        payload = {consts.L7RULE_ID: self.sample_data.l7rule1_id,
+        payload = {consts.ORIGINAL_L7RULE: {'l7rule_id': self.sample_data.l7rule1_id},
                    consts.L7RULE_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_l7rule', **payload)
