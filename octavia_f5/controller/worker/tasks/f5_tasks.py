@@ -546,6 +546,8 @@ class RemoveSelfIP(task.Task):
 
 
 class RemoveRouteDomain(task.Task):
+
+    @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
                 existing_route_domain):
