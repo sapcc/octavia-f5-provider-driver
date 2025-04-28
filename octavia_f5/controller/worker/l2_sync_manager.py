@@ -202,13 +202,13 @@ class L2SyncManager(BaseTaskFlowEngine):
 
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
             subnet_ids = set(sip.fixed_ips[0].subnet_id for sip in selfips_for_host)
-            ensure_l2_flow_data[bigip.hostname] = {
+            ensure_l2_flow_data[bigip] = {
                 'store': {'bigip': bigip, 'network': network, 'subnet_id': subnet_ids.pop()},
                 'selfips': selfips_for_host,
             }
         fs[self.executor.submit(
             self._do_ensure_l2_flow,
-            data=ensure_l2_flow_data)] = ','.join(ensure_l2_flow_data.keys())
+            data=ensure_l2_flow_data)] = ensure_l2_flow_data.keys()
 
         # run VCMP l2 flow for all VCMPs in parallel
         for vcmp in self._vcmps:
@@ -217,19 +217,23 @@ class L2SyncManager(BaseTaskFlowEngine):
                 store['bigip_guest_names'] = CONF.networking.override_vcmp_guest_names
             else:
                 store['bigip_guest_names'] = [bigip.hostname for bigip in self._bigips]
-            fs[self.executor.submit(self._do_ensure_vcmp_l2_flow, store=store)] = vcmp
+            fs[self.executor.submit(self._do_ensure_vcmp_l2_flow, store=store)] = [vcmp]
 
         # wait for all flows to finish
         failed_bigips = []
         done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
         for f in done | not_done:
-            bigip = fs[f]
+            bigips = fs[f]
             try:
                 f.result(0)
             except Exception as e:
-                self._metric_failed_futures.labels(bigip.hostname, 'ensure_l2_flow').inc()
-                LOG.error("Failed running ensure_l2_flow for host %s: %s", bigip.hostname, e)
-                failed_bigips.append(bigip)
+                hostnames = [bigip.hostname for bigip in bigips]
+                for hostname in hostnames:
+                    # consider both device flows as failed, since we don't know
+                    # which one the error originated in.
+                    self._metric_failed_futures.labels(hostname, 'ensure_l2_flow').inc()
+                    failed_bigips.append(hostname)
+                LOG.error(f"Failed running ensure_l2_flow for hosts {', '.join(hostnames)}: {e}")
 
         # raise error only if all pairs failed
         if self._bigips and all(bigip in failed_bigips for bigip in self._bigips):

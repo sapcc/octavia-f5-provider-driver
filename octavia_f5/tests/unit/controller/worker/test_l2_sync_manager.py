@@ -100,12 +100,12 @@ class TestL2SyncManager(base.TestCase):
         ]
         self.manager.ensure_l2_flow(mocked_selfips, 'test-network-id')
         mock_l2_flow.assert_called_once_with(data={
-            'test-guest-hostname_0': {
+            self.manager._bigips[0]: {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value,
                           'subnet_id': MOCK_FIXED_IP.subnet_id}},
-            'test-guest-hostname_1': {
+            self.manager._bigips[1]: {
                 'selfips': [mocked_selfips[1]],
                 'store': {'bigip': self.manager._bigips[1],
                           'network': mock_get_network.return_value,
@@ -145,7 +145,7 @@ class TestL2SyncManager(base.TestCase):
         self.manager._bigips[1].is_available.assert_called_once_with(timeout=5)
         # expect only one call for BigIP, only for available device
         mock_l2_flow.assert_called_once_with(data={
-            'test-guest-hostname_0': {
+            self.manager._bigips[0]: {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value,
@@ -185,12 +185,12 @@ class TestL2SyncManager(base.TestCase):
         ]
         self.manager.ensure_l2_flow(mocked_selfips, 'test-network-id')
         mock_l2_flow.assert_called_once_with(data={
-            'test-guest-hostname_0': {
+            self.manager._bigips[0]: {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value,
                           'subnet_id': MOCK_FIXED_IP.subnet_id}},
-            'test-guest-hostname_1': {
+            self.manager._bigips[1]: {
                 'selfips': [mocked_selfips[1]],
                 'store': {'bigip': self.manager._bigips[1],
                           'network': mock_get_network.return_value,
@@ -230,12 +230,12 @@ class TestL2SyncManager(base.TestCase):
                              e.args[0])
 
         mock_l2_flow.assert_called_once_with(data={
-            'test-guest-hostname_0': {
+            self.manager._bigips[0]: {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value,
                           'subnet_id': MOCK_FIXED_IP.subnet_id}},
-            'test-guest-hostname_1': {
+            self.manager._bigips[1]: {
                 'selfips': [mocked_selfips[1]],
                 'store': {'bigip': self.manager._bigips[1],
                           'network': mock_get_network.return_value,
