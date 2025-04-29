@@ -191,6 +191,7 @@ class L2SyncManager(BaseTaskFlowEngine):
         # run l2 flow for all devices in parallel
         fs = {}
         ensure_l2_flow_data = {}
+        changed_bigips = []
         for bigip in self._bigips:
             if device and bigip.hostname != device:
                 continue
@@ -202,13 +203,14 @@ class L2SyncManager(BaseTaskFlowEngine):
 
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
             subnet_ids = set(sip.fixed_ips[0].subnet_id for sip in selfips_for_host)
-            ensure_l2_flow_data[bigip] = {
+            ensure_l2_flow_data[bigip.hostname] = {
                 'store': {'bigip': bigip, 'network': network, 'subnet_id': subnet_ids.pop()},
                 'selfips': selfips_for_host,
             }
+            changed_bigips.append(bigip)
         fs[self.executor.submit(
             self._do_ensure_l2_flow,
-            data=ensure_l2_flow_data)] = ensure_l2_flow_data.keys()
+            data=ensure_l2_flow_data)] = changed_bigips
 
         # run VCMP l2 flow for all VCMPs in parallel
         for vcmp in self._vcmps:
