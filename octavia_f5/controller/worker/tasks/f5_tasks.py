@@ -564,6 +564,9 @@ class RemoveRouteDomain(task.Task):
                 existing_route_domain, result, *args, **kwargs):
         if isinstance(result, failure.Failure):
             # If this task failed it means that object was not removed
+            LOG.warning("Revert task was called for removing route domain due to some errors, but deletion failed "
+                        f"on device: {bigip.hostname} for route domain: {existing_route_domain}. Usually, it means"
+                        "that route domain is still on the device as expected.")
             return
         # Restore RouteDomain if it existed before
         if existing_route_domain is not None:
@@ -595,6 +598,9 @@ class RemoveVLAN(task.Task):
                 existing_vlan: dict, result, *args, **kwargs):
         if isinstance(result, failure.Failure):
             # If this task failed it means that object was not removed
+            LOG.warning("Revert task was called for removing VLAN due to some errors, but deletion failed "
+                        f"on device: {bigip.hostname} for VLAN: {existing_vlan}. Usually, it means"
+                        "that VLAN is still on the device as expected.")
             return
         # Restore VLAN existed before
         if existing_vlan is not None:
