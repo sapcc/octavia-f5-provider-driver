@@ -84,9 +84,9 @@ class L2SyncManager(BaseTaskFlowEngine):
         for bigip in self._bigips:
             bigip.update_status()
 
-    def _do_ensure_l2_flow(self, data: dict):
+    def _do_ensure_l2_flow(self, data: list):
         ensure_l2_flow = unordered_flow.Flow('ensure-l2-flow-from-all-devices')
-        for flow_data in data.values():
+        for flow_data in data:
             # get existing SelfIPs and subnet routes - they are needed to determine,
             # which ones have to be created and which already exist
             e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(),
@@ -190,7 +190,7 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         # run l2 flow for all devices in parallel
         fs = {}
-        ensure_l2_flow_data = {}
+        ensure_l2_flow_data = []
         for bigip in self._bigips:
             if device and bigip.hostname != device:
                 continue
@@ -202,13 +202,13 @@ class L2SyncManager(BaseTaskFlowEngine):
 
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
             subnet_ids = set(sip.fixed_ips[0].subnet_id for sip in selfips_for_host)
-            ensure_l2_flow_data[bigip] = {
+            ensure_l2_flow_data.append({
                 'store': {'bigip': bigip, 'network': network, 'subnet_id': subnet_ids.pop()},
                 'selfips': selfips_for_host,
-            }
+            })
         fs[self.executor.submit(
             self._do_ensure_l2_flow,
-            data=ensure_l2_flow_data)] = ensure_l2_flow_data.keys()
+            data=ensure_l2_flow_data)] = self._bigips
 
         # run VCMP l2 flow for all VCMPs in parallel
         for vcmp in self._vcmps:

@@ -99,18 +99,19 @@ class TestL2SyncManager(base.TestCase):
                 name=f"local-OTHER_HOST-{uuidutils.generate_uuid()}")
         ]
         self.manager.ensure_l2_flow(mocked_selfips, 'test-network-id')
-        mock_l2_flow.assert_called_once_with(data={
-            self.manager._bigips[0]: {
+        mock_l2_flow.assert_called_once_with(data=[
+            {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value,
-                          'subnet_id': MOCK_FIXED_IP.subnet_id}},
-            self.manager._bigips[1]: {
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}
+            },
+            {
                 'selfips': [mocked_selfips[1]],
                 'store': {'bigip': self.manager._bigips[1],
                           'network': mock_get_network.return_value,
-                          'subnet_id': MOCK_FIXED_IP.subnet_id}}
-        })
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}
+            }])
         self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
@@ -144,13 +145,13 @@ class TestL2SyncManager(base.TestCase):
         self.manager.ensure_l2_flow(mocked_selfips, 'test-network-id')
         self.manager._bigips[1].is_available.assert_called_once_with(timeout=5)
         # expect only one call for BigIP, only for available device
-        mock_l2_flow.assert_called_once_with(data={
-            self.manager._bigips[0]: {
+        mock_l2_flow.assert_called_once_with(data=[
+            {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value,
-                          'subnet_id': MOCK_FIXED_IP.subnet_id}}
-        })
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}
+            }])
         self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
@@ -184,18 +185,19 @@ class TestL2SyncManager(base.TestCase):
                 name=f"local-OTHER_HOST-{uuidutils.generate_uuid()}")
         ]
         self.manager.ensure_l2_flow(mocked_selfips, 'test-network-id')
-        mock_l2_flow.assert_called_once_with(data={
-            self.manager._bigips[0]: {
+        mock_l2_flow.assert_called_once_with(data=[
+            {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value,
-                          'subnet_id': MOCK_FIXED_IP.subnet_id}},
-            self.manager._bigips[1]: {
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}
+            },
+            {
                 'selfips': [mocked_selfips[1]],
                 'store': {'bigip': self.manager._bigips[1],
                           'network': mock_get_network.return_value,
-                          'subnet_id': MOCK_FIXED_IP.subnet_id}}
-        })
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}
+            }])
         self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
@@ -229,18 +231,19 @@ class TestL2SyncManager(base.TestCase):
             self.assertEqual("Failed ensure_l2_flow for all vcmp devices of network_id=test-network-id",
                              e.args[0])
 
-        mock_l2_flow.assert_called_once_with(data={
-            self.manager._bigips[0]: {
+        mock_l2_flow.assert_called_once_with(data=[
+            {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value,
-                          'subnet_id': MOCK_FIXED_IP.subnet_id}},
-            self.manager._bigips[1]: {
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}
+            },
+            {
                 'selfips': [mocked_selfips[1]],
                 'store': {'bigip': self.manager._bigips[1],
                           'network': mock_get_network.return_value,
-                          'subnet_id': MOCK_FIXED_IP.subnet_id}}
-        })
+                          'subnet_id': MOCK_FIXED_IP.subnet_id}
+            }])
         self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
@@ -274,8 +277,8 @@ class TestL2SyncManager(base.TestCase):
                 MockResponse({}, 404) for _ in range(9)]
             mock_bigips.append(mock_bigip)
         mock_bigips[0].is_active = True
-        data = {
-            mock_bigips[0].hostname: {
+        data = [
+            {
                 'selfips': [selfip_port],
                 'store': {
                     'network': mock_network,
@@ -284,7 +287,7 @@ class TestL2SyncManager(base.TestCase):
                     'existing_selfips': []
                 }
             },
-            mock_bigips[1].hostname: {
+            {
                 'selfips': [selfip_port],
                 'store': {
                     'network': mock_network,
@@ -293,7 +296,7 @@ class TestL2SyncManager(base.TestCase):
                     'existing_selfips': []
                 }
             }
-        }
+        ]
         self.manager._do_ensure_l2_flow(data=data)
         # check thath both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigips[0].get.call_count, 9)
@@ -345,8 +348,8 @@ class TestL2SyncManager(base.TestCase):
             # Route Domain creation
             MockResponse({}, 502)
         ]
-        data = {
-            'hostname-1': {
+        data = [
+            {
                 'selfips': [selfip_port],
                 'store': {
                     'network': mock_network,
@@ -355,7 +358,7 @@ class TestL2SyncManager(base.TestCase):
                     'existing_selfips': []
                 }
             },
-            'hostname-2': {
+            {
                 'selfips': [selfip_port],
                 'store': {
                     'network': mock_network,
@@ -364,7 +367,7 @@ class TestL2SyncManager(base.TestCase):
                     'existing_selfips': []
                 }
             }
-        }
+        ]
         # self.manager._do_ensure_l2_flow(data=data)
         self.assertRaises(Exception, self.manager._do_ensure_l2_flow, data=data)
         # check thath both devices were called and REVERT tasks were also called
