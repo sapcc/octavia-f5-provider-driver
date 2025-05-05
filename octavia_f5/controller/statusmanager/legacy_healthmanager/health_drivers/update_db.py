@@ -156,10 +156,10 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
 
         """
         session = db_api.get_session()
-
-        # We need to see if all of the listeners are reporting in
-        db_lb = self.amphora_repo.get_lb_for_health_update(session,
-                                                           health['id'])
+        with session.begin():
+            # We need to see if all of the listeners are reporting in
+            db_lb = self.amphora_repo.get_lb_for_health_update(session,
+                                                            health['id'])
         ignore_listener_count = False
 
         if db_lb:
@@ -180,12 +180,14 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                         l for k, l in db_lb.get('listeners', {}).items()
                         if l['protocol'] == constants.PROTOCOL_UDP]
                     if udp_listeners:
-                        expected_listener_count = (
-                            self._update_listener_count_for_UDP(
-                                session, db_lb, expected_listener_count))
+                        with session.begin():
+                            expected_listener_count = (
+                                self._update_listener_count_for_UDP(
+                                    session, db_lb, expected_listener_count))
         else:
-            # If this is not a spare amp, log and skip it.
-            amp = self.amphora_repo.get(session, id=health['id'])
+            with session.begin():
+                # If this is not a spare amp, log and skip it.
+                amp = self.amphora_repo.get(session, id=health['id'])
             if not amp or amp.load_balancer_id:
                 # This is debug and not warning because this can happen under
                 # normal deleting operations.
@@ -221,8 +223,6 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
         # does not match the expected listener count
         if len(listeners) == expected_listener_count or ignore_listener_count:
 
-            lock_session = db_api.get_session(autocommit=False)
-
             # if we're running too far behind, warn and bail
             proc_delay = time.time() - health['recv_time']
             hb_interval = CONF.health_manager.heartbeat_interval
@@ -237,6 +237,9 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                             'amphora health entry. THIS IS NOT GOOD.',
                             {'id': health['id'], 'delay': proc_delay})
                 return
+
+            lock_session = db_api.get_session()
+            lock_session.begin()
 
             # if the input amphora is healthy, we update its db info
             try:
@@ -301,9 +304,10 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
             try:
                 if (listener_status is not None and
                         listener_status != db_op_status):
-                    self._update_status(
-                        session, self.listener_repo, constants.LISTENER,
-                        listener_id, listener_status, db_op_status)
+                    with session.begin():
+                        self._update_status(
+                            session, self.listener_repo, constants.LISTENER,
+                            listener_id, listener_status, db_op_status)
             except sqlalchemy_exceptions.NoResultFound:
                 LOG.error("Listener %s is not in DB", listener_id)
 
@@ -325,9 +329,10 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                     if db_pool_id in processed_pools:
                         continue
                     db_pool_dict = db_lb['pools'][db_pool_id]
-                    lb_status = self._process_pool_status(
-                        session, db_pool_id, db_pool_dict, pools,
-                        lb_status, processed_pools, potential_offline_pools)
+                    with session.begin():
+                        lb_status = self._process_pool_status(
+                            session, db_pool_id, db_pool_dict, pools,
+                            lb_status, processed_pools, potential_offline_pools)
 
         if health_msg_version >= 2:
             raw_pools = health['pools']
@@ -343,9 +348,10 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                 if db_pool_id in processed_pools:
                     continue
                 db_pool_dict = db_lb['pools'][db_pool_id]
-                lb_status = self._process_pool_status(
-                    session, db_pool_id, db_pool_dict, pools,
-                    lb_status, processed_pools, potential_offline_pools)
+                with session.begin():
+                    lb_status = self._process_pool_status(
+                        session, db_pool_id, db_pool_dict, pools,
+                        lb_status, processed_pools, potential_offline_pools)
 
         for pool_id in potential_offline_pools:
             # Skip if we eventually found a status for this pool
@@ -354,20 +360,22 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
             try:
                 # If the database doesn't already show the pool offline, update
                 if potential_offline_pools[pool_id] != constants.OFFLINE:
-                    self._update_status(
-                        session, self.pool_repo, constants.POOL,
-                        pool_id, constants.OFFLINE,
-                        potential_offline_pools[pool_id])
+                    with session.begin():
+                        self._update_status(
+                            session, self.pool_repo, constants.POOL,
+                            pool_id, constants.OFFLINE,
+                            potential_offline_pools[pool_id])
             except sqlalchemy_exceptions.NoResultFound:
                 LOG.error("Pool %s is not in DB", pool_id)
 
         # Update the load balancer status last
         try:
             if lb_status != db_lb['operating_status']:
-                self._update_status(
-                    session, self.loadbalancer_repo,
-                    constants.LOADBALANCER, db_lb['id'], lb_status,
-                    db_lb[constants.OPERATING_STATUS])
+                with session.begin():
+                    self._update_status(
+                        session, self.loadbalancer_repo,
+                        constants.LOADBALANCER, db_lb['id'], lb_status,
+                        db_lb[constants.OPERATING_STATUS])
         except sqlalchemy_exceptions.NoResultFound:
             LOG.error("Load balancer %s is not in DB", db_lb.id)
 
@@ -520,20 +528,20 @@ class UpdateStatsDb(update_base.StatsUpdateBase, stats.StatsMixin):
 
         """
         session = db_api.get_session()
-
-        amphora_id = health_message['id']
-        listeners = health_message['listeners']
-        for listener_id, listener in listeners.items():
-            listener_stats = listener.get('stats')
-            stats_args = {'bytes_in': listener_stats['rx'], 'bytes_out': listener_stats['tx'],
-                          'active_connections': listener_stats['conns'],
-                          'total_connections': listener_stats['totconns'],
-                          'request_errors': listener_stats['ereq']}
-            stats_obj = ListenerStatistics(
-                listener_id=listener_id,
-                amphora_id=amphora_id,
-                **stats_args
-            )
-            LOG.debug("Listener %s / Amphora %s stats: %s",
-                      listener_id, amphora_id, stats_args)
-            self.listener_stats_repo.replace(session, stats_obj)
+        with session.begin():
+            amphora_id = health_message['id']
+            listeners = health_message['listeners']
+            for listener_id, listener in listeners.items():
+                listener_stats = listener.get('stats')
+                stats_args = {'bytes_in': listener_stats['rx'], 'bytes_out': listener_stats['tx'],
+                            'active_connections': listener_stats['conns'],
+                            'total_connections': listener_stats['totconns'],
+                            'request_errors': listener_stats['ereq']}
+                stats_obj = ListenerStatistics(
+                    listener_id=listener_id,
+                    amphora_id=amphora_id,
+                    **stats_args
+                )
+                LOG.debug("Listener %s / Amphora %s stats: %s",
+                        listener_id, amphora_id, stats_args)
+                self.listener_stats_repo.replace(session, stats_obj)

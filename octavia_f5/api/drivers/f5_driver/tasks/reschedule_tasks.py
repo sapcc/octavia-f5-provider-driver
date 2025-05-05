@@ -44,8 +44,9 @@ class GetLoadBalancerByID(RescheduleTasks):
 
     def execute(self, loadbalancer_id):
         LOG.debug("Get load balancer from DB by id: %s ", loadbalancer_id)
-        return self._loadbalancer_repo.get(db_apis.get_session(),
-                                           id=loadbalancer_id)
+        with db_apis.session().begin() as session:
+            return self._loadbalancer_repo.get(session,
+                                               id=loadbalancer_id)
 
 
 class GetOldAgentFromLoadBalancer(RescheduleTasks):
@@ -93,7 +94,8 @@ class RewriteAmphoraEntry(RescheduleTasks):
     def execute(self, load_balancer: models.LoadBalancer, candidate: str, *args, **kwargs):
         LOG.debug("RewriteAmphoraEntry %s: Changing host '%s' to '%s'.",
                   load_balancer.id, load_balancer.server_group_id, candidate)
-        self._amphora_repo.update(db_apis.get_session(), load_balancer.id, compute_flavor=candidate)
+        with db_apis.session().begin() as session:
+            self._amphora_repo.update(session, load_balancer.id, compute_flavor=candidate)
 
     def revert(self, result, load_balancer: models.LoadBalancer, candidate: str, removal_host: str, **kwargs):
         """Handle a failure to force adding a loadbalancer."""
@@ -104,12 +106,13 @@ class RewriteAmphoraEntry(RescheduleTasks):
             return
         LOG.warning("RewriteAmphoraEntry: Reverting host change of amphora %s from '%s' to '%s'",
                     load_balancer.id, candidate, removal_host)
-        self._amphora_repo.update(db_apis.get_session(), load_balancer.id, compute_flavor=removal_host)
+        with db_apis.session().begin() as session:
+            self._amphora_repo.update(session, load_balancer.id, compute_flavor=removal_host)
 
 
 class RewriteLoadBalancerEntry(RescheduleTasks):
     def execute(self, load_balancer: models.LoadBalancer, candidate: str, *args, **kwargs):
-        with db_apis.get_session() as session:
+        with db_apis.session().begin() as session:
 
             # find out new availability zone
             azps, _ = self._azp_repo.get_all(session)
@@ -136,5 +139,7 @@ class RewriteLoadBalancerEntry(RescheduleTasks):
 
         LOG.warning("RewriteLoadBalancerEntry: Reverting host change of loadbalancer %s: Changing host from '%s' to '%s' and availability zone back to '%s'.",
                     load_balancer.id, candidate, removal_host, load_balancer.availability_zone)
-        self._loadbalancer_repo.update(db_apis.get_session(), load_balancer.id,
-                server_group_id=removal_host, availability_zone=load_balancer.availability_zone)
+        with db_apis.session().begin() as session:
+            self._loadbalancer_repo.update(
+                session, load_balancer.id, server_group_id=removal_host,
+                availability_zone=load_balancer.availability_zone)

@@ -42,7 +42,7 @@ _db_session = mock.MagicMock()
 
 @mock.patch('octavia_f5.controller.worker.status_manager.StatusManager')
 @mock.patch('octavia_f5.controller.worker.sync_manager.SyncManager')
-@mock.patch('octavia_f5.db.api.get_session', return_value=_db_session)
+@mock.patch('octavia_f5.db.api.session', return_value=_db_session)
 class TestControllerWorker(base.TestCase):
     def setUp(self):
         super(TestControllerWorker, self).setUp()
@@ -57,12 +57,14 @@ class TestControllerWorker(base.TestCase):
     def test_register_in_availability_zone(self,
                                            mock_azp_repo,
                                            mock_az_repo,
-                                           mock_api_get_session,
+                                           mock_api_session,
                                            mock_sync_manager,
                                            mock_status_manager):
         az = 'fake_az'
         fake_azp_id = uuidutils.generate_uuid()
         cw = controller_worker.ControllerWorker()
+
+        begin_session = mock_api_session().begin().__enter__()
 
         # existing empty az
         mock_az_repo_instance = mock_az_repo.return_value
@@ -71,10 +73,10 @@ class TestControllerWorker(base.TestCase):
 
         cw.register_in_availability_zone(az)
 
-        mock_az_repo_instance.get.assert_called_once_with(_db_session, name=az)
-        mock_az_repo_instance.get_availability_zone_metadata_dict.assert_called_once_with(_db_session, az)
+        mock_az_repo_instance.get.assert_called_once_with(begin_session, name=az)
+        mock_az_repo_instance.get_availability_zone_metadata_dict.assert_called_once_with(begin_session, az)
         mock_azp_repo.return_value.update.assert_called_once_with(
-            _db_session, id=fake_azp_id, availability_zone_data=json.dumps({'hosts': [CONF.host]}))
+            begin_session, id=fake_azp_id, availability_zone_data=json.dumps({'hosts': [CONF.host]}))
 
         # non-existing az
         mock_az_repo_instance.get.return_value = None
@@ -96,13 +98,15 @@ class TestControllerWorker(base.TestCase):
                                       mock_ensure_selfips,
                                       mock_lb_repo_get_all_by_network,
                                       mock_lb_repo_get,
-                                      mock_api_get_session,
+                                      mock_api_session,
                                       mock_sync_manager,
                                       mock_status_manager):
         cw = controller_worker.ControllerWorker()
         cw.remove_loadbalancer(LB_ID)
 
-        mock_lb_repo_get_all_by_network.assert_called_once_with(_db_session, network_id=NETWORK_ID, show_deleted=False)
-        mock_lb_repo_get.assert_called_once_with(_db_session, id=LB_ID)
+        begin_session = mock_api_session().begin().__enter__()
+
+        mock_lb_repo_get_all_by_network.assert_called_once_with(begin_session, network_id=NETWORK_ID, show_deleted=False)
+        mock_lb_repo_get.assert_called_once_with(begin_session, id=LB_ID)
         mock_ensure_selfips.assert_called_with([_load_balancer_mock], CONF.host, cleanup_orphans=False)
         mock_cleanup_selfips.assert_called_with([_selfip])

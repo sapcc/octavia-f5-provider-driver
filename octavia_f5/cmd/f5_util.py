@@ -70,8 +70,8 @@ def main():
     elif CONF.agent_host:
         _filter_dict.update(host=CONF.agent_host)
     # else --all
-
-    lbs = _loadbalancer_repo.get_all_from_host(session, **_filter_dict)
+    with session.begin():
+        lbs = _loadbalancer_repo.get_all_from_host(session, **_filter_dict)
     LOG.info('Starting manual sync for load balancers "{}" on host "{}".'.format(
         [lb.id for lb in lbs], _filter_dict['host']))
 
@@ -87,7 +87,8 @@ def main():
         try:
             if _sync_manager.tenant_update(network_id):
                 _status_manager.update_status(loadbalancers)
-                lock_session = db_apis.get_session(autocommit=False)
+                lock_session = db_apis.get_session()
+                lock_session.begin()
                 for loadbalancer in loadbalancers:
                     _quota_repo.update(lock_session, project_id=loadbalancer.project_id, quota=_reset_dict)
                 lock_session.commit()

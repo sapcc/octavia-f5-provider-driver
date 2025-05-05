@@ -45,7 +45,8 @@ F5_POOL_MEMBER_STATS = '/mgmt/tm/ltm/pool/{}/members/stats'
 class DatabaseLockSession(object):
     """Provides a database session and rolls it back if an exception occured before exiting with-statement."""
     def __enter__(self):
-        self._lock_session = db_api.get_session(autocommit=False)
+        self._lock_session = db_api.get_session()
+        self._lock_session.begin()
         return self._lock_session
 
     def __exit__(self, exc_type, exc_val, exc_tb):

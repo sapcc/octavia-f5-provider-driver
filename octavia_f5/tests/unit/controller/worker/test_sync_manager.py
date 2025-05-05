@@ -59,7 +59,7 @@ class TestSyncManager(base.TestCase):
 
         mock_lb = mock.Mock(spec=models.LoadBalancer)
         loadbalancer_repo.get_all_by_network.return_value = [mock_lb]
-        with mock.patch('octavia_f5.db.api.get_session'):
+        with mock.patch('octavia_f5.db.api.session'):
             manager.tenant_update('test-net-id', selfips=selfips)
         mock_decl_manager.get_declaration.assert_called_with(
             {'test-net-id': [mock_lb]}, ['1.2.3.4'])

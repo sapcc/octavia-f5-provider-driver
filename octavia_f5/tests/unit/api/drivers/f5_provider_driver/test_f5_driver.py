@@ -32,7 +32,8 @@ class TestF5Driver(base.TestRpc):
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         self.patches = [
             mock.patch('octavia.db.repositories.AmphoraRepository.get'),
-            mock.patch('octavia.db.api.get_session')
+            mock.patch('octavia.db.api.get_session'),
+            mock.patch('octavia.db.api.session'),
         ]
         conf.config(group="oslo_messaging", topic='foo_topic')
         conf.config(group="controller_worker", network_driver='network_noop_driver_f5')

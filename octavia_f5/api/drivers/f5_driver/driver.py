@@ -49,8 +49,9 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         :param loadbalancer_id: loadbalancer id
         :return: scheduled host
         """
-        loadbalancer = self.repositories.load_balancer.get(
-            db_apis.get_session(), id=loadbalancer_id)
+        with db_apis.session().begin() as session:
+            loadbalancer = self.repositories.load_balancer.get(
+                session, id=loadbalancer_id)
         if loadbalancer.server_group_id:
             return loadbalancer.server_group_id
 
@@ -140,28 +141,30 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
 
     # Member
     def member_create(self, member):
-        db_pool = self.repositories.pool.get(db_apis.get_session(),
-                                             id=member.pool_id)
+        with db_apis.session().begin() as session:
+            db_pool = self.repositories.pool.get(session, id=member.pool_id)
         payload = {consts.MEMBER: member.to_dict()}
-        db_pool = self.repositories.pool.get(db_apis.get_session(), id=member.pool_id)
         client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
         client.cast({}, 'create_member', **payload)
 
     def member_delete(self, member):
-        db_pool = self.repositories.pool.get(db_apis.get_session(), id=member.pool_id)
+        with db_apis.session().begin() as session:
+            db_pool = self.repositories.pool.get(session, id=member.pool_id)
         payload = {consts.MEMBER: member.to_dict()}
         client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
         client.cast({}, 'delete_member', **payload)
 
     def member_update(self, old_member, new_member):
-        db_pool = self.repositories.pool.get(db_apis.get_session(), id=old_member.pool_id)
+        with db_apis.session().begin() as session:
+            db_pool = self.repositories.pool.get(session, id=old_member.pool_id)
         payload = {consts.ORIGINAL_MEMBER: old_member.to_dict(),
                    consts.MEMBER_UPDATES: {}}
         client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
         client.cast({}, 'update_member', **payload)
 
     def member_batch_update(self, pool_id, members):
-        db_pool = self.repositories.pool.get(db_apis.get_session(), id=pool_id)
+        with db_apis.session().begin() as session:
+            db_pool = self.repositories.pool.get(session, id=pool_id)
         payload = {'old_members': [],
                    'new_members': [],
                    'updated_members': []}
@@ -180,20 +183,23 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
 
     def health_monitor_create(self, healthmonitor):
         self._health_monitor_check(healthmonitor)
-        db_pool = self.repositories.pool.get(db_apis.get_session(), id=healthmonitor.pool_id)
+        with db_apis.session().begin() as session:
+            db_pool = self.repositories.pool.get(session, id=healthmonitor.pool_id)
         payload = {consts.HEALTH_MONITOR: healthmonitor.to_dict()}
         client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
         client.cast({}, 'create_health_monitor', **payload)
 
     def health_monitor_delete(self, healthmonitor):
-        db_pool = self.repositories.pool.get(db_apis.get_session(), id=healthmonitor.pool_id)
+        with db_apis.session().begin() as session:
+            db_pool = self.repositories.pool.get(session, id=healthmonitor.pool_id)
         payload = {consts.HEALTH_MONITOR: healthmonitor.to_dict()}
         client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
         client.cast({}, 'delete_health_monitor', **payload)
 
     def health_monitor_update(self, old_healthmonitor, new_healthmonitor):
         self._health_monitor_check(new_healthmonitor)
-        db_pool = self.repositories.pool.get(db_apis.get_session(), id=old_healthmonitor.pool_id)
+        with db_apis.session().begin() as session:
+            db_pool = self.repositories.pool.get(session, id=old_healthmonitor.pool_id)
         payload = {consts.ORIGINAL_HEALTH_MONITOR: old_healthmonitor.to_dict(),
                    consts.HEALTH_MONITOR_UPDATES: {}}
         client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
@@ -201,19 +207,22 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
 
     # L7 Policy
     def l7policy_create(self, l7policy):
-        db_listener = self.repositories.listener.get(db_apis.get_session(), id=l7policy.listener_id)
+        with db_apis.session().begin() as session:
+            db_listener = self.repositories.listener.get(session, id=l7policy.listener_id)
         payload = {consts.L7POLICY: l7policy.to_dict()}
         client = self.client.prepare(server=self._get_server(db_listener.load_balancer_id))
         client.cast({}, 'create_l7policy', **payload)
 
     def l7policy_delete(self, l7policy):
-        db_listener = self.repositories.listener.get(db_apis.get_session(), id=l7policy.listener_id)
+        with db_apis.session().begin() as session:
+            db_listener = self.repositories.listener.get(session, id=l7policy.listener_id)
         payload = {consts.L7POLICY: l7policy.to_dict()}
         client = self.client.prepare(server=self._get_server(db_listener.load_balancer_id))
         client.cast({}, 'delete_l7policy', **payload)
 
     def l7policy_update(self, old_l7policy, new_l7policy):
-        db_listener = self.repositories.listener.get(db_apis.get_session(), id=old_l7policy.listener_id)
+        with db_apis.session().begin() as session:
+            db_listener = self.repositories.listener.get(session, id=old_l7policy.listener_id)
         payload = {consts.ORIGINAL_L7POLICY: old_l7policy.to_dict(),
                    consts.L7POLICY_UPDATES: {}}
         client = self.client.prepare(server=self._get_server(db_listener.load_balancer_id))
@@ -221,21 +230,24 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
 
     # L7 Rule
     def l7rule_create(self, l7rule):
-        db_l7 = self.repositories.l7policy.get(db_apis.get_session(), id=l7rule.l7policy_id)
+        with db_apis.session().begin() as session:
+            db_l7 = self.repositories.l7policy.get(session, id=l7rule.l7policy_id)
 
         payload = {consts.L7RULE: l7rule.to_dict()}
         client = self.client.prepare(server=self._get_server(db_l7.listener.load_balancer_id))
         client.cast({}, 'create_l7rule', **payload)
 
     def l7rule_delete(self, l7rule):
-        db_l7 = self.repositories.l7policy.get(db_apis.get_session(), id=l7rule.l7policy_id)
+        with db_apis.session().begin() as session:
+            db_l7 = self.repositories.l7policy.get(session, id=l7rule.l7policy_id)
 
         payload = {consts.L7RULE: l7rule.to_dict()}
         client = self.client.prepare(server=self._get_server(db_l7.listener.load_balancer_id))
         client.cast({}, 'delete_l7rule', **payload)
 
     def l7rule_update(self, old_l7rule, new_l7rule):
-        db_l7 = self.repositories.l7policy.get(db_apis.get_session(), id=old_l7rule.l7policy_id)
+        with db_apis.session().begin() as session:
+            db_l7 = self.repositories.l7policy.get(session, id=old_l7rule.l7policy_id)
 
         payload = {consts.ORIGINAL_L7RULE: old_l7rule.to_dict(),
                    consts.L7RULE_UPDATES: {}}

@@ -343,8 +343,8 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
 
         # Fetch from database
         if host:
-            session = db_apis.get_session()
-            return self.amphora_repo.get_devices_for_host(session, host)
+            with db_apis.session().begin() as session:
+                return self.amphora_repo.get_devices_for_host(session, host)
 
         raise Exception(f"Hostname not found for host {host}")
 

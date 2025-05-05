@@ -178,8 +178,9 @@ class SyncManager(object):
             self_ips = [fixed_ip.ip_address for selfip in selfips for fixed_ip in selfip.fixed_ips]
 
         if not loadbalancers:
-            loadbalancers = self._loadbalancer_repo.get_all_by_network(
-                db_apis.get_session(), network_id=network_id, show_deleted=False)
+            with db_apis.session().begin() as session:
+                loadbalancers = self._loadbalancer_repo.get_all_by_network(
+                    session, network_id=network_id, show_deleted=False)
         if not loadbalancers:
             raise exceptions.AS3Exception("No loadbalancers specified for tenant_update")
 

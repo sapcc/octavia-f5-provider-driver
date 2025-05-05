@@ -46,8 +46,8 @@ class GetCandidate(BaseNetworkTask):
     def execute(self, load_balancer: data_models.LoadBalancer):
         # select a candidate to schedule to
         try:
-            session = db_apis.get_session()
-            candidate = self.scheduler.get_candidates(session, load_balancer.availability_zone)[0]
+            with db_apis.session().begin() as session:
+                candidate = self.scheduler.get_candidates(session, load_balancer.availability_zone)[0]
         except (ValueError, IndexError) as e:
             message = _('Scheduling failed, no target devices found')
             LOG.error(message)
@@ -181,11 +181,12 @@ class GetAllLoadBalancersForNetwork(BaseNetworkTask):
 
     def execute(self, network_id, agent):
         LOG.debug("Get load balancers from DB for network id: %s ", network_id)
-        return self.lb_repo.get_all_by_network(
-            db_apis.get_session(),
-            network_id=network_id,
-            host=agent,
-            show_deleted=False)
+        with db_apis.session().begin() as session:
+            return self.lb_repo.get_all_by_network(
+                session,
+                network_id=network_id,
+                host=agent,
+                show_deleted=False)
 
 
 class GetAllSelfIPsForNetwork(BaseNetworkTask):
