@@ -29,11 +29,12 @@ CONF = cfg.CONF
 LAST_PERSIST = 0
 LOG = logging.getLogger(__name__)
 
+
 def get_name(network_id):
-    return "{}{}".format(constants.PREFIX_NETWORK,
-                         network_id.replace('-', '_'))
+    return f"{constants.PREFIX_NETWORK}{network_id.replace('-', '_')}"
 
 
+# pylint: disable=too-many-positional-arguments
 def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_manager, esd_repo):
 
     project_id = None
@@ -42,14 +43,14 @@ def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_ma
 
     tenant_dict = {}
     if segmentation_id:
-        tenant_dict['label'] = '{}{}'.format(constants.PREFIX_PROJECT, project_id or 'none')
+        tenant_dict['label'] = f'{constants.PREFIX_PROJECT}{project_id or 'none'}'
         tenant_dict['defaultRouteDomain'] = segmentation_id
 
     tenant = as3.Tenant(**tenant_dict)
 
     # Skip members with the same IP as a VIP or SelfIP
     ips_to_skip = [load_balancer.vip.ip_address for load_balancer in loadbalancers
-                        if not driver_utils.pending_delete(load_balancer)] + self_ips
+                   if not driver_utils.pending_delete(load_balancer)] + self_ips
 
     for loadbalancer in loadbalancers:
         # Skip load balancer in (pending) deletion
@@ -70,7 +71,8 @@ def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_ma
                         # Error connecting to keystore, skip tenant update
                         raise e
 
-                    LOG.error("Could not retrieve certificate, assuming it is deleted, skipping listener '%s': %s", listener.id, e)
+                    LOG.error("Could not retrieve certificate, assuming it is deleted, skipping "
+                              "listener '%s': %s", listener.id, e)
                     if status_manager:
                         # Key / Container not found in keystore
                         status_manager.set_error(listener)

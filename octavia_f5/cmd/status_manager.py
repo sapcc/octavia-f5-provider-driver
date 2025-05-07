@@ -63,8 +63,8 @@ def main():
     # leading to too high CPU utilization
     min_health_check_interval = 60
     if CONF.status_manager.health_check_interval < min_health_check_interval:
-        raise cfg.Error(msg="To prevent device overload, the health check interval must not be lower than {}"
-                        .format(min_health_check_interval))
+        raise cfg.Error(msg=("To prevent device overload, the health check "
+                             f"interval must not be lower than {min_health_check_interval}"))
 
     @periodics.periodic(CONF.status_manager.health_check_interval,
                         run_immediately=True)

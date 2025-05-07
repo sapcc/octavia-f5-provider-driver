@@ -140,8 +140,7 @@ class StatusManager(object):
         try:
             self._octavia_driver_updater.update_loadbalancer_status(status)
         except driver_exceptions.UpdateStatusError as e:
-            msg = ("Error while updating status to octavia: "
-                   "%s") % e.fault_string
+            msg = f"Error while updating status to octavia: {e.fault_string}"
             LOG.error(msg)
             raise driver_exceptions.UpdateStatusError(msg)
         finally:

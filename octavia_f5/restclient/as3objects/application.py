@@ -19,4 +19,4 @@ LOG = logging.getLogger(__name__)
 
 
 def get_name(loadbalancer_id):
-    return "{}{}".format(constants.PREFIX_LOADBALANCER, loadbalancer_id)
+    return f"{constants.PREFIX_LOADBALANCER}{loadbalancer_id}"

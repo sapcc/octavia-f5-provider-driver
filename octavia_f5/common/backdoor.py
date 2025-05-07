@@ -46,7 +46,7 @@ def _get_nativethreads():
     lines = []
     for thread_id, stack in sys._current_frames().items():
         lines.append(str(thread_id))
-        lines.extend(l.rstrip() for l in traceback.format_stack(stack))
+        lines.extend(line.rstrip() for line in traceback.format_stack(stack))
         lines.append('')
     return '\n'.join(lines)
 

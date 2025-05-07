@@ -30,8 +30,7 @@ class TestService(base.TestCase):
         self.conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         self.conf.config(group='f5_agent',
                          tcp_service_type='Service_L4')
-        super(TestService, self).setUp()
-
+        super().setUp()
 
     @mock.patch("octavia_f5.utils.esd_repo.EsdRepository")
     @mock.patch("octavia_f5.utils.cert_manager.CertManagerWrapper")
@@ -47,7 +46,7 @@ class TestService(base.TestCase):
 
         test_profile_name = "test_f5_fastl4_profile"
         esd_repo.get_esd.return_value = {
-            "lbaas_fastl4" : test_profile_name,
+            "lbaas_fastl4": test_profile_name,
         }
 
         svc = service.get_service(mock_listener, cert_manager, esd_repo)

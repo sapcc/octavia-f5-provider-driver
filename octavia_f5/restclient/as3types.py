@@ -18,6 +18,7 @@ import string
 REMARK_FORBIDDEN = ["\"", "\\"]
 LABEL_FORBIDDEN = ["#", "&", "*", "<", ">", "?", "[", "\\", "]", "`", "\""]
 
+
 def f5remark(remark):
     if not remark:
         return ""

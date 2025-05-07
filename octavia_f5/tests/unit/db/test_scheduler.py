@@ -38,7 +38,7 @@ class TestScheduler(base.OctaviaDBTestBase):
     FAKE_DEVICE_PAIR_2 = "fake.device.pair2"
 
     def setUp(self):
-        super(TestScheduler, self).setUp()
+        super().setUp()
         self.repos = repo.Repositories()
         self.device_amphora_1 = self.repos.amphora.create(
             self.session, id=self.FAKE_DEVICE_AMPHORA_ID_1,
@@ -103,7 +103,6 @@ class TestScheduler(base.OctaviaDBTestBase):
             "Order of device pairs not consistent")
         for lb in lbs:
             self.repos.load_balancer.delete(self.session, id=lb.id)
-
 
     @mock.patch('octavia_f5.controller.worker.status_manager.StatusManager')
     @mock.patch('octavia_f5.controller.worker.sync_manager.SyncManager')

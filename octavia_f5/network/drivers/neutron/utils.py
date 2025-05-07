@@ -12,7 +12,6 @@
 #  License for the specific language governing permissions and limitations
 #  under the License.
 
-from octavia.common import constants
 from octavia_f5.network import data_models as network_models
 
 

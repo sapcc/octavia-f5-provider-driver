@@ -45,7 +45,7 @@ class AS3DeclarationManager(object):
 
         # PUT ADC (Application Delivery Controller)
         adc = ADC(
-            id="urn:uuid:{}".format(uuid.uuid4()),
+            id=f"urn:uuid:{uuid.uuid4()}",
             label="F5 BigIP Octavia Provider")
         declaration.set_adc(adc)
 

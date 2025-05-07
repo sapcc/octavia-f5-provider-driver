@@ -39,7 +39,7 @@ class TestF5Tasks(base.TestCase):
         conf.config(group="controller_worker",
                     network_driver='network_noop_driver_f5')
 
-        super(TestF5Tasks, self).setUp()
+        super().setUp()
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
@@ -72,7 +72,6 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.patch.assert_called_with(path='/mgmt/tm/net/route/~Common~vlan-1234',
                                             json={'gw': '2.3.4.5%1234', 'network': 'default%1234'})
         mock_bigip.post.assert_not_called()
-
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
@@ -191,7 +190,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.assert_called_with(
             path=f"/mgmt/tm/net/self/{selfip_name}")
         mock_bigip.post.assert_called_with(
-            path=f"/mgmt/tm/net/self",
+            path="/mgmt/tm/net/self",
             json={
                 'name': selfip_name,
                 'vlan': "/Common/vlan-1234",
@@ -232,8 +231,7 @@ class TestF5Tasks(base.TestCase):
             segments=[{'provider:physical_network': 'physnet',
                        'provider:segmentation_id': 1234}]
         )
-        subnet_route_name = "net_{}_sub_{}".format(
-            mock_network.id, mock_subnet.id)
+        subnet_route_name = f"net_{mock_network.id}_sub_{mock_subnet.id}"
         mock_get_subnet.side_effect = [mock_subnet, mock_subnet]
         mock_bigip.get.side_effect = [
             test_f5_flows.MockResponse({}, 404),
@@ -387,6 +385,7 @@ class TestF5Tasks(base.TestCase):
             'network': mock_network,
         }
         # exception to be thrown during task execution
+
         class TestException(Exception):
             pass
 
@@ -409,7 +408,7 @@ class TestF5Tasks(base.TestCase):
         # calls in revert()
         mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_port.id}")
         mock_bigip.post.assert_called_with(
-            path=f"/mgmt/tm/net/self/",
+            path="/mgmt/tm/net/self/",
             json={
                 'name': selfip_name,
                 'vlan': "/Common/vlan-1234",
@@ -437,7 +436,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_bigip.delete.side_effect = TestException(
             "Test exception to trigger rollback of EnsureSelfIP (case 3)")
-        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)] # only HTTP code matters
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)]  # only HTTP code matters
         store['bigip'] = mock_bigip
         store['existing_selfips'] = [selfip_port_dict]
         self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
@@ -472,6 +471,7 @@ class TestF5Tasks(base.TestCase):
             'network': mock_network,
         }
         # exception to be thrown during task execution
+
         class TestException(Exception):
             pass
 
@@ -495,7 +495,7 @@ class TestF5Tasks(base.TestCase):
         # calls in revert()
         mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
         mock_bigip.post.assert_called_with(
-            path=f"/mgmt/tm/net/route",
+            path="/mgmt/tm/net/route",
             json={
                 'name': subnet_route_name,
                 'tmInterface': subnet_route['tmInterface'],
@@ -523,7 +523,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_bigip.delete.side_effect = TestException(
             "Test exception to trigger rollback of EnsureSubnetRoute (case 3)")
-        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)] # only HTTP code matters
+        mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)]  # only HTTP code matters
         store['bigip'] = mock_bigip
         store['existing_subnet_routes'] = [subnet_route]
         self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
@@ -533,4 +533,3 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
         mock_bigip.post.assert_not_called()
         mock_bigip.patch.assert_not_called()
-

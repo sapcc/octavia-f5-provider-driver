@@ -53,24 +53,22 @@ SUPPORTED_ACTION_TYPE = [
 
 
 def get_name(policy_id):
-    return "{}{}".format(f5_const.PREFIX_POLICY, policy_id)
+    return f"{f5_const.PREFIX_POLICY}{policy_id}"
 
 
 def get_wrapper_name(listener_id):
-    return "{}{}".format(f5_const.PREFIX_WRAPPER_POLICY, listener_id)
+    return f"{f5_const.PREFIX_WRAPPER_POLICY}{listener_id}"
 
 
 def _get_condition(l7rule):
     if l7rule.type not in COND_TYPE_MAP:
         raise PolicyTypeNotSupported(
-            "l7policy-id={}, l7rule-id={}, type={}".format(
-                l7rule.l7policy_id, l7rule.id, l7rule.type))
+            f"l7policy-id={l7rule.l7policy_id}, l7rule-id={l7rule.id}, type={l7rule.type}")
     if l7rule.compare_type not in COMPARE_TYPE_MAP:
         raise CompareTypeNotSupported(
-            "l7policy-id={}, l7rule-id={}, type={}".format(
-                l7rule.l7policy_id, l7rule.id, l7rule.compare_type))
+            f"l7policy-id={l7rule.l7policy_id}, l7rule-id={l7rule.id}, type={l7rule.compare_type}")
 
-    args = dict()
+    args = {}
     if l7rule.invert:
         operand = COMPARE_TYPE_INVERT_MAP[l7rule.compare_type]
     else:
@@ -92,7 +90,7 @@ def _get_action(l7policy):
     if l7policy.action not in SUPPORTED_ACTION_TYPE:
         raise PolicyActionNotSupported()
 
-    args = dict()
+    args = {}
     if l7policy.action == constants.L7POLICY_ACTION_REDIRECT_TO_POOL:
         args['type'] = 'forward'
         pool_name = pool.get_name(l7policy.redirect_pool_id)
@@ -106,7 +104,7 @@ def _get_action(l7policy):
             args['code'] = l7policy.redirect_http_code
     elif l7policy.action == constants.L7POLICY_ACTION_REDIRECT_PREFIX:
         args['type'] = 'httpRedirect'
-        args['location'] = 'tcl:{}[HTTP::uri]'.format(l7policy.redirect_prefix)
+        args['location'] = f'tcl:{l7policy.redirect_prefix}[HTTP::uri]'
         args['event'] = 'request'
     elif l7policy.action == constants.L7POLICY_ACTION_REJECT:
         args['type'] = 'drop'
@@ -118,7 +116,7 @@ def get_endpoint_policy(l7policies):
     wrapper_name = ', '.join([l7policy.name for l7policy in l7policies if l7policy.name])
     wrapper_desc = ', '.join([l7policy.description for l7policy in l7policies if l7policy.description])
 
-    args = dict()
+    args = {}
     args['label'] = as3types.f5label(wrapper_name or wrapper_desc)
     args['remark'] = as3types.f5remark(wrapper_desc or wrapper_name)
     args['rules'] = [Endpoint_Policy_Rule(

@@ -64,7 +64,7 @@ def do_upgrade(config, cmd):
                                'not both'))
         if delta < 0:
             raise SystemExit(_('Negative delta (downgrade) not supported'))
-        revision = '%s+%d' % (revision, delta)
+        revision = f'{revision}+{delta}'
 
     do_alembic_command(config, cmd, revision, sql=CONF.command.sql)
 

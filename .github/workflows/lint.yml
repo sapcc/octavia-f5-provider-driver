@@ -1,10 +1,10 @@
-name: Pylint
+name: Linting the repository
 
 on: [push, pull_request]
 
 jobs:
-  build:
-    runs-on: ubuntu-22.04
+  lint:
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version: [3.12]

@@ -70,6 +70,6 @@ def main():
         try:
             db_cleanup.cleanup_load_balancers()
         except Exception as e:
-            LOG.error('Housekeeping caught the following exception: {}'.format(e))
+            LOG.error(f'Housekeeping caught the following exception: {e}')
             _metric_housekeeping_exceptions.inc()
         time.sleep(interval)

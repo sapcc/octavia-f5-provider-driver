@@ -21,6 +21,7 @@ from octavia_f5.utils import driver_utils
 LOG = logging.getLogger(__name__)
 
 
+# pylint: disable=too-many-positional-arguments
 class Network(BaseDataModel):
     """ This is a helper class what can provide vlan tag and
         default gateway """
@@ -62,6 +63,6 @@ class Network(BaseDataModel):
             if segment['provider:physical_network'] == self._network_driver.physical_network:
                 return segment['provider:segmentation_id']
 
-        err = 'Error retrieving segment id for physical network {} of network {}'.format(
-                  self._network_driver.physical_network, self.id)
+        err = ('Error retrieving segment id for physical network '
+               f'{self._network_driver.physical_network} of network {self.id}')
         raise base.NetworkException(err)

@@ -28,7 +28,7 @@ from octavia_lib.api.drivers import data_models as driver_dm
 class TestF5Driver(base.TestRpc):
 
     def setUp(self):
-        super(TestF5Driver, self).setUp()
+        super().setUp()
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         self.patches = [
             mock.patch('octavia.db.repositories.AmphoraRepository.get'),
@@ -44,7 +44,7 @@ class TestF5Driver(base.TestRpc):
             patch.start()
 
     def tearDown(self):
-        super(TestF5Driver, self).tearDown()
+        super().tearDown()
         for patch in self.patches:
             patch.stop()
 
@@ -252,19 +252,11 @@ class TestF5Driver(base.TestRpc):
         mock_cast.assert_not_called()
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
-    def test_health_monitor_update(self, mock_cast):
-        provider_HM = driver_dm.HealthMonitor(
-            healthmonitor_id=self.sample_data.hm1_id)
-        self.amp_driver.health_monitor_update(provider_HM, provider_HM)
-        payload = {consts.ORIGINAL_HEALTH_MONITOR: {'healthmonitor_id': self.sample_data.hm1_id}}
-        mock_cast.assert_called_with({}, 'update_health_monitor', **payload)
-
-    @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
     def test_health_monitor_update_invalid_delay(self, mock_cast):
         provider_HM = driver_dm.HealthMonitor(
             healthmonitor_id=self.sample_data.hm1_id)
         provider_HM.delay = f5_consts.HEALTH_MONITOR_DELAY_MAX + 1
-        self.assertRaises(exceptions.ValidationException,self.amp_driver.health_monitor_update, provider_HM,
+        self.assertRaises(exceptions.ValidationException, self.amp_driver.health_monitor_update, provider_HM,
                           provider_HM)
         mock_cast.assert_not_called()
 

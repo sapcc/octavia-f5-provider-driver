@@ -45,7 +45,7 @@ _db_session = mock.MagicMock()
 @mock.patch('octavia_f5.db.api.session', return_value=_db_session)
 class TestControllerWorker(base.TestCase):
     def setUp(self):
-        super(TestControllerWorker, self).setUp()
+        super().setUp()
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         conf.config(group="f5_agent", prometheus=False)
         conf.config(group="controller_worker", network_driver='network_noop_driver_f5')

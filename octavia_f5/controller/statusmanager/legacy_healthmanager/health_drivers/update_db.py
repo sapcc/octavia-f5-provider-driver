@@ -12,7 +12,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import datetime
+from datetime import datetime, timezone
 import time
 import timeit
 
@@ -35,7 +35,7 @@ LOG = logging.getLogger(__name__)
 
 class UpdateHealthDb(update_base.HealthUpdateBase):
     def __init__(self):
-        super(UpdateHealthDb, self).__init__()
+        super().__init__()
         # first setup repo for amphora, listener,member(nodes),pool repo
         self.amphora_repo = repo.AmphoraRepository()
         self.amphora_health_repo = repo.AmphoraHealthRepository()
@@ -44,6 +44,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
         self.member_repo = repo.MemberRepository()
         self.pool_repo = repo.PoolRepository()
 
+    # pylint: disable=too-many-positional-arguments
     def _update_status(self, session, repo, entity_type,
                        entity_id, new_op_status, old_op_status):
         message = {}
@@ -158,8 +159,8 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
         session = db_api.get_session()
         with session.begin():
             # We need to see if all of the listeners are reporting in
-            db_lb = self.amphora_repo.get_lb_for_health_update(session,
-                                                            health['id'])
+            db_lb = self.amphora_repo.get_lb_for_health_update(
+                session, health['id'])
         ignore_listener_count = False
 
         if db_lb:
@@ -245,7 +246,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
             try:
                 self.amphora_health_repo.replace(
                     lock_session, health['id'],
-                    last_update=(datetime.datetime.utcnow()))
+                    last_update=datetime.now(timezone.utc))
                 lock_session.commit()
             except Exception:
                 with excutils.save_and_reraise_exception():
@@ -353,18 +354,18 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                         session, db_pool_id, db_pool_dict, pools,
                         lb_status, processed_pools, potential_offline_pools)
 
-        for pool_id in potential_offline_pools:
+        for pool_id, pool_data in potential_offline_pools.items():
             # Skip if we eventually found a status for this pool
             if pool_id in processed_pools:
                 continue
             try:
                 # If the database doesn't already show the pool offline, update
-                if potential_offline_pools[pool_id] != constants.OFFLINE:
+                if pool_data != constants.OFFLINE:
                     with session.begin():
                         self._update_status(
                             session, self.pool_repo, constants.POOL,
                             pool_id, constants.OFFLINE,
-                            potential_offline_pools[pool_id])
+                            pool_data)
             except sqlalchemy_exceptions.NoResultFound:
                 LOG.error("Pool %s is not in DB", pool_id)
 
@@ -379,6 +380,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
         except sqlalchemy_exceptions.NoResultFound:
             LOG.error("Load balancer %s is not in DB", db_lb.id)
 
+    # pylint: disable=too-many-positional-arguments
     def _process_pool_status(
             self, session, pool_id, db_pool_dict, pools, lb_status,
             processed_pools, potential_offline_pools):
@@ -480,7 +482,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
 class UpdateStatsDb(update_base.StatsUpdateBase, stats.StatsMixin):
 
     def __init__(self):
-        super(UpdateStatsDb, self).__init__()
+        super().__init__()
         self.repo_listener = repo.ListenerRepository()
 
     def update_stats(self, health_message, srcaddr='127.0.0.1'):
@@ -534,14 +536,13 @@ class UpdateStatsDb(update_base.StatsUpdateBase, stats.StatsMixin):
             for listener_id, listener in listeners.items():
                 listener_stats = listener.get('stats')
                 stats_args = {'bytes_in': listener_stats['rx'], 'bytes_out': listener_stats['tx'],
-                            'active_connections': listener_stats['conns'],
-                            'total_connections': listener_stats['totconns'],
-                            'request_errors': listener_stats['ereq']}
+                              'active_connections': listener_stats['conns'],
+                              'total_connections': listener_stats['totconns'],
+                              'request_errors': listener_stats['ereq']}
                 stats_obj = ListenerStatistics(
                     listener_id=listener_id,
                     amphora_id=amphora_id,
                     **stats_args
                 )
-                LOG.debug("Listener %s / Amphora %s stats: %s",
-                        listener_id, amphora_id, stats_args)
+                LOG.debug(f"Listener {listener_id} / Amphora {amphora_id} stats: {stats_args}")
                 self.listener_stats_repo.replace(session, stats_obj)

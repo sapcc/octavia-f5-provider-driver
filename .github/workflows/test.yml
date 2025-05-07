@@ -1,7 +1,7 @@
 # This workflow will install Python dependencies, run tests and lint with a variety of Python versions
 # For more information see: https://help.github.com/actions/language-and-framework-guides/using-python-with-github-actions
 
-name: Python package
+name: Testing the repository
 
 on:
   push:
@@ -12,7 +12,7 @@ env:
   UPPER_CONSTRAINTS: "https://raw.githubusercontent.com/sapcc/requirements/stable/2025.1-m3/upper-constraints.txt"
 
 jobs:
-  build:
+  test:
 
     runs-on: ubuntu-latest
     strategy:
@@ -34,10 +34,7 @@ jobs:
     - name: Lint with flake8
       run: |
         pip install flake8
-        # stop the build if there are Python syntax errors or undefined names
-        flake8 ./octavia_f5 --count --select=E9,F63,F7,F82 --show-source --statistics
-        # exit-zero treats all errors as warnings. The GitHub editor is 127 chars wide
-        flake8 ./octavia_f5 --count --ignore H104 --enable-extensions H106,H203,H204,H205,H904 --exit-zero --max-complexity=10 --max-line-length=127 --statistics
+        flake8 ./octavia_f5 --count --ignore H104,W504 --enable-extensions H106,H203,H204,H205,H904 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
         pip install pytest -c $UPPER_CONSTRAINTS

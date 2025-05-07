@@ -95,7 +95,7 @@ class StatusManager(object):
 
         if cfg.CONF.f5_agent.prometheus:
             prometheus_port = CONF.f5_agent.prometheus_port
-            LOG.info('Starting Prometheus HTTP server on port {}'.format(prometheus_port))
+            LOG.info(f'Starting Prometheus HTTP server on port {prometheus_port}')
             prometheus.start_http_server(prometheus_port)
 
     _metric_heartbeat = prometheus.metrics.Counter(
@@ -120,7 +120,7 @@ class StatusManager(object):
             else:
                 auth = bigip_auth.BigIPBasicAuth(bigip_url)
 
-            yield(
+            yield (
                 bigip_restclient.BigIPRestClient(
                     bigip_url=bigip_url,
                     auth=auth,
@@ -188,7 +188,7 @@ class StatusManager(object):
     def availability_check(self):
         # Check availability of all devices
         for bigip in self.bigips:
-            LOG.debug('Checking availability of device with URL {}'.format(bigip.hostname))
+            LOG.debug(f'Checking availability of device with URL {bigip.hostname}')
             timeout = CONF.status_manager.failover_timeout
 
             # Try reaching device
@@ -285,7 +285,7 @@ class StatusManager(object):
                     statobj = None
                     member_id = member['description']
                     base_path = memberstats['selfLink'][:memberstats['selfLink'].find('/stats')]
-                    member_path = '{}/{}/stats'.format(base_path, member['fullPath'].replace('/', '~'))
+                    member_path = f"{base_path}/{member['fullPath'].replace('/', '~')}/stats"
                     if member_path in memberstats['entries']:
                         statobj = memberstats['entries'][member_path]
                     elif member_path.replace('%', '%25') in memberstats['entries']:

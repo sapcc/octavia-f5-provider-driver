@@ -42,7 +42,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
     """
 
     def __init__(self):
-        super(F5ProviderDriver, self).__init__()
+        super().__init__()
 
     def _get_server(self, loadbalancer_id):
         """ Get scheduled host of the loadbalancer.
@@ -178,8 +178,8 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
             return
         if delay > f5_consts.HEALTH_MONITOR_DELAY_MAX:
             raise api_exceptions.ValidationException(
-                detail='Delay value for health monitor too high. Must not be higher than {}.'.format(
-                    f5_consts.HEALTH_MONITOR_DELAY_MAX))
+                detail=('Delay value for health monitor too high. Must not be higher '
+                        f'than {f5_consts.HEALTH_MONITOR_DELAY_MAX}.'))
 
     def health_monitor_create(self, healthmonitor):
         self._health_monitor_check(healthmonitor)
@@ -226,7 +226,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         payload = {consts.ORIGINAL_L7POLICY: old_l7policy.to_dict(),
                    consts.L7POLICY_UPDATES: {}}
         client = self.client.prepare(server=self._get_server(db_listener.load_balancer_id))
-        self.client.cast({}, 'update_l7policy', **payload)
+        client.cast({}, 'update_l7policy', **payload)
 
     # L7 Rule
     def l7rule_create(self, l7rule):
@@ -270,7 +270,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         raise exceptions.NotImplementedError(
             operator_fault_string="F5 provider does not support Loadbaslancer's flavors.")
 
-    def validate_flavor(self, flavor_metadata):
+    def validate_flavor(self, flavor_metadata):  # pylint: disable=arguments-renamed
         """Validates if driver can support flavor as defined in flavor_metadata.
 
         :param flavor_metadata (dict): Dictionary with flavor metadata.
@@ -300,7 +300,6 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
             return
 
         raise exceptions.UnsupportedOptionError(
-                user_fault_string='Failed to get the supported availability '
-                                  'zone metadata.',
-                operator_fault_string='Failed to get hosts from availability '
-                                  'zone metadata: {}'.format(availability_zone_dict))
+            user_fault_string='Failed to get the supported availability zone metadata.',
+            operator_fault_string=('Failed to get hosts from availability '
+                                   f'zone metadata: {availability_zone_dict}'))

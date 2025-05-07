@@ -32,7 +32,7 @@ def get_name(pool_id):
     :param pool_id: pool id
     :return: AS3 object name
     """
-    return "{}{}".format(f5_consts.PREFIX_POOL, pool_id)
+    return f"{f5_consts.PREFIX_POOL}{pool_id}"
 
 
 def get_pool(pool, ips_to_skip, status):
@@ -60,7 +60,7 @@ def get_pool(pool, ips_to_skip, status):
     # Never set priority group if there is only one member, even if it's a backup member
     enable_priority_group = False
     if len(pool.members) > 1:
-        enable_priority_group = any([member.backup for member in pool.members])
+        enable_priority_group = any(member.backup for member in pool.members)
 
     for member in pool.members:
         if not utils.pending_delete(member):

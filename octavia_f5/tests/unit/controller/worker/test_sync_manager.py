@@ -30,15 +30,15 @@ LOG = logging.getLogger(__name__)
 
 MOCK_BIGIP_HOSTNAME = 'test-guest-hostname'
 
+
 class TestSyncManager(base.TestCase):
     def setUp(self):
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         conf.config(group='controller_worker',
                     network_driver='network_noop_driver_f5')
-        super(TestSyncManager, self).setUp()
+        super().setUp()
 
-    @mock.patch("octavia_f5.controller.worker.sync_manager.SyncManager"
-                        ".initialize_bigips")
+    @mock.patch("octavia_f5.controller.worker.sync_manager.SyncManager.initialize_bigips")
     @mock.patch("octavia_f5.utils.esd_repo.EsdRepository")
     @mock.patch("octavia_f5.restclient.as3declaration.AS3DeclarationManager")
     def test_tenant_update_skip_selfips(self, mock_as3, mock_esd_repo, mock_init_bigips):

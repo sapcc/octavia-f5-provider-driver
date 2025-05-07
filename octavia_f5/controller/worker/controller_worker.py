@@ -91,21 +91,20 @@ class ControllerWorker(object):
 
         # start thread for AS3 provisioning loop
         LOG.info("Starting as3worker")
-        as3worker = threading.Thread(target=self.as3worker)
-        as3worker.setDaemon(True)
+        as3worker = threading.Thread(target=self.as3worker, daemon=True)
         as3worker.start()
 
         # start prometheus server
         if cfg.CONF.f5_agent.prometheus:
             prometheus_port = CONF.f5_agent.prometheus_port
-            LOG.info('Starting Prometheus HTTP server on port {}'.format(prometheus_port))
+            LOG.info(f'Starting Prometheus HTTP server on port {prometheus_port}')
             prometheus.start_http_server(prometheus_port)
 
         # 'register' this worker to its availability zone
         if CONF.f5_agent.availability_zone:
             self.register_in_availability_zone(CONF.f5_agent.availability_zone)
 
-        super(ControllerWorker, self).__init__()
+        super().__init__()
 
     def as3worker(self):
         """ AS3 Worker thread, pops tenant to refresh from thread-safe set queue"""
@@ -154,7 +153,7 @@ class ControllerWorker(object):
                 LOG.exception(e)
                 # restart
 
-    @periodics.periodic(60*60*24, run_immediately=CONF.f5_agent.sync_immediately)
+    @periodics.periodic(60 * 60 * 24, run_immediately=CONF.f5_agent.sync_immediately)
     def cleanup_orphaned_tenants(self):
         LOG.info("Running (24h) tenant cleanup")
         session = db_apis.get_session()
@@ -180,7 +179,7 @@ class ControllerWorker(object):
                 # Ignore as3 errors
                 pass
 
-    @periodics.periodic(60*4, run_immediately=CONF.f5_agent.sync_immediately)
+    @periodics.periodic(60 * 4, run_immediately=CONF.f5_agent.sync_immediately)
     def full_sync_reappearing_devices(self):
         session = db_apis.get_session()
         session.begin()
@@ -208,7 +207,7 @@ class ControllerWorker(object):
             self._amphora_repo.update(session, device.id, status=lib_consts.AMPHORA_READY)
             session.commit()
 
-    @periodics.periodic(60*60*24, run_immediately=CONF.f5_agent.sync_immediately)
+    @periodics.periodic(60 * 60 * 24, run_immediately=CONF.f5_agent.sync_immediately)
     def full_sync_l2(self):
         session = db_apis.get_session()
 
@@ -218,7 +217,7 @@ class ControllerWorker(object):
                 session, show_deleted=False)
         self.l2sync.full_sync(loadbalancers)
 
-    @periodics.periodic(60*2, run_immediately=CONF.f5_agent.sync_immediately)
+    @periodics.periodic(60 * 2, run_immediately=CONF.f5_agent.sync_immediately)
     def pending_sync(self):
         """
         Reconciliation loop that
@@ -810,7 +809,7 @@ class ControllerWorker(object):
             if az:
                 metadata = self._az_repo.get_availability_zone_metadata_dict(lock_session, az_name)
                 hosts = metadata.get('hosts', [])
-                if not CONF.host in hosts:
+                if CONF.host not in hosts:
                     # add host to availibility zone profile metadata
                     hosts.append(CONF.host)
                     self._azp_repo.update(lock_session, id=az.availability_zone_profile_id,

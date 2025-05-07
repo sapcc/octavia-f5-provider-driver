@@ -64,17 +64,17 @@ class CertManagerWrapper(object):
         # Note, the first cert is the TLS default cert
         if cert_dict['tls_cert'] is not None:
             certificates.append({
-                'id': '{}{}'.format(constants.PREFIX_CERTIFICATE, cert_dict['tls_cert'].id),
+                'id': f'{constants.PREFIX_CERTIFICATE}{cert_dict['tls_cert'].id}',
                 'as3': m_cert.get_certificate(
-                    'Container {}'.format(', '.join(cert_dict['container_id'])),
+                    f'Container {', '.join(cert_dict['container_id'])}',
                     cert_dict['tls_cert'])
             })
 
         for sni_cert in cert_dict['sni_certs']:
             certificates.append({
-                'id': '{}{}'.format(constants.PREFIX_CERTIFICATE, sni_cert.id),
+                'id': f'{constants.PREFIX_CERTIFICATE}{sni_cert.id}',
                 'as3': m_cert.get_certificate(
-                    'Container {}'.format(', '.join(cert_dict['container_id'])),
+                    f'Container {', '.join(cert_dict['container_id'])}',
                     sni_cert)
             })
 
@@ -103,4 +103,4 @@ class CertManagerWrapper(object):
             pass
         id = hashlib.sha1(secret).hexdigest()  # nosec
 
-        return '{}{}'.format(constants.PREFIX_SECRET, id), secret
+        return f'{constants.PREFIX_SECRET}{id}', secret

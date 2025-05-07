@@ -48,10 +48,10 @@ class Scheduler(object):
             isouter=True
         ).filter(
             models.Amphora.role == consts.ROLE_MASTER,
-            models.Amphora.load_balancer_id == None,
+            models.Amphora.load_balancer_id == None,  # noqa: E711
             or_(
                 # !='disabled' gives False on NULL, so we need to check for NULL (None) explicitly
-                models.Amphora.vrrp_interface == None,
+                models.Amphora.vrrp_interface == None,  # noqa: E711
                 models.Amphora.vrrp_interface != 'disabled')
         ).group_by(models.Amphora.compute_flavor)
 

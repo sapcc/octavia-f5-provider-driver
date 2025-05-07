@@ -27,10 +27,10 @@ class TimeoutHTTPAdapter(HTTPAdapter):
         if "timeout" in kwargs:
             self.timeout = kwargs["timeout"]
             del kwargs["timeout"]
-        super(TimeoutHTTPAdapter, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
 
     def send(self, request, **kwargs):
         timeout = kwargs.get("timeout")
         if timeout is None:
             kwargs["timeout"] = self.timeout
-        return super(TimeoutHTTPAdapter, self).send(request, **kwargs)
+        return super().send(request, **kwargs)

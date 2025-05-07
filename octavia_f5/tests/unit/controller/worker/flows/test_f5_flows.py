@@ -61,7 +61,7 @@ class TestF5Flows(base.TestCase):
         conf.config(group="controller_worker",
                     network_driver='network_noop_driver_f5')
 
-        super(TestF5Flows, self).setUp()
+        super().setUp()
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
@@ -230,7 +230,7 @@ class TestF5Flows(base.TestCase):
         mock_bigip.get.assert_called()
         mock_bigip.patch.assert_not_called()
         mock_bigip.post.assert_called_with(
-            path=f"/mgmt/tm/net/self",
+            path="/mgmt/tm/net/self",
             json={'name': f'port-{selfip_port.id}',
                   'vlan': '/Common/vlan-1234',
                   'address': '1.2.3.2%1234/24'}
@@ -270,7 +270,7 @@ class TestF5Flows(base.TestCase):
         mock_bigip.get.assert_called()
         mock_bigip.patch.assert_not_called()
         mock_bigip.post.assert_called_with(
-            path=f"/mgmt/tm/net/route",
+            path="/mgmt/tm/net/route",
             json={'name': f'net_{mock_network_id}_sub_{mock_subnet_id}',
                   'tmInterface': '/Common/vlan-1234',
                   'network': '1.2.3.0%1234/24'}
@@ -390,7 +390,7 @@ class TestF5Flows(base.TestCase):
             path=f"/mgmt/tm/net/route/~Common~net_{mock_network_id}_sub_{mock_subnet_id}"
         )
         mock_bigip.post.assert_called_with(
-            path=f"/mgmt/tm/net/route",
+            path="/mgmt/tm/net/route",
             json={'name': f'net_{mock_network_id}_sub_{mock_subnet_id}',
                   'tmInterface': '/Common/vlan-1234',
                   'network': '1.2.3.0%1234/24'}
@@ -449,7 +449,7 @@ class TestF5Flows(base.TestCase):
             path=f"/mgmt/tm/net/self/port-{selfip_port.id}"
         )
         mock_bigip.post.assert_called_with(
-            path=f"/mgmt/tm/net/self",
+            path="/mgmt/tm/net/self",
             json={'name': f'port-{selfip_port.id}',
                   'vlan': '/Common/vlan-1234',
                   'address': '1.2.3.2%1234/24'}

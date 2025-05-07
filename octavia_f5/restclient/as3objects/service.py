@@ -40,7 +40,7 @@ def get_name(listener_id):
     :param listener_id: listener id
     :return: AS3 object name
     """
-    return "{}{}".format(f5_const.PREFIX_LISTENER, listener_id)
+    return f"{f5_const.PREFIX_LISTENER}{listener_id}"
 
 
 def get_data_group_name(listener_id):
@@ -49,7 +49,7 @@ def get_data_group_name(listener_id):
     :param listener_id: listener id
     :return: AS3 object name
     """
-    return "{}{}".format(get_name(listener_id), f5_const.SUFFIX_ALLOWED_CIDRS)
+    return f"{get_name(listener_id)}{f5_const.SUFFIX_ALLOWED_CIDRS}"
 
 
 def get_esd_entities(servicetype, esd):
@@ -123,7 +123,7 @@ def get_service(listener, cert_manager, esd_repository):
     vip = listener.load_balancer.vip
     project_id = listener.load_balancer.project_id
     label = as3types.f5label(listener.name or listener.description)
-    virtual_address = '{}'.format(vip.ip_address)
+    virtual_address = f'{vip.ip_address}'
     service_args = {
         'virtualPort': listener.protocol_port,
         'persistenceMethods': [],
@@ -332,11 +332,11 @@ def get_service(listener, cert_manager, esd_repository):
 
         # enrich service with iRules and other things defined in ESD
         esd_entities = get_esd_entities(service_args['_servicetype'], esd)
-        for entity_name in esd_entities:
+        for entity_name, entity_data in esd_entities.items():
             if entity_name == 'iRules':
                 service_args['iRules'].extend(esd_entities['iRules'])
             else:
-                service_args[entity_name] = esd_entities[entity_name]
+                service_args[entity_name] = entity_data
 
     endpoint_policies = []
     # Map special L7policies to ESDs
@@ -350,11 +350,11 @@ def get_service(listener, cert_manager, esd_repository):
         if esd:
             # enrich service with iRules and other things defined in ESD
             esd_entities = get_esd_entities(service_args['_servicetype'], esd)
-            for entity_name in esd_entities:
+            for entity_name, entity_data in esd_entities.items():
                 if entity_name == 'iRules':
                     service_args['iRules'].extend(esd_entities['iRules'])
                 else:
-                    service_args[entity_name] = esd_entities[entity_name]
+                    service_args[entity_name] = entity_data
         elif policy.provisioning_status != lib_consts.PENDING_DELETE:
             endpoint_policies.append(policy)
 

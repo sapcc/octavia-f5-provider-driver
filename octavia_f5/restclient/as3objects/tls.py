@@ -30,7 +30,7 @@ def get_listener_name(listener_id):
     :param listener_id: octavia listener id
     :return: AS3 object name
     """
-    return "{}{}".format(constants.PREFIX_TLS_LISTENER, listener_id)
+    return f"{constants.PREFIX_TLS_LISTENER}{listener_id}"
 
 
 def get_pool_name(pool_id):
@@ -39,7 +39,7 @@ def get_pool_name(pool_id):
     :param pool_id: octavia pool id
     :return: AS3 object name
     """
-    return "{}{}".format(constants.PREFIX_TLS_POOL, pool_id)
+    return f"{constants.PREFIX_TLS_POOL}{pool_id}"
 
 
 def filter_cipher_suites(cipher_suites, object_print_name, object_id):
@@ -61,8 +61,8 @@ def filter_cipher_suites(cipher_suites, object_print_name, object_id):
 
     cipher_suites_list = cipher_suites.split(':')
     if rejected_cipher_suites:
-        LOG.error("{} object with ID {} has invalid cipher suites which won't be provisioned: {}"
-                  .format(object_print_name, object_id, ', '.join(rejected_cipher_suites)))
+        LOG.error(f"{object_print_name} object with ID {object_id} has invalid "
+                  f"cipher suites which won't be provisioned: {', '.join(rejected_cipher_suites)}")
         for c in rejected_cipher_suites:
             cipher_suites_list.remove(c)
 
@@ -119,6 +119,7 @@ def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_rene
     return TLS_Server(**service_args)
 
 
+# pylint: disable=too-many-positional-arguments
 def get_tls_client(pool, trust_ca=None, client_cert=None, crl_file=None, allow_renegotiation=True, cipher_group=None):
     """ returns AS3 TLS_Client
 

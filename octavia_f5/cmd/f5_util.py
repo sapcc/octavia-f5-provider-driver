@@ -34,7 +34,7 @@ def main():
     urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
     if len(sys.argv) == 1:
         print('Error: Config file must be specified.')
-        print('{} --config-file <filename>'.format(sys.argv[0]))
+        print(f'{sys.argv[0]} --config-file <filename>')
         return 1
     argv = sys.argv or []
     CONF.register_cli_opts(config.f5_util_opts)
@@ -72,9 +72,8 @@ def main():
     # else --all
     with session.begin():
         lbs = _loadbalancer_repo.get_all_from_host(session, **_filter_dict)
-    LOG.info('Starting manual sync for load balancers "{}" on host "{}".'.format(
-        [lb.id for lb in lbs], _filter_dict['host']))
-
+    LOG.info(f'Starting manual sync for load balancers "{[lb.id for lb in lbs]}" '
+             f'on host "{_filter_dict['host']}".')
 
     # deduplicate
     networks = collections.defaultdict(list)

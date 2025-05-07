@@ -28,6 +28,7 @@ LOG = logging.getLogger(__name__)
 Routines for configuring Octavia F5 Provider
 """
 
+
 def init(args, **kwargs):
     cfg.CONF(args=args, project='octavia_f5',
              **kwargs)
@@ -115,19 +116,19 @@ f5_agent_opts = [
     cfg.BoolOpt('async_mode', default=False,
                 help=_("Use asynchronous mode for posting as3 declarations.")),
     cfg.IntOpt('persist_every', default=-1,
-                help=_("When persist_every >= 0 make the whole working configuration "
-                       "persistent on targetHost after (and only if) this request "
-                       "deploys any changes and after the value of seconds passed since "
-                       "last persist. If persist_every = 0, persist with every delcaration. "
-                       "Set persist_every < 0, leave the working "
-                       "configuration in memory only (if targetHost restart, you may "
-                       "lose the configuration from memory")),
+               help=_("When persist_every >= 0 make the whole working configuration "
+                      "persistent on targetHost after (and only if) this request "
+                      "deploys any changes and after the value of seconds passed since "
+                      "last persist. If persist_every = 0, persist with every delcaration. "
+                      "Set persist_every < 0, leave the working "
+                      "configuration in memory only (if targetHost restart, you may "
+                      "lose the configuration from memory")),
     cfg.BoolOpt('unchecked_mode', default=False,
                 help=_("Use unchecked mode for posting AS3 declarations. The "
                        "current BigIP state won't be checked when AS3 applies a "
                        "declaration.")),
     cfg.StrOpt('availability_zone', default=None,
-                help=_("Name of the availability zone the F5 device of this worker is assigned to.")),
+               help=_("Name of the availability zone the F5 device of this worker is assigned to.")),
     cfg.StrOpt('irule_allowed_cidrs', default='cc_allowed_cidrs',
                help=_("Name of iRule used for allowed_cidrs filtering.")),
 ]
@@ -223,7 +224,7 @@ f5_status_manager_opts = [
                default=30,
                help=_('Sleep time between failover checks in seconds.')),
     cfg.IntOpt('cleanup_check_interval',
-               default=60*10,
+               default=60 * 10,
                help=_('Sleep time between cleanup checks in seconds.')),
     cfg.IntOpt('failover_timeout',
                default=5,

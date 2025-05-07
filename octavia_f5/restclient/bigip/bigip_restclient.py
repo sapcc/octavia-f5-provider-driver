@@ -40,7 +40,7 @@ class BigIPRestClient(requests.Session):
         'octavia_bigip_delete_exceptions', 'Number of exceptions at DELETE request sent to Big IP')
 
     def __init__(self, bigip_url, verify=True, auth=None):
-        super(BigIPRestClient, self).__init__()
+        super().__init__()
         self.url = parse.urlparse(bigip_url, allow_fragments=False)
 
         # Remove any user/pw, since it's been already configured via auth
@@ -84,10 +84,9 @@ class BigIPRestClient(requests.Session):
         available = True
         try:
             requests.get(self.url.scheme + '://' + self.url.hostname, timeout=timeout, verify=False)
-            LOG.info('Found device with URL {}'.format(self.url.hostname))
+            LOG.info(f'Found device with URL {self.url.hostname}')
         except requests.exceptions.Timeout:
-            LOG.info('Device timed out, considering it unavailable. Timeout: {}s Hostname: {}'.format(
-                     timeout, self.url.hostname))
+            LOG.info(f'Device timed out, considering it unavailable. Timeout: {timeout}s Hostname: {self.url.hostname}')
             available = False
         return available
 
@@ -123,7 +122,7 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).get(url, **kwargs)
+        return super().get(url, **kwargs)
 
     @_metric_post_exceptions.count_exceptions()
     def post(self, url=None, **kwargs):
@@ -132,7 +131,7 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).post(url, **kwargs)
+        return super().post(url, **kwargs)
 
     @_metric_delete_exceptions.count_exceptions()
     def delete(self, url=None, **kwargs):
@@ -141,7 +140,7 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).delete(url, **kwargs)
+        return super().delete(url, **kwargs)
 
     @_metric_patch_exceptions.count_exceptions()
     def patch(self, url=None, **kwargs):
@@ -150,7 +149,7 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).patch(url, **kwargs)
+        return super().patch(url, **kwargs)
 
     @_metric_put_exceptions.count_exceptions()
     def put(self, url=None, **kwargs):
@@ -159,7 +158,7 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
-        return super(BigIPRestClient, self).put(url, **kwargs)
+        return super().put(url, **kwargs)
 
     def config_sync(self, device_group):
         """ Performing a ConfigSync
@@ -169,6 +168,6 @@ class BigIPRestClient(requests.Session):
 
         cmd = {
             'command': 'run',
-            'utilCmdArgs': 'config-sync to-group {}'.format(device_group)
+            'utilCmdArgs': f'config-sync to-group {device_group}'
         }
-        return super(BigIPRestClient, self).post(self.get_url(BIGIP_CM_PATH), json=cmd)
+        return super().post(self.get_url(BIGIP_CM_PATH), json=cmd)

@@ -13,6 +13,7 @@
 #  under the License.
 import ipaddress
 import re
+from typing import List
 from urllib import parse
 
 import requests.exceptions
@@ -22,6 +23,7 @@ from oslo_cache import core as cache
 from oslo_config import cfg
 from oslo_log import log as logging
 from oslo_utils import excutils
+import openstack.exceptions as os_exceptions
 from taskflow import flow
 from taskflow.exceptions import WrappedFailure
 from taskflow.listeners import logging as tf_logging
@@ -34,12 +36,12 @@ from octavia.network import base
 from octavia.network import data_models as network_models
 from octavia.network.drivers.neutron import base as neutron_base
 from octavia.network.drivers.neutron import utils
-import openstack.exceptions as os_exceptions
 
 from octavia_f5.common import constants
 from octavia_f5.controller.worker.tasks import network_tasks
 from octavia_f5.db import repositories
 from octavia_f5.network.drivers.neutron import utils as f5_utils
+from octavia_f5.utils import exceptions as f5_exc
 
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
@@ -66,7 +68,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
 
     def __init__(self):
         LOG.info("Initializing Neutron Client")
-        super(NeutronClient, self).__init__()
+        super().__init__()
         base_taskflow.BaseTaskFlowEngine.__init__(self)
         self.allocate_vip_flow = self.get_allocate_vip_flow()
         self.deallocate_vip_flow = self.get_deallocate_vip_flow()
@@ -88,8 +90,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             normalized_fixed_ip = ipaddress.ip_address(
                 fixed_ip.ip_address).compressed
             normalized_ip = ipaddress.ip_address(ip_address).compressed
-            if (fixed_ip.subnet_id == subnet_id and
-                    normalized_fixed_ip == normalized_ip):
+            if (fixed_ip.subnet_id == subnet_id and normalized_fixed_ip == normalized_ip):
                 return True
         return False
 
@@ -134,8 +135,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
                 fixed_ip_found = self._validate_fixed_ip(
                     port.fixed_ips, load_balancer.vip.subnet_id,
                     load_balancer.vip.ip_address)
-                if (port.network_id == load_balancer.vip.network_id and
-                        fixed_ip_found):
+                if (port.network_id == load_balancer.vip.network_id and fixed_ip_found):
                     LOG.info('Port %s already exists. Nothing to be done.',
                              load_balancer.vip.port_id)
                     return self._port_to_vip(port, load_balancer)[0]
@@ -151,9 +151,8 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
                     self.delete_port(load_balancer.vip.port_id)
                 else:
                     raise base.AllocateVIPException(
-                        'VIP port {0} is broken, but is owned by project {1} '
-                        'so will not be recreated. Aborting VIP allocation.'
-                            .format(port.id, port.project_id))
+                        f'VIP port {port.id} is broken, but is owned by project {port.project_id} '
+                        'so will not be recreated. Aborting VIP allocation.')
             except base.AllocateVIPException as e:
                 # Catch this explicitly because otherwise we blame Neutron
                 LOG.error(getattr(e, 'message', None))
@@ -163,13 +162,12 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
                             load_balancer.vip.port_id)
             except Exception as e:
                 message = _('Neutron is failing to service requests due to: '
-                            '{}. Aborting.').format(str(e))
+                            f'{e}. Aborting.')
                 LOG.error(message)
                 raise base.AllocateVIPException(
                     message,
                     orig_msg=getattr(e, 'message', None),
                     orig_code=getattr(e, 'status_code', None), )
-
 
         # Run the Flow
         try:
@@ -187,10 +185,10 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             # Unwrap Allocation error and re-raise
             for e in f:
                 if isinstance(e, base.DeallocateVIPException):
-                    raise e
+                    raise e from f
             # Generic TaskFlow Error, log exception and raise generic Exception
             LOG.exception(f)
-            raise base.AllocateVIPException()
+            raise base.AllocateVIPException() from f
 
     def get_deallocate_vip_flow(self) -> flow.Flow:
         # VIP ports needs to be allocated together with all depending resources
@@ -222,8 +220,8 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         try:
             port = self.network_proxy.get_port(vip.port_id)
         except os_exceptions.NotFoundException:
-            LOG.warning("Can't deallocate VIP because the vip port {0} "
-                        "cannot be found in neutron.".format(vip.port_id))
+            LOG.warning(f"Can't deallocate VIP because the vip port {vip.port_id} "
+                        "cannot be found in neutron.")
             return
 
         if port['device_owner'] not in [constants.DEVICE_OWNER_LISTENER,
@@ -252,10 +250,10 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             # Unwrap Allocation error and re-raise
             for e in f:
                 if isinstance(e, base.DeallocateVIPException):
-                    raise e
+                    raise e from f
             # Generic TaskFlow Error, log exception and raise generic Exception
             LOG.exception(f)
-            raise base.DeallocateVIPException()
+            raise base.DeallocateVIPException() from f
 
     @MEMOIZE
     def get_scheduled_host(self, port_id):
@@ -274,13 +272,13 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         """
         try:
             network_dict = self.network_proxy.get_network(network_id)
-        except os_exceptions.ResourceNotFound:
+        except os_exceptions.ResourceNotFound as exc:
             message = _(f"Network not found (network id: {network_id}).")
-            raise base.NetworkNotFound(message)
-        except Exception:
+            raise base.NetworkNotFound(message) from exc
+        except Exception as exc:
             message = _(f"Error retrieving network (network id: {network_id}.")
             LOG.exception(message)
-            raise base.NetworkException(message)
+            raise base.NetworkException(message) from exc
         return f5_utils.convert_network_to_model(network_dict)
 
     @MEMOIZE
@@ -293,7 +291,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         except Exception as e:
             LOG.error('Error retrieving segmentation id for network "%s": %s', network_id, e)
             raise e
-        raise base.NetworkException('No segmentation id for network "{}" found'.format(network_id))
+        raise base.NetworkException(f'No segmentation id for network "{network_id}" found')
 
     def parse_mapping(self, mapping):
         if not mapping:
@@ -318,7 +316,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         return {
             'tenant_id': project_id,
             'binding:host_id': agent,
-            'name': 'local-{}-{}'.format(f5host, subnet_id),
+            'name': f'local-{f5host}-{subnet_id}',
             'network_id': network_id,
             'device_owner': constants.DEVICE_OWNER_SELFIP,
             'device_id': subnet_id,
@@ -327,7 +325,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             'fixed_ips': [{'subnet_id': subnet_id}]
         }
 
-    def _get_f5_hostnames(self, host: str) -> [str]:
+    def _get_f5_hostnames(self, host: str) -> List[str]:
         """ Returns f5 device hostnames of a specific agent host.
 
         :param host: agent hostname
@@ -343,7 +341,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             with db_apis.session().begin() as session:
                 return self.amphora_repo.get_devices_for_host(session, host)
 
-        raise Exception(f"Hostname not found for host {host}")
+        raise base.AmphoraNotFound(f"Hostname not found for host {host}")
 
     def _get_subnets_chunks(self, subnets: list, max_size: int = 100):
         for i in range(0, len(subnets), max_size):
@@ -374,9 +372,9 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
              requests.exceptions.ConnectionError)),
         wait=tenacity.wait_incrementing(1, 1, 5),
         stop=tenacity.stop_after_attempt(15))
-    def ensure_selfips(self, load_balancers: [octavia_models.LoadBalancer],
+    def ensure_selfips(self, load_balancers: List[octavia_models.LoadBalancer],
                        agent: str = None,
-                       cleanup_orphans: bool = False) -> [network_models.Port]:
+                       cleanup_orphans: bool = False) -> List[network_models.Port]:
         """ Ensures, that for a specific Neutron Load-Balancer VIP port,
             SelfIP ports in Neutron are existing and returns them.
 
@@ -393,7 +391,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             # get the hosted agent, only expect one
             hosts_id = list(set(lb.server_group_id for lb in load_balancers if lb.server_group_id is not None))
             if len(hosts_id) != 1:
-                raise Exception("Could not identify single host: {}".format(hosts_id))
+                raise f5_exc.ProviderDriverException(f"Could not identify single host: {hosts_id}")
         else:
             hosts_id = [agent]
 
@@ -460,7 +458,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         return ([utils.convert_port_to_model(selfip) for selfip in selfips],
                 [utils.convert_port_to_model(selfip) for selfip in new_selfips])
 
-    def update_aap(self, vip: network_models.Port, selfips: [network_models.Port]):
+    def update_aap(self, vip: network_models.Port, selfips: List[network_models.Port]):
         """ Tries to update a VIP ports allowed_address_pairs with SelfIPs ip addresses
 
         :param vip: Network VIP port
@@ -480,16 +478,17 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         except Exception as e:
             LOG.warning("Failed updating VIPs allowed_address_pairs %s: %s", vip.id, e)
 
-    def update_vip(self, vip: network_models.Port, candidate: str):
+    def update_vip(self, vip: network_models.Port, candidate: str):  # pylint: disable=arguments-renamed
         host_binding = {
             'binding:host_id': candidate
         }
         self.network_proxy.update_port(vip.id, **host_binding)
 
-    def cleanup_selfips(self, selfips: [network_models.Port]):
+    def cleanup_selfips(self, selfips: List[network_models.Port]):
         for port in selfips:
             self.delete_port(port.id)
 
+    # pylint: disable=too-many-positional-arguments
     def create_port(self, network_id, name=None, fixed_ips=(),
                     secondary_ips=(), security_group_ids=(),
                     admin_state_up=True, qos_policy_id=None):
@@ -530,7 +529,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             project_id_key = 'tenant_id'
 
         # It can be assumed that network_id exists
-        vip_port = {'name': 'loadbalancer-{}'.format(load_balancer.id),
+        vip_port = {'name': f'loadbalancer-{load_balancer.id}',
                     'network_id': load_balancer.vip.network_id,
                     'admin_state_up': True,
                     'device_id': load_balancer.id,
@@ -545,15 +544,15 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             return utils.convert_port_to_model(neutron_port)
         except os_exceptions.SDKException as e:
             # Raise OverQuota errors back to user
-            raise base.AllocateVIPException(getattr(e, 'message', None),
+            raise base.AllocateVIPException(
+                getattr(e, 'message', None),
                 orig_msg=getattr(e, 'message', None),
                 orig_code=getattr(e, 'status_code', None),
             )
         except Exception as e:
             LOG.exception(e)
             raise base.AllocateVIPException(
-                _('Error creating neutron vip port for network {network_id}'
-                  ).format(network_id=load_balancer.vip.network_id),
+                _(f'Error creating neutron vip port for network {load_balancer.vip.network_id}'),
                 orig_msg=getattr(e, 'message', None),
                 orig_code=getattr(e, 'status_code', None),
             )
@@ -599,13 +598,14 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
 
     @tenacity.retry(
         wait=tenacity.wait_incrementing(1, 5, 60),
-        stop=tenacity.stop_after_attempt(10))
+        stop=tenacity.stop_after_attempt(10),
+        retry=tenacity.retry_if_not_result(lambda r: r)
+    )
     def is_port_active(self, port_id):
         port = self.get_port(port_id)
         if port.status == "ACTIVE":
             return True
-
-        raise Exception()
+        return False
 
     def invalidate_cache(self, hard=True):
         cache_region.invalidate(hard=hard)

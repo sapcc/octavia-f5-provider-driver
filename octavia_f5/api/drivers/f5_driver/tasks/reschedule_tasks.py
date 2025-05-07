@@ -33,7 +33,7 @@ class RescheduleTasks(task.Task, metaclass=ABCMeta):
     """Base task to load drivers common to the tasks."""
     def __init__(self, **kwargs):
         self.rpc = kwargs.pop("rpc", None)
-        super(RescheduleTasks, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self._loadbalancer_repo = f5_repo.LoadBalancerRepository()
         self._amphora_repo = f5_repo.AmphoraRepository()
         self._azp_repo = repo.AvailabilityZoneProfileRepository()
@@ -125,7 +125,8 @@ class RewriteLoadBalancerEntry(RescheduleTasks):
                     break
 
             # adjust load balancer DB entry
-            LOG.debug("RewriteLoadBalancerEntry for LB %s: Changing host from '%s' to '%s' and availability zone from '%s' to '%s'.",
+            LOG.debug("RewriteLoadBalancerEntry for LB %s: Changing host from '%s' to '%s' and availability "
+                      "zone from '%s' to '%s'.",
                       load_balancer.id, load_balancer.server_group_id, candidate, load_balancer.availability_zone, az)
             self._loadbalancer_repo.update(session, load_balancer.id, server_group_id=candidate, availability_zone=az)
 
@@ -137,7 +138,8 @@ class RewriteLoadBalancerEntry(RescheduleTasks):
                       load_balancer.id)
             return
 
-        LOG.warning("RewriteLoadBalancerEntry: Reverting host change of loadbalancer %s: Changing host from '%s' to '%s' and availability zone back to '%s'.",
+        LOG.warning("RewriteLoadBalancerEntry: Reverting host change of loadbalancer %s: Changing host from '%s' "
+                    "to '%s' and availability zone back to '%s'.",
                     load_balancer.id, candidate, removal_host, load_balancer.availability_zone)
         with db_apis.session().begin() as session:
             self._loadbalancer_repo.update(

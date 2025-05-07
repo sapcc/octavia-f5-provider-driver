@@ -27,7 +27,7 @@ def get_source_ip(timeout, granularity):
     if granularity:
         persist['addressMask'] = granularity
         m.update(granularity.encode('utf-8'))
-    name = 'persist_{}'.format(m.hexdigest())
+    name = f'persist_{m.hexdigest()}'
     persist = Persist(**persist)
     return name, persist
 
@@ -35,8 +35,8 @@ def get_source_ip(timeout, granularity):
 def get_app_cookie(cookie_name):
     persist = Persist(
         persistenceMethod='universal',
-        iRule='{}app_cookie_{}'.format(constants.PREFIX_IRULE, cookie_name),
+        iRule=f'{constants.PREFIX_IRULE}app_cookie_{cookie_name}',
         duration=3600
     )
-    name = 'persist_app_cookie_{}'.format(cookie_name)
+    name = f'persist_app_cookie_{cookie_name}'
     return name, persist

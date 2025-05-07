@@ -27,10 +27,7 @@ def get_response_log(response):
     request = response.request
     url = parse.urlparse(response.url)
     redacted_url = url._replace(netloc=url.hostname).geturl()
-    msg = "{} {} finished with code {}:\n".format(
-        request.method,
-        redacted_url,
-        response.status_code)
+    msg = f"{request.method} {redacted_url} finished with code {response.status_code}:\n"
 
     # Format Request
     if request.body:

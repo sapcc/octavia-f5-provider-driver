@@ -42,7 +42,7 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
             host = CONF.host
 
         filters.update(server_group_id=host)
-        return super(LoadBalancerRepository, self).get_all(
+        return super().get_all(
             session, **filters)[0]
 
     def get_all_by_network(self, session, network_id, host=None, **filters):
@@ -160,10 +160,11 @@ class AmphoraRepository(repositories.AmphoraRepository):
         except sqlalchemy.orm.exc.NoResultFound:
             pass
 
+
 class QuotasRepository(repositories.BaseRepository):
     model_class = models.Quotas
 
-    def update(self, session, project_id, **model_kwargs):
+    def update(self, session, project_id, **model_kwargs):  # pylint: disable=arguments-renamed
         with session.begin(subtransactions=True):
             session.query(self.model_class).filter_by(
                 project_id=project_id).update(model_kwargs)

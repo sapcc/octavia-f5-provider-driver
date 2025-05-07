@@ -11,6 +11,7 @@
 #  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #  License for the specific language governing permissions and limitations
 #  under the License.
+from typing import List, Tuple
 
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -34,7 +35,7 @@ class BaseNetworkTask(task.Task):
     """Base task to load drivers common to the tasks."""
 
     def __init__(self, network_driver, **kwargs):
-        super(BaseNetworkTask, self).__init__(**kwargs)
+        super().__init__(**kwargs)
         self.network_driver = network_driver
         self.scheduler = scheduler.Scheduler()
         self.lb_repo = repo.LoadBalancerRepository()
@@ -64,13 +65,14 @@ class GetCandidate(BaseNetworkTask):
 class AllSelfIPs(BaseNetworkTask):
     default_provides = 'selfips'
 
-    def execute(self, existing_selfips: [network_models.Port],
-                new_selfips: [network_models.Port]) -> [network_models.Port]:
+    def execute(self, existing_selfips: List[network_models.Port],
+                new_selfips: List[network_models.Port]) -> List[network_models.Port]:
         return existing_selfips + new_selfips
 
 
 class CreateSelfIP(BaseNetworkTask):
     default_provides = "port"
+
     def execute(self, loadbalancer: dict,
                 candidate: str) -> network_models.Port:
         return self.network_driver.create_selfip(loadbalancer, f5host="todo", agent=candidate)
@@ -87,7 +89,7 @@ class CreateSelfIP(BaseNetworkTask):
 
 
 class WaitForNewSelfIPs(BaseNetworkTask):
-    def execute(self, new_selfips: [network_models.Port]):
+    def execute(self, new_selfips: List[network_models.Port]):
         # Wait for port to be active
         for port in new_selfips:
             self.network_driver.is_port_active(port.id)
@@ -97,8 +99,8 @@ class CreateSelfIPs(BaseNetworkTask):
     default_provides = ('existing_selfips', 'new_selfips')
 
     def execute(self, load_balancer: data_models.LoadBalancer,
-                candidate: str) -> ([network_models.Port],
-                                    [network_models.Port]):
+                candidate: str) -> Tuple[List[network_models.Port],
+                                         List[network_models.Port]]:
         try:
             # create_only imposes only to return selfips that needed
             # to be created from ground up, this is to ensure
@@ -107,10 +109,7 @@ class CreateSelfIPs(BaseNetworkTask):
                 [load_balancer], agent=candidate)
         except Exception as e:
             message = _('Error creating selfips for network '
-                        '{network_id}: {err}.').format(
-                network_id=load_balancer.vip.network_id,
-                err=e
-            )
+                        f'{load_balancer.vip.network_id}: {e}.')
             LOG.error(message)
             raise base.AllocateVIPException(
                 message,
@@ -118,7 +117,7 @@ class CreateSelfIPs(BaseNetworkTask):
                 orig_code=getattr(e, 'status_code', None),
             )
 
-    def revert(self, result: ([network_models.Port], [network_models.Port]),
+    def revert(self, result: Tuple[List[network_models.Port], List[network_models.Port]],
                *args, **kwargs):
         """Handle a failure to create selfip ports."""
 
@@ -157,7 +156,7 @@ class GetVIPFromLoadBalancer(BaseNetworkTask):
 
 
 class UpdateAAP(BaseNetworkTask):
-    def execute(self, vip_port: network_models.Port, selfips: [network_models.Port]):
+    def execute(self, vip_port: network_models.Port, selfips: List[network_models.Port]):
         # Update allowed address pairs
         self.network_driver.update_aap(vip_port, selfips)
 
@@ -208,6 +207,8 @@ class CleanupSelfIPs(BaseNetworkTask):
             for selfip in selfips:
                 self.network_driver.delete_port(selfip['id'])
 
+
 class InvalidateCache(BaseNetworkTask):
+
     def execute(self, *args, **kwargs):
         self.network_driver.invalidate_cache()

@@ -18,10 +18,10 @@ from octavia_f5.common import constants
 PROXY_PROTOCOL_INITIATIOR = """when CLIENT_ACCEPTED {
     set proxyheader "PROXY TCP[IP::version] [getfield [IP::remote_addr] "%" 1] [getfield [IP::local_addr] "%" 1] [TCP::remote_port] [TCP::local_port]\\r\\n"
 }
- 
+
 when SERVER_CONNECTED {
     TCP::respond $proxyheader
-}"""
+}"""  # noqa: E501
 X_FORWARDED_FOR = """when HTTP_REQUEST {
     if { [HTTP::has_responded] }{ return }
     HTTP::header insert "X-Forwarded-For" [getfield [IP::remote_addr] "%" 1]
@@ -124,6 +124,7 @@ when HTTP_RESPONSE {{
     }}
 }}"""
 
+
 def get_proxy_irule():
     """
     Returns iRule for proxy protocol initiation.
@@ -131,7 +132,7 @@ def get_proxy_irule():
     """
     irule = IRule(PROXY_PROTOCOL_INITIATIOR,
                   remark="Insert Proxy Protocol Header V1")
-    name = '{}proxy_protocol_initiator'.format(constants.PREFIX_IRULE)
+    name = f'{constants.PREFIX_IRULE}proxy_protocol_initiator'
     return name, irule
 
 
@@ -143,7 +144,7 @@ def get_app_cookie_irule(cookie_name):
     app_cookie_irule = APP_COOKIE_SESSION_PERSIST.format(_cookie=cookie_name)
     irule = IRule(app_cookie_irule,
                   remark="persistence app cookie")
-    name = '{}app_cookie_{}'.format(constants.PREFIX_IRULE, cookie_name)
+    name = f'{constants.PREFIX_IRULE}app_cookie_{cookie_name}'
     return name, irule
 
 

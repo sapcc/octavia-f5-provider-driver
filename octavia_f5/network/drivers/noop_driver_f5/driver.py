@@ -26,10 +26,10 @@ class NoopNetworkDriverF5(driver.NoopNetworkDriver):
     def __init__(self):
         self.physical_network = 'physnet'
         self.physical_interface = 'portchannel1'
-        super(NoopNetworkDriverF5, self).__init__()
+        super().__init__()
 
-    def allocate_vip(self, load_balancer):
-        return super(NoopNetworkDriverF5, self).allocate_vip(load_balancer)
+    def allocate_vip(self, load_balancer):  # pylint: disable=arguments-renamed
+        return super().allocate_vip(load_balancer)
 
     def get_scheduled_host(self, port_id):
         return CONF.host

@@ -52,11 +52,11 @@ TLS_HELLO_CHECK = TEMPLATE.format("echo 'QUIT'|openssl s_client -verify 1 -conne
 
 
 def get_name(healthmonitor_id):
-    return "{}{}".format(constants.PREFIX_HEALTH_MONITOR, healthmonitor_id)
+    return f"{constants.PREFIX_HEALTH_MONITOR}{healthmonitor_id}"
 
 
 def get_monitor(health_monitor, target_address=None, target_port=None):
-    args = dict()
+    args = {}
 
     # Standard Octavia monitor types
     if health_monitor.type == 'HTTP':
@@ -94,18 +94,13 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
     else:
         return {}
 
-    if health_monitor.type == 'HTTP' or health_monitor.type == 'HTTPS':
+    if health_monitor.type in ('HTTP', 'HTTPS'):
         http_version = '1.0'
         if health_monitor.http_version:
             http_version = health_monitor.http_version
-        send = "{} {} HTTP/{}\\r\\n".format(
-            health_monitor.http_method,
-            health_monitor.url_path,
-            http_version
-            )
+        send = f"{health_monitor.http_method} {health_monitor.url_path} HTTP/{http_version}\\r\\n"
         if health_monitor.domain_name:
-            send += "Host: {}\\r\\n\\r\\n".format(
-                health_monitor.domain_name)
+            send += f"Host: {health_monitor.domain_name}\\r\\n\\r\\n"
         else:
             send += "\\r\\n"
 
@@ -142,27 +137,23 @@ def get_monitor(health_monitor, target_address=None, target_port=None):
 def _get_recv_text(healthmonitor):
     http_version = "1.(0|1)"
     if healthmonitor.http_version:
-        http_version = "{:1.1f}".format(healthmonitor.http_version)
+        http_version = f"{healthmonitor.http_version:1.1f}"
 
     try:
         if healthmonitor.expected_codes.find(",") > 0:
             status_codes = healthmonitor.expected_codes.split(',')
-            recv_text = "HTTP/{} ({})".format(
-                http_version, "|".join(status_codes))
+            recv_text = f"HTTP/{http_version} ({'|'.join(status_codes)})"
         elif healthmonitor.expected_codes.find("-") > 0:
             status_range = healthmonitor.expected_codes.split('-')
             start_range = status_range[0]
             stop_range = status_range[1]
-            recv_text = "HTTP/{} [{}-{}]".format(
-                        http_version, start_range, stop_range
-            )
+            recv_text = f"HTTP/{http_version} [{start_range}-{stop_range}]"
         else:
-            recv_text = "HTTP/{} {}".format(
-                http_version, healthmonitor.expected_codes)
+            recv_text = f"HTTP/{http_version} {healthmonitor.expected_codes}"
     except Exception as exc:
         LOG.error(
-            "invalid monitor expected_codes=%s, http_version=%s, defaulting to '%s': %s",
-            healthmonitor.expected_codes, healthmonitor.http_version,
-            CONF.f5_agent.healthmonitor_receive, exc)
+            f"invalid monitor expected_codes={healthmonitor.expected_codes}, "
+            f"http_version={healthmonitor.http_version}, defaulting to "
+            f"'{CONF.f5_agent.healthmonitor_receive}': {exc}")
         recv_text = CONF.f5_agent.healthmonitor_receive
     return recv_text

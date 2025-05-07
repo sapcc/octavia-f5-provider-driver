@@ -30,7 +30,7 @@ class BigIPBasicAuth(HTTPBasicAuth):
     def __init__(self, url):
         self.url = url
         parse_result = parse.urlparse(url, allow_fragments=False)
-        super(BigIPBasicAuth, self).__init__(parse_result.username, parse.unquote(parse_result.password))
+        super().__init__(parse_result.username, parse.unquote(parse_result.password))
 
 
 class BigIPTokenAuth(AuthBase):
@@ -109,6 +109,6 @@ class BigIPTokenAuth(AuthBase):
 
         # Increase timeout to max of 10 hours
         patch_timeout = {"timeout": BIGIP_TOKEN_MAX_TIMEOUT}
-        requests.patch("{}/{}".format(parse.urljoin(self.url, BIGIP_TOKENS_PATH), token),
+        requests.patch(f"{parse.urljoin(self.url, BIGIP_TOKENS_PATH)}/{token}",
                        auth=auth, json=patch_timeout, timeout=10, verify=False)
         return token

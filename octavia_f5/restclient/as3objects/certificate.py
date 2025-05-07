@@ -25,7 +25,7 @@ def get_name(container_id):
     :param container_id: container_id of barbican container
     :return: AS3 object name
     """
-    return "{}{}".format(constants.PREFIX_CONTAINER, container_id)
+    return f"{constants.PREFIX_CONTAINER}{container_id}"
 
 
 def get_certificate(remark, tlscontainer):

@@ -37,10 +37,8 @@ def workaround_autotool_1469(network_id, loadbalancer_id, pool, bigips):
         LOG.info("Disassociating health-monitor '%s'", pool.health_monitor.id)
         for bigip in bigips:
             try:
-                pool_resource_path = '{pool_path}/~{net_id}~{lb_id}~{pool_id}'.format(
-                    pool_path=F5_POOL_PATH, net_id=m_tenant.get_name(network_id),
-                    lb_id=m_app.get_name(loadbalancer_id), pool_id=m_pool.get_name(pool.id)
-                )
+                pool_resource_path = (f'{F5_POOL_PATH}/~{m_tenant.get_name(network_id)}'
+                                      f'~{m_app.get_name(loadbalancer_id)}~{m_pool.get_name(pool.id)}')
                 pool_json = bigip.get(pool_resource_path)
 
                 if pool_json.ok:

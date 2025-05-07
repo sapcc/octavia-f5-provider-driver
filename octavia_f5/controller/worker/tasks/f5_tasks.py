@@ -13,6 +13,8 @@
 #  under the License.
 import requests
 import tenacity
+from typing import List
+
 from netaddr import IPNetwork
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -35,9 +37,9 @@ def selfip_for_subnet_exists(subnet_id, selfips):
                 return True
     return False
 
+
 def get_subnet_route_name(network_id, subnet_id):
-    return "{}{}_{}{}".format(constants.PREFIX_NETWORK, network_id,
-                              constants.PREFIX_SUBNET, subnet_id)
+    return f"{constants.PREFIX_NETWORK}{network_id}_{constants.PREFIX_SUBNET}{subnet_id}"
 
 
 class EnsureVLAN(task.Task):
@@ -131,7 +133,7 @@ class EnsureGuestVLAN(task.Task):
     @decorators.RaisesIControlRestError()
     def execute(self,
                 bigip: bigip_restclient.BigIPRestClient,
-                bigip_guest_names: [str],
+                bigip_guest_names: List[str],
                 device_vlan: dict):
 
         device_guest = None
@@ -243,7 +245,7 @@ class EnsureSelfIP(task.Task):
         # Otherwise update existing selfip (if our selfip isn't a subset)
         device_selfip = device_response.json()
         if not selfip.items() <= device_selfip.items():
-            res = bigip.patch(path='/mgmt/tm/net/self/{}'.format(device_selfip['name']),
+            res = bigip.patch(path=f'/mgmt/tm/net/self/{device_selfip['name']}',
                               json=selfip)
             res.raise_for_status()
             return res.json()
@@ -328,7 +330,7 @@ class GetExistingSubnetRoutesForNetwork(task.Task):
                 network: f5_network_models.Network):
 
         # get all routes
-        response = bigip.get(path=f"/mgmt/tm/net/route").json()
+        response = bigip.get(path="/mgmt/tm/net/route").json()
         routes = response.get('items', [])
 
         # filter for only the subnet routes belonging to this network
@@ -356,7 +358,7 @@ class EnsureDefaultRoute(task.Task):
 
         device_response = bigip.get(path=f"/mgmt/tm/net/route/~Common~{route['name']}")
         if device_response.status_code == 404:
-            path=f"/mgmt/tm/net/route/~Common~net-{network.id}"
+            path = f"/mgmt/tm/net/route/~Common~net-{network.id}"
             device_response = bigip.get(path=path)
 
         if device_response.status_code == 404:
@@ -524,7 +526,7 @@ class RemoveSelfIP(task.Task):
 
     @decorators.RaisesIControlRestError()
     def revert(self, bigip: bigip_restclient.BigIPRestClient,
-               selfip: dict, existing_selfips: [dict], *args, **kwargs):
+               selfip: dict, existing_selfips: List[dict], *args, **kwargs):
 
         # don't restore SelfIP if it didn't exist before this task was executed
         if selfip['name'] not in [sip['name'] for sip in existing_selfips]:
@@ -541,7 +543,7 @@ class RemoveSelfIP(task.Task):
         # restore SelfIP
         payload = {'name': selfip['name'], 'vlan': selfip['vlan'], 'address': selfip['address']}
         LOG.warning(f"Reverting RemoveSelfIP: Restoring SelfIP: {selfip['name']}")
-        res = bigip.post(path=f"/mgmt/tm/net/self/", json=payload)
+        res = bigip.post(path="/mgmt/tm/net/self/", json=payload)
         res.raise_for_status()
 
 
@@ -593,7 +595,7 @@ class GetVCMPGuests(task.Task):
 class RemoveVLANIfNotOwnedByGuest(task.Task):
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
-                bigip_guest_names: [str],
+                bigip_guest_names: List[str],
                 device_guests: list):
         """ Task to delete VLAN on a VCMP Host  """
         name = f'vlan-{network.vlan_id}'
@@ -618,7 +620,7 @@ class RemoveGuestVLAN(task.Task):
     @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
-                bigip_guest_names: [str],
+                bigip_guest_names: List[str],
                 device_guests: list):
 
         path = f"/Common/vlan-{network.vlan_id}"

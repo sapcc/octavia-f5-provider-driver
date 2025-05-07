@@ -11,6 +11,7 @@
 #  WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
 #  License for the specific language governing permissions and limitations
 #  under the License.
+from typing import List
 
 from oslo_log import log as logging
 from taskflow import flow
@@ -23,7 +24,7 @@ LOG = logging.getLogger(__name__)
 
 
 class F5Flows(object):
-    def make_ensure_l2_flow(self, selfips: [network_models.Port], store: dict) -> flow.Flow:
+    def make_ensure_l2_flow(self, selfips: List[network_models.Port], store: dict) -> flow.Flow:
         """
         Construct and return a flow to ensure complete L2 configuration for a new partition.
         The flow assumes that no L2 objects exist yet for the network so nothing is cleaned up.
@@ -166,9 +167,10 @@ class F5Flows(object):
         # remove subnet routes that are existing but don't belong to one of the subnets that need routes
         subnet_route_network_part = f5_tasks.get_subnet_route_name(network.id, '')
         subnet_routes_to_remove = [r for r in existing_subnet_routes
-                                   if r['name'].startswith(subnet_route_network_part)
-                                   and r['name'][len(subnet_route_network_part):] not in subnets_that_need_routes]
-        LOG.debug(f"{host}: Subnet routes to remove for network {network.id} (subnet IDs): {[r['name'] for r in subnet_routes_to_remove]}")
+                                   if r['name'].startswith(subnet_route_network_part) and
+                                   r['name'][len(subnet_route_network_part):] not in subnets_that_need_routes]
+        LOG.debug(f"{host}: Subnet routes to remove for network {network.id} (subnet IDs):"
+                  f" {[r['name'] for r in subnet_routes_to_remove]}")
 
         # make subnet routes removal subflow
         remove_subnet_routes_subflow = unordered_flow.Flow('remove-subnet-routes-subflow')

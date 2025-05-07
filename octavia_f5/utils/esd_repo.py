@@ -46,7 +46,7 @@ class EsdJSONValidation(object):
     def read_json(self):
         for fileList in self.esdJSONFileList:
             try:
-                with open(fileList) as json_file:
+                with open(fileList, encoding="utf-8") as json_file:
                     # Reading each file to a dictionary
                     file_json_dict = json.load(json_file)
                     # Combine all dictionaries to one
@@ -70,7 +70,7 @@ class EsdRepository(EsdJSONValidation):
     def __init__(self):
         self.esd_dict = {}
         self.validtags = []
-        super(EsdRepository, self).__init__(CONF.f5_agent.esd_dir)
+        super().__init__(CONF.f5_agent.esd_dir)
         self.process_esd()
 
     # this function will return intersection of known valid esd tags
@@ -120,11 +120,10 @@ class EsdRepository(EsdJSONValidation):
 
                 # add tag to valid ESD
                 valid_esd[tag] = esd[tag]
-                LOG.debug("Tag {0} is valid for ESD {1}.".format(tag, name))
+                LOG.debug(f"Tag {tag} is valid for ESD {name}.")
             except exceptions.InputFileError as err:
-                LOG.info('Tag {0} failed validation for ESD {1} and was not '
-                         'added to ESD. Error: {2}'.
-                         format(tag, name, err.message))
+                LOG.info(f'Tag {tag} failed validation for ESD {name} and was not '
+                         f'added to ESD. Error: {err.message}')
 
         return valid_esd
 
@@ -134,13 +133,13 @@ class EsdRepository(EsdJSONValidation):
         # verify value type
         value_type = tag_def['value_type']
         if not isinstance(value, value_type):
-            msg = 'Invalid value {0} for tag {1}. ' \
-                  'Type must be {2}.'.format(value, tag, value_type)
+            msg = (f'Invalid value {value} for tag {tag}. '
+                   f'Type must be {value_type}.')
             raise exceptions.InputFileError(filename='', reason=msg)
 
     def verify_tag(self, tag):
         if not self.is_valid_tag(tag):
-            msg = 'Tag {0} is not valid.'.format(tag)
+            msg = f'Tag {tag} is not valid.'
             raise exceptions.InputFileError(filename='', reason=msg)
 
     # this dictionary contains all the tags

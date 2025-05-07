@@ -26,8 +26,8 @@ class RequiredKeyMissingException(Exception):
     """
 
     def __init__(self, key):
-        super(RequiredKeyMissingException).__init__()
-        self.message = 'Missing required key \'{}\'.'.format(key)
+        super().__init__()
+        self.message = f"Missing required key '{key}'."
 
 
 class IncompatibleSubTypeException(Exception):
@@ -38,9 +38,8 @@ class IncompatibleSubTypeException(Exception):
     """
 
     def __init__(self, got, expected):
-        super(IncompatibleSubTypeException).__init__()
-        self.message = 'Incompatible subtype \'{}\', expected \'{}\'.'.format(
-            got, expected)
+        super().__init__()
+        self.message = f"Incompatible subtype '{got}', expected '{expected}'."
 
 
 class DuplicatedKeyException(Exception):

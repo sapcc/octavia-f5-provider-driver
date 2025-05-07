@@ -29,7 +29,7 @@ def get_cipher_rule_name(object_id, object_type):
     :param object_id: octavia listener or pool id
     :return: AS3 object name
     """
-    return "{}{}_{}".format(constants.PREFIX_CIPHER_RULE, object_type.lower(), object_id)
+    return f"{constants.PREFIX_CIPHER_RULE}{object_type.lower()}_{object_id}"
 
 
 def get_cipher_group_name(object_id, object_type):
@@ -38,7 +38,7 @@ def get_cipher_group_name(object_id, object_type):
     :param object_id: octavia listener or pool id
     :return: AS3 object name
     """
-    return "{}{}_{}".format(constants.PREFIX_CIPHER_GROUP, object_type.lower(), object_id)
+    return f"{constants.PREFIX_CIPHER_GROUP}{object_type.lower()}_{object_id}"
 
 
 def filter_cipher_suites(cipher_suites, object_name, object_id, http2=False):
@@ -61,16 +61,16 @@ def filter_cipher_suites(cipher_suites, object_name, object_id, http2=False):
 
     cipher_suites_list = cipher_suites.split(':')
     if rejected_cipher_suites:
-        LOG.error("{} object with ID {} has invalid cipher suites which won't be provisioned: {}"
-                  .format(object_name, object_id, ', '.join(rejected_cipher_suites)))
+        LOG.error(f"{object_name} object with ID {object_id} has invalid cipher suites "
+                  f"which won't be provisioned: {', '.join(rejected_cipher_suites)}")
         for c in rejected_cipher_suites:
             cipher_suites_list.remove(c)
 
     # Add required ciphers if HTTP2 is using
     for cipher in constants.CIPHERS_HTTP2:
         if cipher not in cipher_suites_list:
-            LOG.warning("mandatory cipher {} was added for {} {} because HTTP2 is being used"
-                        .format(cipher, object_name, object_id))
+            LOG.warning(f"mandatory cipher {cipher} was added for {object_name} "
+                        f"{object_id} because HTTP2 is being used")
             cipher_suites_list.append(cipher)
 
     return cipher_suites_list

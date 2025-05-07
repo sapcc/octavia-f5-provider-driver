@@ -30,8 +30,8 @@ class TestGetDeclaration(base.TestCase):
     def setUp(self):
         self.conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         self.conf.config(group='controller_worker',
-                    network_driver='network_noop_driver_f5')
-        super(TestGetDeclaration, self).setUp()
+                         network_driver='network_noop_driver_f5')
+        super().setUp()
 
     @mock.patch("octavia_f5.utils.esd_repo.EsdRepository")
     @mock.patch("octavia_f5.network.drivers.noop_driver_f5.driver.NoopNetworkDriverF5"
@@ -41,8 +41,8 @@ class TestGetDeclaration(base.TestCase):
         as3 = as3declaration.AS3DeclarationManager(mock_status_manager)
         mock_get_segmentation_id.side_effect = [1234, 2345]
         mock_lb = mock.Mock(spec=models.LoadBalancer)
-        mock_lb.pools=[]
-        mock_lb.listeners=[]
+        mock_lb.pools = []
+        mock_lb.listeners = []
 
         self.assertIsInstance(as3, as3declaration.AS3DeclarationManager)
 

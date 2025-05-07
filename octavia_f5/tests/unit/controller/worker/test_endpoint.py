@@ -29,7 +29,7 @@ from octavia_f5.controller.worker import controller_worker
 class TestEndpoint(test_endpoints.TestEndpoints):
 
     def setUp(self):
-        super(TestEndpoint, self).setUp()
+        super().setUp()
 
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         conf.config(octavia_plugins='f5_plugin')
@@ -53,7 +53,7 @@ class TestEndpoint(test_endpoints.TestEndpoints):
         self.availability_zone = uuidutils.generate_uuid()
 
     def tearDown(self):
-        super(TestEndpoint, self).tearDown()
+        super().tearDown()
         self.worker_patcher.stop()
 
     def test_add_loadbalancer(self):

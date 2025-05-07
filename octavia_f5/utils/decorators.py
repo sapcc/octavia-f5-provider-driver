@@ -45,7 +45,7 @@ class RaisesIControlRestError(ContextDecorator):
     def __exit__(self, exc_type, exc_val, traceback):
         if exc_type == HTTPError:
             parsed = urlparse(exc_val.request.url)
-            redacted = parsed._replace(netloc="{}:{}@{}".format(parsed.username, "???", parsed.hostname))
+            redacted = parsed._replace(netloc=f"{parsed.username}:???@{parsed.hostname}")
             try:
                 message = exc_val.response.json()
                 if 'message' in message:

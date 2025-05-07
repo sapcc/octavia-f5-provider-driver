@@ -16,6 +16,7 @@ from octavia.certificates.common import local as local_common
 from octavia.certificates.manager import cert_mgr
 
 
+# pylint: disable=too-many-positional-arguments
 class NoopCertManager(cert_mgr.CertManager):
     def store_cert(self, context, certificate, private_key, intermediates=None, private_key_passphrase=None,
                    expiration=None, name=None):

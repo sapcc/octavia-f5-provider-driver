@@ -16,17 +16,14 @@ from unittest import mock
 
 import copy
 
-import futurist
-from neutronclient.common import exceptions as neutron_client_exceptions
 from octavia_lib.common import constants as lib_consts
 from oslo_utils import uuidutils
 
 from openstack.network.v2.port import Port
 
-from octavia.common import clients, data_models
+from octavia.common import data_models
 from octavia.network import base as network_base
 from octavia.network import data_models as network_models
-from octavia.network.drivers.neutron import allowed_address_pairs
 from octavia.network.drivers.neutron import base as neutron_base
 from octavia.tests.common import constants as t_constants
 from octavia.tests.common import data_model_helpers as dmh
@@ -86,7 +83,7 @@ class TestNeutronClient(base.TestCase):
         return impl_class()
 
     def setUp(self):
-        super(TestNeutronClient, self).setUp()
+        super().setUp()
         mock.patch("tenacity.nap.time").start()
         with mock.patch('octavia.common.clients.openstack.connection.'
                         'Connection', autospec=True) as os_connection:
@@ -98,9 +95,9 @@ class TestNeutronClient(base.TestCase):
             self.k_session = mock.patch(
                 'keystoneauth1.session.Session').start()
             self._get_f5_hostnames = mock.patch(
-                    'octavia_f5.network.drivers.neutron.neutron_client.'
-                    'NeutronClient._get_f5_hostnames',
-                    return_value=[MOCK_HOSTNAME]).start()
+                'octavia_f5.network.drivers.neutron.neutron_client.'
+                'NeutronClient._get_f5_hostnames',
+                return_value=[MOCK_HOSTNAME]).start()
             # self.driver = neutron_driver.NeutronClient()
             self.driver = self._instantiate_partial_abc(
                 neutron_driver.NeutronClient)
@@ -296,7 +293,6 @@ class TestNeutronClient(base.TestCase):
                                       mock.call('self-ip-id-1')],
                                      any_order=True)
 
-
     def test_allocate_vip_when_port_already_provided(self):
         get_port = self.driver.network_proxy.get_port
         get_port.return_value = MOCK_NEUTRON_PORT
@@ -468,7 +464,7 @@ class TestNeutronClient(base.TestCase):
             'binding:host_id': MOCK_CANDIDATE,
             'tenant_id': 'test-project',
             'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID,
-                            'ip_address': t_constants.MOCK_IP_ADDRESS}]
+                           'ip_address': t_constants.MOCK_IP_ADDRESS}]
         }
         create_port.assert_called_once_with(**exp_create_port_call)
         self.assertIsInstance(vip, data_models.Vip)
