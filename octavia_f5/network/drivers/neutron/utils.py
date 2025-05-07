@@ -16,20 +16,18 @@ from octavia.common import constants
 from octavia_f5.network import data_models as network_models
 
 
-def convert_network_dict_to_model(network_dict):
-    nw = network_dict.get('network', network_dict)
-
+def convert_network_to_model(nw):
     return network_models.Network(
-        id=nw.get(constants.ID),
-        name=nw.get(constants.NAME),
-        subnets=nw.get('subnets'),
-        project_id=nw.get(constants.TENANT_ID),
-        admin_state_up=nw.get('admin_state_up'),
-        mtu=nw.get('mtu'),
-        provider_network_type=nw.get('provider:network_type'),
-        provider_physical_network=nw.get('provider:physical_network'),
-        provider_segmentation_id=nw.get('provider:segmentation_id'),
-        router_external=nw.get('router:external'),
-        port_security_enabled=nw.get('port_security_enabled'),
-        segments=nw.get('segments')
+        id=nw.id,
+        name=nw.name,
+        subnets=nw.subnet_ids,
+        project_id=nw.project_id,
+        admin_state_up=nw.is_admin_state_up,
+        mtu=nw.mtu,
+        provider_network_type=nw.provider_network_type,
+        provider_physical_network=nw.provider_physical_network,
+        provider_segmentation_id=nw.provider_segmentation_id,
+        router_external=nw.is_router_external,
+        port_security_enabled=nw.is_port_security_enabled,
+        segments=nw.segments
     )

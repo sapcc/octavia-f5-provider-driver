@@ -197,7 +197,7 @@ class GetAllSelfIPsForNetwork(BaseNetworkTask):
                                    constants.DEVICE_OWNER_LEGACY],
                   'binding:host_id': agent,
                   'network_id': network_id}
-        return self.network_driver.neutron_client.list_ports(**filter).get('ports', [])
+        return self.network_driver.network_proxy.ports(**filter)
 
 
 class CleanupSelfIPs(BaseNetworkTask):

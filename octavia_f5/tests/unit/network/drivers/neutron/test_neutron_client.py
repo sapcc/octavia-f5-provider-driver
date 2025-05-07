@@ -21,6 +21,8 @@ from neutronclient.common import exceptions as neutron_client_exceptions
 from octavia_lib.common import constants as lib_consts
 from oslo_utils import uuidutils
 
+from openstack.network.v2.port import Port
+
 from octavia.common import clients, data_models
 from octavia.network import base as network_base
 from octavia.network import data_models as network_models
@@ -29,6 +31,8 @@ from octavia.network.drivers.neutron import base as neutron_base
 from octavia.tests.common import constants as t_constants
 from octavia.tests.common import data_model_helpers as dmh
 from octavia.tests.unit import base
+import openstack.exceptions as os_exceptions
+
 from octavia_f5.common import constants as f5_constants
 from octavia_f5.network.drivers.neutron import neutron_client as neutron_driver
 
@@ -36,15 +40,15 @@ MOCK_CANDIDATE = 'mock_candidate'
 MOCK_HOSTNAME = 'mock_hostname'
 MOCK_SUBNET_ID = 'e99b5451-aa70-4a71-878e-fc841adadfc9'
 MOCK_SELFIP_IPADDRESS = '1.2.3.4'
-MOCK_NEUTRON_SELFIP_PORTS = {'ports': [{
+MOCK_NEUTRON_SELFIP_PORTS = [Port(**{
     'id': 'mock-selfip-id-1',
     'name': f"local-{MOCK_HOSTNAME}-{MOCK_SUBNET_ID}",
     'network_id': t_constants.MOCK_NETWORK_ID,
     'fixed_ips': [{
         'ip_address': MOCK_SELFIP_IPADDRESS,
         'subnet_id': MOCK_SUBNET_ID}]
-}]}
-EXP_MOCK_SELFIP_PORT = {'port': {
+})]
+EXP_MOCK_SELFIP_PORT = {
     'name': f'local-{MOCK_HOSTNAME}-{MOCK_SUBNET_ID}',
     'device_id': MOCK_SUBNET_ID,
     'device_owner': f5_constants.DEVICE_OWNER_SELFIP,
@@ -54,44 +58,52 @@ EXP_MOCK_SELFIP_PORT = {'port': {
     'tenant_id': 'test-project',
     'description': MOCK_HOSTNAME,
     'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
-}}
-MOCK_NEUTRON_PORT = copy.deepcopy(t_constants.MOCK_NEUTRON_PORT)
-MOCK_NEUTRON_PORT['port']['fixed_ips'][0]['subnet_id'] = MOCK_SUBNET_ID
-EXP_MOCK_NEUTRON_PORT = {'port': {
+}
+MOCK_NEUTRON_PORT = t_constants.MOCK_NEUTRON_PORT
+MOCK_NEUTRON_PORT['fixed_ips'][0]['subnet_id'] = MOCK_SUBNET_ID
+EXP_MOCK_NEUTRON_PORT = {
     'name': 'loadbalancer-1',
     'device_id': '1',
     'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
     'admin_state_up': True,
     'network_id': t_constants.MOCK_NETWORK_ID,
     'binding:host_id': MOCK_CANDIDATE,
-    'project_id': 'test-project',
+    'tenant_id': 'test-project',
     'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
-}}
+}
 
 
 class TestNeutronClient(base.TestCase):
 
+    def _instantiate_partial_abc(self, abclass):
+        if "__abstractmethods__" not in abclass.__dict__:
+            return abclass()
+        new_dict = abclass.__dict__.copy()
+        for abstractmethod in abclass.__abstractmethods__:
+            new_dict[abstractmethod] = lambda x, *args, **kw: (x, args, kw)
+        impl_class = type(f"partially_implemented_abc_{abclass.__name__}",
+                          (abclass,), new_dict)
+        return impl_class()
+
     def setUp(self):
         super(TestNeutronClient, self).setUp()
-        with mock.patch('octavia.common.clients.neutron_client.Client',
-                        autospec=True) as neutron_client:
-            with mock.patch('stevedore.driver.DriverManager.driver',
-                            autospec=True):
-                client = neutron_client(clients.NEUTRON_VERSION)
-                client.list_extensions.return_value = {
-                    'extensions': [
-                        {'alias': allowed_address_pairs.AAP_EXT_ALIAS},
-                        {'alias': neutron_base.SEC_GRP_EXT_ALIAS}
-                    ]
-                }
-                self.k_session = mock.patch(
-                    'keystoneauth1.session.Session').start()
-                self._get_f5_hostnames = mock.patch(
+        mock.patch("tenacity.nap.time").start()
+        with mock.patch('octavia.common.clients.openstack.connection.'
+                        'Connection', autospec=True) as os_connection:
+            self._original_find_extension = (
+                os_connection.return_value.network.find_extension)
+            os_connection.return_value.network.find_extension = (
+                lambda x: 'alias' if x == neutron_base.SEC_GRP_EXT_ALIAS else
+                None)
+            self.k_session = mock.patch(
+                'keystoneauth1.session.Session').start()
+            self._get_f5_hostnames = mock.patch(
                     'octavia_f5.network.drivers.neutron.neutron_client.'
                     'NeutronClient._get_f5_hostnames',
                     return_value=[MOCK_HOSTNAME]).start()
-                self.driver = neutron_driver.NeutronClient()
-                self.driver.executor = futurist.ThreadPoolExecutor(max_workers=4)
+            # self.driver = neutron_driver.NeutronClient()
+            self.driver = self._instantiate_partial_abc(
+                neutron_driver.NeutronClient)
 
     @mock.patch('octavia_f5.db.repositories.LoadBalancerRepository.'
                 'get_all_by_network',
@@ -100,12 +112,12 @@ class TestNeutronClient(base.TestCase):
         lb = dmh.generate_load_balancer_tree()
         lb.vip.load_balancer = lb
         vip = lb.vip
-        show_port = self.driver.neutron_client.show_port
-        show_port.return_value = {'port': {
+        get_port = self.driver.network_proxy.get_port
+        get_port.return_value = {
             'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
             'binding:host_id': MOCK_CANDIDATE
-        }}
-        delete_port = self.driver.neutron_client.delete_port
+        }
+        delete_port = self.driver.network_proxy.delete_port
         self.driver.deallocate_vip(vip)
         delete_port.assert_called_once_with(vip.port_id)
 
@@ -116,14 +128,14 @@ class TestNeutronClient(base.TestCase):
         lb = dmh.generate_load_balancer_tree()
         lb.vip.load_balancer = lb
         vip = lb.vip
-        show_port = self.driver.neutron_client.show_port
-        port = {'port': {
+        get_port = self.driver.network_proxy.get_port
+        port = {
             'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
             'binding:host_id': MOCK_CANDIDATE
-        }}
-        show_port.side_effect = [port, Exception]
+        }
+        get_port.side_effect = [port, Exception]
         self.driver.deallocate_vip(vip)
-        self.driver.neutron_client.update_port.assert_not_called()
+        self.driver.network_proxy.update_port.assert_not_called()
 
     @mock.patch('octavia_f5.db.repositories.LoadBalancerRepository.'
                 'get_all_by_network',
@@ -133,12 +145,12 @@ class TestNeutronClient(base.TestCase):
         lb = dmh.generate_load_balancer_tree()
         vip = data_models.Vip(port_id='1')
         vip.load_balancer = lb
-        show_port = self.driver.neutron_client.show_port
-        show_port.return_value = {'port': {
+        get_port = self.driver.network_proxy.get_port
+        get_port.return_value = {
             'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
             'binding:host_id': MOCK_CANDIDATE
-        }}
-        delete_port = self.driver.neutron_client.delete_port
+        }
+        delete_port = self.driver.network_proxy.delete_port
         delete_port.side_effect = TypeError
         self.assertRaises(network_base.DeallocateVIPException,
                           self.driver.deallocate_vip, vip)
@@ -151,23 +163,22 @@ class TestNeutronClient(base.TestCase):
         lb = dmh.generate_load_balancer_tree()
         lb.vip.load_balancer = lb
         vip = lb.vip
-        show_port = self.driver.neutron_client.show_port
-        show_port.return_value = {'port': {
+        get_port = self.driver.network_proxy.get_port
+        get_port.return_value = {
             'id': vip.port_id,
-            'device_owner': 'neutron:LOADBALANCERV2'}}
-        delete_port = self.driver.neutron_client.delete_port
+            'device_owner': 'neutron:LOADBALANCERV2'}
+        delete_port = self.driver.network_proxy.delete_port
         self.driver.deallocate_vip(vip)
         delete_port.assert_not_called()
 
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])
     def test_allocate_vip_with_selfips(self, mock_get_candidates):
-        update_port = self.driver.neutron_client.update_port
-        create_port = self.driver.neutron_client.create_port
-        show_subnet = self.driver.neutron_client.show_subnet
+        update_port = self.driver.network_proxy.update_port
+        create_port = self.driver.network_proxy.create_port
+        show_subnet = self.driver.network_proxy.show_subnet
 
-        port_create_dict = copy.deepcopy(MOCK_NEUTRON_PORT)
-        create_port.return_value = port_create_dict
+        create_port.return_value = MOCK_NEUTRON_PORT
         show_subnet.return_value = {'subnet': {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
@@ -177,8 +188,8 @@ class TestNeutronClient(base.TestCase):
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
         vip = self.driver.allocate_vip(fake_lb)
-        create_port.assert_has_calls([mock.call(EXP_MOCK_NEUTRON_PORT),
-                                      mock.call(EXP_MOCK_SELFIP_PORT)],
+        create_port.assert_has_calls([mock.call(**EXP_MOCK_NEUTRON_PORT),
+                                      mock.call(**EXP_MOCK_SELFIP_PORT)],
                                      any_order=True)
         self.assertIsInstance(vip, data_models.Vip)
         self.assertEqual(t_constants.MOCK_IP_ADDRESS, vip.ip_address)
@@ -186,34 +197,32 @@ class TestNeutronClient(base.TestCase):
         self.assertEqual(t_constants.MOCK_PORT_ID, vip.port_id)
         self.assertEqual(fake_lb.id, vip.load_balancer_id)
         update_port.assert_called_once_with(
-            'mock-port-1', {'port': {'allowed_address_pairs': [
-                {'ip_address': t_constants.MOCK_IP_ADDRESS}]}})
+            'mock-port-1', allowed_address_pairs=[
+                {'ip_address': t_constants.MOCK_IP_ADDRESS}])
 
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])
     def test_allocate_vip_with_existing_selfips(self, mock_get_candidates):
-        show_subnet = self.driver.neutron_client.show_subnet
-        create_port = self.driver.neutron_client.create_port
-        list_ports = self.driver.neutron_client.list_ports
-        update_port = self.driver.neutron_client.update_port
+        show_subnet = self.driver.network_proxy.show_subnet
+        create_port = self.driver.network_proxy.create_port
+        list_ports = self.driver.network_proxy.ports
+        update_port = self.driver.network_proxy.update_port
 
-        port_create_dict = copy.deepcopy(MOCK_NEUTRON_PORT)
-        create_port.return_value = port_create_dict
-        list_ports_dict = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
-        list_ports.return_value = list_ports_dict
-        show_subnet.return_value = {'subnet': {
+        create_port.return_value = MOCK_NEUTRON_PORT
+        list_ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
+        show_subnet.return_value = {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
-        }}
+        }
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
         self.driver.allocate_vip(fake_lb)
-        create_port.assert_called_once_with(EXP_MOCK_NEUTRON_PORT)
+        create_port.assert_called_once_with(**EXP_MOCK_NEUTRON_PORT)
         update_port.assert_called_once_with(
-            'mock-port-1', {'port': {'allowed_address_pairs': [
-                {'ip_address': MOCK_SELFIP_IPADDRESS}]}})
+            'mock-port-1', allowed_address_pairs=[
+                {'ip_address': MOCK_SELFIP_IPADDRESS}])
 
     @mock.patch('octavia.network.drivers.neutron.base.BaseNeutronDriver.'
                 'get_port', side_effect=Exception('boom'))
@@ -229,62 +238,59 @@ class TestNeutronClient(base.TestCase):
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])
     def test_allocate_vip_revert(self, mock_get_candidates):
-        port_create_dict = copy.deepcopy(MOCK_NEUTRON_PORT)
-        create_port = self.driver.neutron_client.create_port
-        create_port.side_effect = [port_create_dict, Exception('foo')]
-        show_subnet = self.driver.neutron_client.show_subnet
-        show_subnet.return_value = {'subnet': {
+        create_port = self.driver.network_proxy.create_port
+        create_port.side_effect = [MOCK_NEUTRON_PORT, Exception('foo')]
+        show_subnet = self.driver.network_proxy.show_subnet
+        show_subnet.return_value = {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
-        }}
+        }
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
         self.assertRaises(network_base.AllocateVIPException,
                           self.driver.allocate_vip, fake_lb)
-        create_port.assert_has_calls([mock.call(EXP_MOCK_NEUTRON_PORT),
-                                      mock.call(EXP_MOCK_SELFIP_PORT)],
+        create_port.assert_has_calls([mock.call(**EXP_MOCK_NEUTRON_PORT),
+                                      mock.call(**EXP_MOCK_SELFIP_PORT)],
                                      any_order=True)
-        self.driver.neutron_client.delete_port.assert_called_once_with(
-            MOCK_NEUTRON_PORT['port']['id']
+        self.driver.network_proxy.delete_port.assert_called_once_with(
+            MOCK_NEUTRON_PORT['id']
         )
 
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])
     def test_allocate_vip_revert_selfips(self, mock_get_candidates):
-        def create_port_side_effect(port):
-            if port['port']['device_owner'] == f5_constants.DEVICE_OWNER_SELFIP:
-                if port['port']['description'] == MOCK_HOSTNAME:
+        def create_port_side_effect(**port):
+            if port['device_owner'] == f5_constants.DEVICE_OWNER_SELFIP:
+                if port['description'] == MOCK_HOSTNAME:
                     selfip_create_dict = copy.deepcopy(port)
-                    selfip_create_dict['port']['id'] = 'self-ip-id-1'
-                    return selfip_create_dict
-                if port['port']['description'] == 'boom_host':
-                    raise neutron_client_exceptions.NeutronClientException('boom')
+                    selfip_create_dict['id'] = 'self-ip-id-1'
+                    return Port(**selfip_create_dict)
+                if port['description'] == 'boom_host':
+                    raise os_exceptions.SDKException('boom')
             else:
                 vip_create_dict = copy.deepcopy(port)
-                vip_create_dict['port']['id'] = 'vip-ip-id'
-                return vip_create_dict
+                vip_create_dict['id'] = 'vip-ip-id'
+                return Port(**vip_create_dict)
 
-        create_port = self.driver.neutron_client.create_port
+        create_port = self.driver.network_proxy.create_port
         create_port.side_effect = create_port_side_effect
-        delete_port = self.driver.neutron_client.delete_port
-        show_subnet = self.driver.neutron_client.show_subnet
-        show_subnet.return_value = {'subnet': {
+        delete_port = self.driver.network_proxy.delete_port
+        show_subnet = self.driver.network_proxy.show_subnet
+        show_subnet.return_value = {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
-        }}
+        }
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
-        with mock.patch('octavia_f5.network.drivers.neutron.neutron_client.'
-                        'NeutronClient._get_f5_hostnames',
-                        return_value=[MOCK_HOSTNAME, 'boom_host']):
-            self.assertRaises(network_base.AllocateVIPException,
-                              self.driver.allocate_vip, fake_lb)
-        create_port.assert_has_calls([mock.call(EXP_MOCK_NEUTRON_PORT),
-                                      mock.call(EXP_MOCK_SELFIP_PORT)],
+        self._get_f5_hostnames.return_value = [MOCK_HOSTNAME, 'boom_host']
+        self.assertRaises(network_base.AllocateVIPException,
+                          self.driver.allocate_vip, fake_lb)
+        create_port.assert_has_calls([mock.call(**EXP_MOCK_NEUTRON_PORT),
+                                      mock.call(**EXP_MOCK_SELFIP_PORT)],
                                      any_order=True)
         delete_port.assert_has_calls([mock.call('vip-ip-id'),
                                       mock.call('self-ip-id-1')],
@@ -292,8 +298,8 @@ class TestNeutronClient(base.TestCase):
 
 
     def test_allocate_vip_when_port_already_provided(self):
-        show_port = self.driver.neutron_client.show_port
-        show_port.return_value = MOCK_NEUTRON_PORT
+        get_port = self.driver.network_proxy.get_port
+        get_port.return_value = MOCK_NEUTRON_PORT
         fake_lb_vip = data_models.Vip(
             port_id=t_constants.MOCK_PORT_ID,
             subnet_id=MOCK_SUBNET_ID,
@@ -314,18 +320,17 @@ class TestNeutronClient(base.TestCase):
         bad_existing_port.port_id = uuidutils.generate_uuid()
         bad_existing_port.network_id = uuidutils.generate_uuid()
         bad_existing_port.subnet_id = uuidutils.generate_uuid()
-        show_port = self.driver.neutron_client.show_port
-        show_port.return_value = bad_existing_port
-        port_create_dict = copy.deepcopy(MOCK_NEUTRON_PORT)
-        create_port = self.driver.neutron_client.create_port
-        create_port.return_value = port_create_dict
-        show_subnet = self.driver.neutron_client.show_subnet
-        show_subnet.return_value = {'subnet': {
+        get_port = self.driver.network_proxy.get_port
+        get_port.return_value = bad_existing_port
+        create_port = self.driver.network_proxy.create_port
+        create_port.return_value = MOCK_NEUTRON_PORT
+        show_subnet = self.driver.network_proxy.show_subnet
+        show_subnet.return_value = {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
-        }}
-        list_ports = self.driver.neutron_client.list_ports
-        list_ports.return_value = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
+        }
+        list_ports = self.driver.network_proxy.ports
+        list_ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID,
                                       port_id=t_constants.MOCK_PORT_ID,
@@ -334,20 +339,18 @@ class TestNeutronClient(base.TestCase):
                                            project_id='test-project')
         vip = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
-            'port': {
-                'name': 'loadbalancer-1',
-                'network_id': t_constants.MOCK_NETWORK_ID,
-                'device_id': '1',
-                'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
-                'admin_state_up': True,
-                'binding:host_id': MOCK_CANDIDATE,
-                'project_id': 'test-project',
-                'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
-            }
+            'name': 'loadbalancer-1',
+            'network_id': t_constants.MOCK_NETWORK_ID,
+            'device_id': '1',
+            'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
+            'admin_state_up': True,
+            'binding:host_id': MOCK_CANDIDATE,
+            'tenant_id': 'test-project',
+            'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
         }
-        self.driver.neutron_client.delete_port.assert_called_once_with(
+        self.driver.network_proxy.delete_port.assert_called_once_with(
             t_constants.MOCK_PORT_ID)
-        create_port.assert_called_once_with(exp_create_port_call)
+        create_port.assert_called_once_with(**exp_create_port_call)
         self.assertIsInstance(vip, data_models.Vip)
         self.assertEqual(t_constants.MOCK_IP_ADDRESS, vip.ip_address)
         self.assertEqual(MOCK_SUBNET_ID, vip.subnet_id)
@@ -360,17 +363,15 @@ class TestNeutronClient(base.TestCase):
                 return_value=[MOCK_CANDIDATE])
     def test_allocate_vip_when_port_not_found(self, mock_get_candidates,
                                               mock_get_port):
-        port_create_dict = copy.deepcopy(MOCK_NEUTRON_PORT)
-        create_port = self.driver.neutron_client.create_port
-        create_port.return_value = port_create_dict
-        show_subnet = self.driver.neutron_client.show_subnet
-        show_subnet.return_value = {'subnet': {
+        create_port = self.driver.network_proxy.create_port
+        create_port.return_value = MOCK_NEUTRON_PORT
+        show_subnet = self.driver.network_proxy.show_subnet
+        show_subnet.return_value = {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
-        }}
-        list_ports = self.driver.neutron_client.list_ports
-        list_ports_dict = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
-        list_ports.return_value = list_ports_dict
+        }
+        list_ports = self.driver.network_proxy.ports
+        list_ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID,
                                       port_id=t_constants.MOCK_PORT_ID)
@@ -378,18 +379,16 @@ class TestNeutronClient(base.TestCase):
                                            project_id='test-project')
         vip = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
-            'port': {
-                'name': 'loadbalancer-1',
-                'network_id': t_constants.MOCK_NETWORK_ID,
-                'device_id': '1',
-                'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
-                'admin_state_up': True,
-                'binding:host_id': MOCK_CANDIDATE,
-                'project_id': 'test-project',
-                'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
-            }
+            'name': 'loadbalancer-1',
+            'network_id': t_constants.MOCK_NETWORK_ID,
+            'device_id': '1',
+            'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
+            'admin_state_up': True,
+            'binding:host_id': MOCK_CANDIDATE,
+            'tenant_id': 'test-project',
+            'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
         }
-        create_port.assert_called_once_with(exp_create_port_call)
+        create_port.assert_called_once_with(**exp_create_port_call)
         self.assertIsInstance(vip, data_models.Vip)
         self.assertEqual(t_constants.MOCK_IP_ADDRESS, vip.ip_address)
         self.assertEqual(MOCK_SUBNET_ID, vip.subnet_id)
@@ -403,7 +402,7 @@ class TestNeutronClient(base.TestCase):
             network_id=t_constants.MOCK_NETWORK_ID,
             subnet_id=MOCK_SUBNET_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip)
-        create_port = self.driver.neutron_client.create_port
+        create_port = self.driver.network_proxy.create_port
         create_port.side_effect = Exception
         self.assertRaises(network_base.AllocateVIPException,
                           self.driver.allocate_vip, fake_lb)
@@ -411,35 +410,31 @@ class TestNeutronClient(base.TestCase):
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])
     def test_allocate_vip_when_no_port_provided(self, mock_get_candidates):
-        port_create_dict = copy.deepcopy(MOCK_NEUTRON_PORT)
-        create_port = self.driver.neutron_client.create_port
-        create_port.return_value = port_create_dict
-        show_subnet = self.driver.neutron_client.show_subnet
-        show_subnet.return_value = {'subnet': {
+        create_port = self.driver.network_proxy.create_port
+        create_port.return_value = MOCK_NEUTRON_PORT
+        show_subnet = self.driver.network_proxy.show_subnet
+        show_subnet.return_value = {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
-        }}
-        list_ports_dict = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
-        list_ports = self.driver.neutron_client.list_ports
-        list_ports.return_value = list_ports_dict
+        }
+        list_ports = self.driver.network_proxy.ports
+        list_ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
         vip = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
-            'port': {
-                'name': 'loadbalancer-1',
-                'network_id': t_constants.MOCK_NETWORK_ID,
-                'device_id': '1',
-                'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
-                'admin_state_up': True,
-                'binding:host_id': MOCK_CANDIDATE,
-                'project_id': 'test-project',
-                'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
-            }
+            'name': 'loadbalancer-1',
+            'network_id': t_constants.MOCK_NETWORK_ID,
+            'device_id': '1',
+            'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
+            'admin_state_up': True,
+            'binding:host_id': MOCK_CANDIDATE,
+            'tenant_id': 'test-project',
+            'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
         }
-        create_port.assert_called_once_with(exp_create_port_call)
+        create_port.assert_called_once_with(**exp_create_port_call)
         self.assertIsInstance(vip, data_models.Vip)
         self.assertEqual(t_constants.MOCK_IP_ADDRESS, vip.ip_address)
         self.assertEqual(MOCK_SUBNET_ID, vip.subnet_id)
@@ -449,17 +444,15 @@ class TestNeutronClient(base.TestCase):
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])
     def test_allocate_vip_when_no_port_fixed_ip(self, mock_get_candidates):
-        port_create_dict = copy.deepcopy(MOCK_NEUTRON_PORT)
-        create_port = self.driver.neutron_client.create_port
-        create_port.return_value = port_create_dict
-        show_subnet = self.driver.neutron_client.show_subnet
-        show_subnet.return_value = {'subnet': {
+        create_port = self.driver.network_proxy.create_port
+        create_port.return_value = MOCK_NEUTRON_PORT
+        show_subnet = self.driver.network_proxy.show_subnet
+        show_subnet.return_value = {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
-        }}
-        list_ports = self.driver.neutron_client.list_ports
-        list_ports_dict = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
-        list_ports.return_value = list_ports_dict
+        }
+        list_ports = self.driver.network_proxy.ports
+        list_ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID,
                                       ip_address=t_constants.MOCK_IP_ADDRESS)
@@ -467,19 +460,17 @@ class TestNeutronClient(base.TestCase):
                                            project_id='test-project')
         vip = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
-            'port': {
-                'name': 'loadbalancer-1',
-                'network_id': t_constants.MOCK_NETWORK_ID,
-                'device_id': '1',
-                'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
-                'admin_state_up': True,
-                'binding:host_id': MOCK_CANDIDATE,
-                'project_id': 'test-project',
-                'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID,
-                               'ip_address': t_constants.MOCK_IP_ADDRESS}]
-            }
+            'name': 'loadbalancer-1',
+            'network_id': t_constants.MOCK_NETWORK_ID,
+            'device_id': '1',
+            'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
+            'admin_state_up': True,
+            'binding:host_id': MOCK_CANDIDATE,
+            'tenant_id': 'test-project',
+            'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID,
+                            'ip_address': t_constants.MOCK_IP_ADDRESS}]
         }
-        create_port.assert_called_once_with(exp_create_port_call)
+        create_port.assert_called_once_with(**exp_create_port_call)
         self.assertIsInstance(vip, data_models.Vip)
         self.assertEqual(t_constants.MOCK_IP_ADDRESS, vip.ip_address)
         self.assertEqual(MOCK_SUBNET_ID, vip.subnet_id)
@@ -489,32 +480,29 @@ class TestNeutronClient(base.TestCase):
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])
     def test_allocate_vip_when_no_port_no_fixed_ip(self, mock_get_candidates):
-        port_create_dict = copy.deepcopy(MOCK_NEUTRON_PORT)
-        create_port = self.driver.neutron_client.create_port
-        create_port.return_value = port_create_dict
-        show_subnet = self.driver.neutron_client.show_subnet
-        show_subnet.return_value = {'subnet': {
+        create_port = self.driver.network_proxy.create_port
+        create_port.return_value = MOCK_NEUTRON_PORT
+        show_subnet = self.driver.network_proxy.show_subnet
+        show_subnet.return_value = {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
-        }}
-        list_ports = self.driver.neutron_client.list_ports
-        list_ports_dict = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
-        list_ports.return_value = list_ports_dict
+        }
+        list_ports = self.driver.network_proxy.ports
+        list_ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
         fake_lb_vip = data_models.Vip(network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
         vip = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
-            'port': {
-                'name': 'loadbalancer-1',
-                'network_id': t_constants.MOCK_NETWORK_ID,
-                'device_id': '1',
-                'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
-                'admin_state_up': True,
-                'binding:host_id': MOCK_CANDIDATE,
-                'project_id': 'test-project'}
+            'name': 'loadbalancer-1',
+            'network_id': t_constants.MOCK_NETWORK_ID,
+            'device_id': '1',
+            'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
+            'admin_state_up': True,
+            'binding:host_id': MOCK_CANDIDATE,
+            'tenant_id': 'test-project'
         }
-        create_port.assert_called_once_with(exp_create_port_call)
+        create_port.assert_called_once_with(**exp_create_port_call)
         self.assertIsInstance(vip, data_models.Vip)
         self.assertEqual(t_constants.MOCK_PORT_ID, vip.port_id)
         self.assertEqual(fake_lb.id, vip.load_balancer_id)
@@ -522,35 +510,31 @@ class TestNeutronClient(base.TestCase):
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])
     def test_allocate_vip_when_no_port_provided_tenant(self, mock_get_candidates):
-        port_create_dict = copy.deepcopy(MOCK_NEUTRON_PORT)
-        create_port = self.driver.neutron_client.create_port
-        create_port.return_value = port_create_dict
-        show_subnet = self.driver.neutron_client.show_subnet
-        show_subnet.return_value = {'subnet': {
+        create_port = self.driver.network_proxy.create_port
+        create_port.return_value = MOCK_NEUTRON_PORT
+        show_subnet = self.driver.network_proxy.show_subnet
+        show_subnet.return_value = {
             'id': MOCK_SUBNET_ID,
             'network_id': t_constants.MOCK_NETWORK_ID
-        }}
-        list_ports = self.driver.neutron_client.list_ports
-        list_ports_dict = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
-        list_ports.return_value = list_ports_dict
+        }
+        list_ports = self.driver.network_proxy.ports
+        list_ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id=t_constants.MOCK_PROJECT_ID)
         vip = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
-            'port': {
-                'name': 'loadbalancer-1',
-                'network_id': t_constants.MOCK_NETWORK_ID,
-                'device_id': '1',
-                'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
-                'admin_state_up': True,
-                'project_id': t_constants.MOCK_PROJECT_ID,
-                'binding:host_id': MOCK_CANDIDATE,
-                'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
-            }
+            'name': 'loadbalancer-1',
+            'network_id': t_constants.MOCK_NETWORK_ID,
+            'device_id': '1',
+            'device_owner': f5_constants.DEVICE_OWNER_LISTENER,
+            'admin_state_up': True,
+            'tenant_id': t_constants.MOCK_PROJECT_ID,
+            'binding:host_id': MOCK_CANDIDATE,
+            'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
         }
-        create_port.assert_called_once_with(exp_create_port_call)
+        create_port.assert_called_once_with(**exp_create_port_call)
         self.assertIsInstance(vip, data_models.Vip)
         self.assertEqual(t_constants.MOCK_IP_ADDRESS, vip.ip_address)
         self.assertEqual(MOCK_SUBNET_ID, vip.subnet_id)
@@ -558,9 +542,9 @@ class TestNeutronClient(base.TestCase):
         self.assertEqual(fake_lb.id, vip.load_balancer_id)
 
     def test_ensure_selfips_create(self):
-        list_ports = self.driver.neutron_client.list_ports
-        list_ports.return_value = {'ports': []}
-        create_port = self.driver.neutron_client.create_port
+        list_ports = self.driver.network_proxy.ports
+        list_ports.return_value = []
+        create_port = self.driver.network_proxy.create_port
 
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
@@ -568,28 +552,25 @@ class TestNeutronClient(base.TestCase):
                                         project_id='test-project')]
         existing_selfips, new_selfips = self.driver.ensure_selfips(lbs, MOCK_CANDIDATE)
         exp_create_port_call = {
-            'port': {
-                'tenant_id': 'test-project',
-                'name': f"local-{MOCK_HOSTNAME}-{MOCK_SUBNET_ID}",
-                'network_id': t_constants.MOCK_NETWORK_ID,
-                'device_owner': f5_constants.DEVICE_OWNER_SELFIP,
-                'device_id': MOCK_SUBNET_ID,
-                'description': MOCK_HOSTNAME,
-                'admin_state_up': True,
-                'binding:host_id': MOCK_CANDIDATE,
-                'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
-            }
+            'tenant_id': 'test-project',
+            'name': f"local-{MOCK_HOSTNAME}-{MOCK_SUBNET_ID}",
+            'network_id': t_constants.MOCK_NETWORK_ID,
+            'device_owner': f5_constants.DEVICE_OWNER_SELFIP,
+            'device_id': MOCK_SUBNET_ID,
+            'description': MOCK_HOSTNAME,
+            'admin_state_up': True,
+            'binding:host_id': MOCK_CANDIDATE,
+            'fixed_ips': [{'subnet_id': MOCK_SUBNET_ID}]
         }
-        create_port.assert_called_once_with(exp_create_port_call)
+        create_port.assert_called_once_with(**exp_create_port_call)
         self.assertEqual(len(new_selfips), 1)
         self.assertEqual(len(existing_selfips), 0)
         self.assertIsInstance(new_selfips[0], network_models.Port)
 
     def test_ensure_selfips_noop(self):
-        list_ports = self.driver.neutron_client.list_ports
-        list_ports_dict = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
-        list_ports.return_value = list_ports_dict
-        create_port = self.driver.neutron_client.create_port
+        list_ports = self.driver.network_proxy.ports
+        list_ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
+        create_port = self.driver.network_proxy.create_port
 
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
@@ -603,20 +584,20 @@ class TestNeutronClient(base.TestCase):
         self.assertIsInstance(selfips[0], network_models.Port)
 
     def test_ensure_selfips_delete_duplicate(self):
-        selfip_ports = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
+        selfip_ports = [MOCK_NEUTRON_SELFIP_PORTS[0]]
         # append a duplicate port
-        selfip_ports['ports'].append({
+        selfip_ports.append(Port(**{
             'id': 'mock-selfip-id-2',
             'name': f"local-{MOCK_HOSTNAME}-{MOCK_SUBNET_ID}",
             'network_id': t_constants.MOCK_NETWORK_ID,
             'fixed_ips': [{
                 'ip_address': MOCK_SELFIP_IPADDRESS,
                 'subnet_id': MOCK_SUBNET_ID}]
-        })
-        list_ports = self.driver.neutron_client.list_ports
+        }))
+        list_ports = self.driver.network_proxy.ports
         list_ports.return_value = selfip_ports
-        delete_port = self.driver.neutron_client.delete_port
-        create_port = self.driver.neutron_client.create_port
+        delete_port = self.driver.network_proxy.delete_port
+        create_port = self.driver.network_proxy.create_port
 
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
@@ -629,19 +610,19 @@ class TestNeutronClient(base.TestCase):
         self.assertIsInstance(selfips[0], network_models.Port)
 
     def test_ensure_selfips_delete(self):
-        selfip_ports = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
+        selfip_ports = [MOCK_NEUTRON_SELFIP_PORTS[0]]
         # append a unexpected port
         unexpected_subnet_id = uuidutils.generate_uuid()
-        selfip_ports['ports'].append({
+        selfip_ports.append(Port(**{
             'id': 'mock-selfip-id-2',
             'name': f"local-{MOCK_HOSTNAME}-{unexpected_subnet_id}",
             'network_id': t_constants.MOCK_NETWORK_ID,
             'fixed_ips': [{'subnet_id': unexpected_subnet_id}]
-        })
-        list_ports = self.driver.neutron_client.list_ports
+        }))
+        list_ports = self.driver.network_proxy.ports
         list_ports.return_value = selfip_ports
-        delete_port = self.driver.neutron_client.delete_port
-        create_port = self.driver.neutron_client.create_port
+        delete_port = self.driver.network_proxy.delete_port
+        create_port = self.driver.network_proxy.create_port
 
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
@@ -656,9 +637,9 @@ class TestNeutronClient(base.TestCase):
         self.assertIsInstance(selfips[0], network_models.Port)
 
     def test_ensure_selfips_no_network(self):
-        create_port = self.driver.neutron_client.create_port
-        create_port.side_effect = [neutron_client_exceptions.NetworkNotFoundClient()]
-        delete_port = self.driver.neutron_client.delete_port
+        create_port = self.driver.network_proxy.create_port
+        create_port.side_effect = [os_exceptions.NotFoundException()]
+        delete_port = self.driver.network_proxy.delete_port
 
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
@@ -670,11 +651,10 @@ class TestNeutronClient(base.TestCase):
         self.assertEqual(len(selfips), 0)
 
     def test_ensure_selfips_delete_orphaned(self):
-        selfip_ports = copy.deepcopy(MOCK_NEUTRON_SELFIP_PORTS)
-        list_ports = self.driver.neutron_client.list_ports
-        list_ports.return_value = selfip_ports
-        delete_port = self.driver.neutron_client.delete_port
-        create_port = self.driver.neutron_client.create_port
+        list_ports = self.driver.network_proxy.ports
+        list_ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
+        delete_port = self.driver.network_proxy.delete_port
+        create_port = self.driver.network_proxy.create_port
 
         fake_lb_vip = data_models.Vip(subnet_id=MOCK_SUBNET_ID,
                                       network_id=t_constants.MOCK_NETWORK_ID)
@@ -684,6 +664,6 @@ class TestNeutronClient(base.TestCase):
 
         # check if deletes unexpected subnet selfip
         _, selfips = self.driver.ensure_selfips(lbs, MOCK_CANDIDATE, True)
-        delete_port.assert_called_once_with(MOCK_NEUTRON_SELFIP_PORTS['ports'][0]['id'])
+        delete_port.assert_called_once_with(MOCK_NEUTRON_SELFIP_PORTS[0]['id'])
         create_port.assert_not_called()
         self.assertEqual(len(selfips), 0)
