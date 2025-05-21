@@ -17,6 +17,7 @@ from netaddr import IPNetwork
 from oslo_config import cfg
 from oslo_log import log as logging
 from taskflow import task
+from taskflow.types import failure
 
 from octavia.network import data_models as network_models
 from octavia_f5.common import constants
@@ -296,7 +297,6 @@ class GetExistingRouteDomain(task.Task):
             return None
         return device_response.json()
 
-
 class GetExistingSelfIPsForVLAN(task.Task):
     default_provides = 'existing_selfips'
 
@@ -546,35 +546,76 @@ class RemoveSelfIP(task.Task):
 
 
 class RemoveRouteDomain(task.Task):
-    def execute(self, network: f5_network_models.Network,
-                bigip: bigip_restclient.BigIPRestClient):
 
-        paths = [
-            f"/mgmt/tm/net/route-domain/vlan-{network.vlan_id}",
-            f"/mgmt/tm/net/route-domain/net-{network.id}"
-        ]
+    @decorators.RaisesIControlRestError()
+    def execute(self, network: f5_network_models.Network,
+                bigip: bigip_restclient.BigIPRestClient,
+                existing_route_domain):
 
         """ Task to delete Route Domain """
-        res = None
-        for path in paths:
-            if bigip.get(path=path).ok:
-                res = bigip.delete(path=path)
-                break
+        if existing_route_domain is None:
+            return
+        res = bigip.delete(path=f"/mgmt/tm/net/route-domain/{existing_route_domain['fullPath']}")
+        res.raise_for_status()
 
-        if res and not res.ok:
-            LOG.warning("%s: Failed removing route domain for network_id=%s vlan_id=%s: %s",
-                        bigip.hostname, network.id, network.vlan_id, res.content)
-
+    @decorators.RaisesIControlRestError()
+    def revert(self,
+                bigip: bigip_restclient.BigIPRestClient,
+                existing_route_domain, result, *args, **kwargs):
+        if isinstance(result, failure.Failure):
+            # If this task failed it means that object was not removed
+            LOG.warning("Revert task was called for removing route domain due to some errors, but deletion failed "
+                        f"on device: {bigip.hostname} for route domain: {existing_route_domain}. Usually, it means"
+                        "that route domain is still on the device as expected.")
+            return
+        # Restore RouteDomain if it existed before
+        if existing_route_domain is not None:
+            res = bigip.post(
+                path='/mgmt/tm/net/route-domain',
+                json={
+                    'name': existing_route_domain['name'],
+                    'vlans': existing_route_domain['vlans'],
+                    'id': existing_route_domain['id']
+                }
+            )
+            res.raise_for_status()
 
 class RemoveVLAN(task.Task):
+
+    @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
-                bigip: bigip_restclient.BigIPRestClient):
+                bigip: bigip_restclient.BigIPRestClient,
+                existing_vlan: dict):
         """ Task to delete VLAN """
-        name = f'vlan-{network.vlan_id}'
-        res = bigip.delete(path=f"/mgmt/tm/net/vlan/~Common~{name}")
-        if not res.ok:
-            LOG.warning("%s: Failed removing VLAN for vlan_id=%s: %s",
-                        bigip.hostname, network.vlan_id, res.content)
+        if existing_vlan is None:
+            return
+        res = bigip.delete(path=f"/mgmt/tm/net/vlan/~Common~vlan-{network.vlan_id}")
+        res.raise_for_status()
+
+    @decorators.RaisesIControlRestError()
+    def revert(self,
+                bigip: bigip_restclient.BigIPRestClient,
+                existing_vlan: dict, result, *args, **kwargs):
+        if isinstance(result, failure.Failure):
+            # If this task failed it means that object was not removed
+            LOG.warning("Revert task was called for removing VLAN due to some errors, but deletion failed "
+                        f"on device: {bigip.hostname} for VLAN: {existing_vlan}. Usually, it means"
+                        "that VLAN is still on the device as expected.")
+            return
+        # Restore VLAN existed before
+        if existing_vlan is not None:
+            res = bigip.post(
+                path='/mgmt/tm/net/vlan',
+                json={
+                    'name': existing_vlan['name'],
+                    'tag': existing_vlan['tag'],
+                    'mtu': existing_vlan['mtu'],
+                    'hardwareSyncookie': existing_vlan['hardwareSyncookie'],
+                    'synFloodRateLimit': existing_vlan['synFloodRateLimit'],
+                    'syncacheThreshold': existing_vlan['syncacheThreshold']
+                }
+            )
+            res.raise_for_status()
 
 
 class GetVCMPGuests(task.Task):

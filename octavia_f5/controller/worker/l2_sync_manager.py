@@ -116,20 +116,23 @@ class L2SyncManager(BaseTaskFlowEngine):
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
-    def _do_remove_l2_flow(self, store: dict):
+    def _do_remove_l2_flow(self, data: dict):
+        remove_l2_flow = unordered_flow.Flow('remove-l2-flow-from-all-devices')
+        for flow_data in data.values():
+            # get existing SelfIPs and subnet routes
+            e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(),
+                                   store=flow_data['store'])
+            with tf_logging.LoggingListener(e, log=LOG):
+                e.run()
 
-        # get existing SelfIPs and subnet routes
-        e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
-        with tf_logging.LoggingListener(e, log=LOG):
-            e.run()
+            # info about existing SelfIPs and subnet routes could be needed for either
+            # flow construction or in the tasks themselves, or both
+            flow_data['store']['existing_selfips'] = e.storage.get('get-existing-selfips')
+            flow_data['store']['existing_subnet_routes'] = e.storage.get('get-existing-subnet-routes')
 
-        # info about existing SelfIPs and subnet routes could be needed for either
-        # flow construction or in the tasks themselves, or both
-        store['existing_selfips'] = e.storage.get('get-existing-selfips')
-        store['existing_subnet_routes'] = e.storage.get('get-existing-subnet-routes')
+            remove_l2_flow.add(self._f5flows.make_remove_l2_flow(store=flow_data['store']))
 
-        remove_l2_flow = self._f5flows.make_remove_l2_flow(store=store)
-        e = self.taskflow_load(remove_l2_flow, store=store)
+        e = self.taskflow_load(remove_l2_flow)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
@@ -259,13 +262,25 @@ class L2SyncManager(BaseTaskFlowEngine):
                       network_id)
             return
 
+        # run l2 flow for all devices in parallel
         fs = {}
+        remove_l2_flow_data = {}
         for bigip in self._bigips:
             if device and bigip.hostname != device:
                 continue
 
-            store = {'bigip': bigip, 'network': network}
-            fs[self.executor.submit(self._do_remove_l2_flow, store=store)] = bigip
+            # Check if device available by symple GET request
+            if not bigip.is_available(timeout=CONF.status_manager.failover_timeout):
+                LOG.debug(f"Device {bigip.hostname} is unreachable for API requests.")
+                continue
+
+            remove_l2_flow_data[bigip.hostname] = {
+                'store': {'bigip': bigip, 'network': network},
+            }
+
+        fs[self.executor.submit(
+            self._do_remove_l2_flow,
+            data=remove_l2_flow_data)] = ','.join(remove_l2_flow_data.keys())
 
         if CONF.networking.override_vcmp_guest_names:
             guest_names = CONF.networking.override_vcmp_guest_names
