@@ -258,15 +258,15 @@ class TestL2SyncManager(base.TestCase):
                 ".get_subnet")
     def test__do_ensure_l2_flow_nothing_exist_no_errors(self, mock_get_subnet):
         mock_get_subnet.return_value = network_models.Subnet(
-            id='test-subnet-id', gateway_ip='1.2.3.1',
+            id='test-subnet-id-1', gateway_ip='1.2.3.1',
             cidr='1.2.3.0/24', network_id='test-network-id')
         mock_network = f5_network_models.Network(
-            mtu=8950, id='test-network-id', subnets=['test-subnet-id'],
+            mtu=8950, id='test-network-id', subnets=['test-subnet-id-1', 'test-subnet-id-2'],
             segments=[{'provider:physical_network': 'physnet',
                        'provider:segmentation_id': 1234}]
         )
         selfip_fixed_ip = network_models.FixedIP(
-            ip_address='1.2.3.2', subnet_id='test-subnet-id-2')
+            ip_address='5.6.7.8', subnet_id='test-subnet-id-2')
         selfip_port = network_models.Port(
             id='test-selfip-port-id', fixed_ips=[selfip_fixed_ip],
         )
@@ -284,7 +284,7 @@ class TestL2SyncManager(base.TestCase):
                 'store': {
                     'network': mock_network,
                     'bigip': mock_bigips[0],
-                    'subnet_id': 'test-subnet-id',
+                    'subnet_id': 'test-subnet-id-2',
                     'existing_selfips': []
                 }
             },
@@ -293,7 +293,7 @@ class TestL2SyncManager(base.TestCase):
                 'store': {
                     'network': mock_network,
                     'bigip': mock_bigips[1],
-                    'subnet_id': 'test-subnet-id',
+                    'subnet_id': 'test-subnet-id-2',
                     'existing_selfips': []
                 }
             }
@@ -306,6 +306,25 @@ class TestL2SyncManager(base.TestCase):
         self.assertEqual(mock_bigips[1].post.call_count, 5)
         self.assertEqual(mock_bigips[0].delete.call_count, 0)
         self.assertEqual(mock_bigips[1].delete.call_count, 0)
+        for i in range(0, 2):
+            # check SelfIP creation
+            mock_bigips[i].post.assert_any_call(
+                path='/mgmt/tm/net/self',
+                json={'name': 'port-test-selfip-port-id', 'vlan': '/Common/vlan-1234',
+                      'address': '5.6.7.8%1234/24'})
+            # check DefaultRoute creation
+            mock_bigips[i].post.assert_any_call(
+                path='/mgmt/tm/net/route',
+                json={'name': 'vlan-1234', 'gw': '1.2.3.1%1234',
+                      'network': 'default%1234'})
+            # check SubnetRoute existence
+            mock_bigips[i].get.assert_any_call(
+                path='/mgmt/tm/net/route/~Common~net_test-network-id_sub_test-subnet-id-1')
+            # check SubnetRoute creation
+            mock_bigips[i].post.assert_any_call(
+                path='/mgmt/tm/net/route',
+                json={'name': 'net_test-network-id_sub_test-subnet-id-1',
+                      'tmInterface': '/Common/vlan-1234', 'network': '1.2.3.0%1234/24'})
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
