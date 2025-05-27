@@ -42,8 +42,9 @@ class F5Flows(object):
             ensure_selfip_task = f5_tasks.EnsureSelfIP(
                 name=f'ensure-selfip-{bigip_hostname}-{selfip_port.id}',
                 inject={
-                    'port': selfip_port,
-                    **store
+                    # store data should come first because it also contains port data
+                    **store,
+                    'port': selfip_port
                 }
             )
             ensure_selfips_subflow.add(ensure_selfip_task)
@@ -61,8 +62,9 @@ class F5Flows(object):
             ensure_subnet_route_task = f5_tasks.EnsureSubnetRoute(
                 name=f'ensure-subnet-route-{bigip_hostname}-{subnet_route_name}',
                 inject={
-                    'subnet_id': subnet_id,
-                    **store
+                    # store data should come first because it also contains subnet_id
+                    **store,
+                    'subnet_id': subnet_id
                 }
             )
             ensure_subnet_routes_subflow.add(ensure_subnet_route_task)
