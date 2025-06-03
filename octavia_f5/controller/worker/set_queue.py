@@ -16,12 +16,33 @@ from queue import Queue
 
 
 class SetQueue(Queue):
+    """
+    A thread-safe queue that stores unique items using sets and supports priority items.
+
+    Inherits from `Queue` but overrides the internal storage to use sets, ensuring all items are unique.
+    Items added via `put_priority` are returned first when retrieving from the queue.
+    """
     def _init(self, maxsize):
         self.maxsize = maxsize
         self.queue = set()
+        self.priority_queue = set()
+
+    def put_priority(self, item):
+        """Add an item to the priority queue."""
+        self.priority_queue.add(item)
+        self.queue.discard(item)
 
     def _put(self, item):
         self.queue.add(item)
 
+    def _qsize(self):
+        """Return the approximate size of the queue."""
+        return len(self.queue) + len(self.priority_queue)
+
     def _get(self):
+        if len(self.priority_queue) > 0:
+            # If there are priority items, return one of them
+            item = self.priority_queue.pop()
+            self.queue.discard(item)
+            return item
         return self.queue.pop()
