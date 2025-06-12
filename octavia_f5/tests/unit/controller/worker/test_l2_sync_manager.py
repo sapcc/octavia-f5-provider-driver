@@ -299,7 +299,7 @@ class TestL2SyncManager(base.TestCase):
             }
         ]
         self.manager._do_ensure_l2_flow(data=data)
-        # check thath both devices were called and REVERT tasks were not called
+        # check that both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigips[0].get.call_count, 9)
         self.assertEqual(mock_bigips[1].get.call_count, 9)
         self.assertEqual(mock_bigips[0].post.call_count, 5)
@@ -389,7 +389,7 @@ class TestL2SyncManager(base.TestCase):
             }
         ]
         self.assertRaises(Exception, self.manager._do_ensure_l2_flow, data=data)
-        # check thath both devices were called and REVERT tasks were also called
+        # check that both devices were called and REVERT tasks were also called
         self.assertEqual(mock_bigip_1.get.call_count, 10)
         self.assertEqual(mock_bigip_2.get.call_count, 7)
         self.assertEqual(mock_bigip_1.post.call_count, 5)
@@ -502,7 +502,7 @@ class TestL2SyncManager(base.TestCase):
             }
         ]
         self.manager._do_remove_l2_flow(data=data)
-        # check thath both devices were called and REVERT tasks were not called
+        # check that both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigips[0].get.call_count, 7)
         self.assertEqual(mock_bigips[1].get.call_count, 7)
         self.assertEqual(mock_bigips[0].post.call_count, 0)
@@ -597,7 +597,7 @@ class TestL2SyncManager(base.TestCase):
             # RouteDomain delete
             MockResponse({}, 200),
             # VLAN delete
-            MockResponse({}, 502, "something happend")
+            MockResponse({}, 502, "something happened")
         ]
         data = [
             {
@@ -616,7 +616,7 @@ class TestL2SyncManager(base.TestCase):
             }
         ]
         self.assertRaises(Exception, self.manager._do_remove_l2_flow, data=data)
-        # check thath both devices were called and REVERT tasks were not called
+        # check that both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigip_1.get.call_count, 5)
         self.assertEqual(mock_bigip_2.get.call_count, 5)
         self.assertEqual(mock_bigip_1.post.call_count, 2)
