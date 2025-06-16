@@ -116,9 +116,9 @@ class L2SyncManager(BaseTaskFlowEngine):
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
-    def _do_remove_l2_flow(self, data: dict):
+    def _do_remove_l2_flow(self, data: list):
         remove_l2_flow = unordered_flow.Flow('remove-l2-flow-from-all-devices')
-        for flow_data in data.values():
+        for flow_data in data:
             # get existing SelfIPs and subnet routes
             e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(),
                                    store=flow_data['store'])
@@ -264,7 +264,7 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         # run l2 flow for all devices in parallel
         fs = {}
-        remove_l2_flow_data = {}
+        remove_l2_flow_data = []
         for bigip in self._bigips:
             if device and bigip.hostname != device:
                 continue
@@ -274,13 +274,13 @@ class L2SyncManager(BaseTaskFlowEngine):
                 LOG.debug(f"Device {bigip.hostname} is unreachable for API requests.")
                 continue
 
-            remove_l2_flow_data[bigip.hostname] = {
+            remove_l2_flow_data.append({
                 'store': {'bigip': bigip, 'network': network},
-            }
+            })
 
         fs[self.executor.submit(
             self._do_remove_l2_flow,
-            data=remove_l2_flow_data)] = ','.join(remove_l2_flow_data.keys())
+            data=remove_l2_flow_data)] = self._bigips
 
         if CONF.networking.override_vcmp_guest_names:
             guest_names = CONF.networking.override_vcmp_guest_names
@@ -289,16 +289,20 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         for vcmp in self._vcmps:
             store = {'bigip': vcmp, 'bigip_guest_names': guest_names, 'network': network}
-            fs[self.executor.submit(self._do_remove_vcmp_l2_flow, store=store)] = vcmp
+            fs[self.executor.submit(self._do_remove_vcmp_l2_flow, store=store)] = [vcmp]
 
         done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
         for f in done | not_done:
-            bigip = fs[f]
+            bigips = fs[f]
             try:
                 f.result(0)
             except Exception as e:
-                self._metric_failed_futures.labels(bigip.hostname, 'remove_l2_flow').inc()
-                LOG.error("Failed running remove_l2_flow for host %s: %s", bigip.hostname, e)
+                hostnames = [bigip.hostname for bigip in bigips]
+                for hostname in hostnames:
+                    # consider both device flows as failed, since we don't know
+                    # which one the error originated in.
+                    self._metric_failed_futures.labels(hostname, 'remove_l2_flow').inc()
+                LOG.error(f"Failed running remove_l2_flow for hosts {', '.join(hostnames)}: {e}")
 
     def sync_l2_selfips_and_subnet_routes_flow(self, selfips: [network_models.Port], network_id: str, device=None):
         """ Runs the taskflows to sync (add/remove) SelfIPs and subnet routes on all bigip devices in parallel

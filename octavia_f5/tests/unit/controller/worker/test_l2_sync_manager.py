@@ -299,7 +299,7 @@ class TestL2SyncManager(base.TestCase):
             }
         ]
         self.manager._do_ensure_l2_flow(data=data)
-        # check thath both devices were called and REVERT tasks were not called
+        # check that both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigips[0].get.call_count, 9)
         self.assertEqual(mock_bigips[1].get.call_count, 9)
         self.assertEqual(mock_bigips[0].post.call_count, 5)
@@ -389,7 +389,7 @@ class TestL2SyncManager(base.TestCase):
             }
         ]
         self.assertRaises(Exception, self.manager._do_ensure_l2_flow, data=data)
-        # check thath both devices were called and REVERT tasks were also called
+        # check that both devices were called and REVERT tasks were also called
         self.assertEqual(mock_bigip_1.get.call_count, 10)
         self.assertEqual(mock_bigip_2.get.call_count, 7)
         self.assertEqual(mock_bigip_1.post.call_count, 5)
@@ -422,14 +422,15 @@ class TestL2SyncManager(base.TestCase):
     def test_remove_l2_flow_all_available(self, mock_get_network,
                             mock_l2_flow, mock_vcmp_l2_flow):
         self.manager.remove_l2_flow('test-network-id')
-        mock_l2_flow.assert_called_once_with(data={
-            'test-guest-hostname_0': {
+        mock_l2_flow.assert_called_once_with(data=[
+        {
                 'store': {'bigip': self.manager._bigips[0],
-                          'network': mock_get_network.return_value}},
-            'test-guest-hostname_1': {
+                          'network': mock_get_network.return_value}
+        },
+        {
                 'store': {'bigip': self.manager._bigips[1],
-                          'network': mock_get_network.return_value}}
-        })
+                          'network': mock_get_network.return_value}
+        }])
         self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
@@ -451,11 +452,11 @@ class TestL2SyncManager(base.TestCase):
         self.manager.remove_l2_flow('test-network-id')
         self.manager._bigips[1].is_available.assert_called_once_with(timeout=5)
         # expect only one call for BigIP, only for available device
-        mock_l2_flow.assert_called_once_with(data={
-            'test-guest-hostname_0': {
+        mock_l2_flow.assert_called_once_with(data=[
+            {
                 'store': {'bigip': self.manager._bigips[0],
-                          'network': mock_get_network.return_value}}
-        })
+                          'network': mock_get_network.return_value}
+            }])
         self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
@@ -484,24 +485,24 @@ class TestL2SyncManager(base.TestCase):
                 MockResponse({}, 404) for _ in range(9)]
             mock_bigips.append(mock_bigip)
         mock_bigips[0].is_active = True
-        data = {
-            mock_bigips[0].hostname: {
+        data = [
+            {
                 'store': {
                     'network': mock_network,
                     'bigip': mock_bigips[0],
                     'subnet_id': 'test-subnet-id',
                 }
             },
-            mock_bigips[1].hostname: {
+            {
                 'store': {
                     'network': mock_network,
                     'bigip': mock_bigips[1],
                     'subnet_id': 'test-subnet-id',
                 }
             }
-        }
+        ]
         self.manager._do_remove_l2_flow(data=data)
-        # check thath both devices were called and REVERT tasks were not called
+        # check that both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigips[0].get.call_count, 7)
         self.assertEqual(mock_bigips[1].get.call_count, 7)
         self.assertEqual(mock_bigips[0].post.call_count, 0)
@@ -596,27 +597,26 @@ class TestL2SyncManager(base.TestCase):
             # RouteDomain delete
             MockResponse({}, 200),
             # VLAN delete
-            MockResponse({}, 502, "something happend")
+            MockResponse({}, 502, "something happened")
         ]
-        data = {
-            'hostname-1': {
+        data = [
+            {
                 'store': {
                     'network': mock_network,
                     'bigip': mock_bigip_1,
                     'subnet_id': 'test-subnet-id',
                 }
             },
-            'hostname-2': {
+            {
                 'store': {
                     'network': mock_network,
                     'bigip': mock_bigip_2,
                     'subnet_id': 'test-subnet-id',
                 }
             }
-        }
-        # self.manager._do_remove_l2_flow(data=data)
+        ]
         self.assertRaises(Exception, self.manager._do_remove_l2_flow, data=data)
-        # check thath both devices were called and REVERT tasks were not called
+        # check that both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigip_1.get.call_count, 5)
         self.assertEqual(mock_bigip_2.get.call_count, 5)
         self.assertEqual(mock_bigip_1.post.call_count, 2)
