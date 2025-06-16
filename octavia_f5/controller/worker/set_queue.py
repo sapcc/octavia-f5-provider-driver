@@ -32,7 +32,7 @@ class SetQueue(Queue):
         self.priority_queue.add(item)
         self.queue.discard(item)
         # notify polling threads
-        with self.not_empty: # acquire self.mutex for self.not_empty
+        with self.not_empty:  # acquire self.mutex for self.not_empty
             self.not_empty.notify()
 
     def _put(self, item):
