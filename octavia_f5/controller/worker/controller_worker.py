@@ -277,7 +277,7 @@ class ControllerWorker(object):
         # because each network is synced separately
         pending_networks = set(lb.vip.network_id for lb in lbs)
         for network_id in pending_networks:
-            self.queue.put_nowait((network_id, None))
+            self.queue.put_priority((network_id, None))
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
@@ -339,7 +339,7 @@ class ControllerWorker(object):
 
         self.ensure_amphora_exists(db_lb.id)
         self.ensure_host_set(db_lb)
-        self.queue.put((db_lb.vip.network_id, None))
+        self.queue.put_priority((db_lb.vip.network_id, None))
 
     def update_load_balancer(self, original_load_balancer,
                              load_balancer_updates):
@@ -347,7 +347,7 @@ class ControllerWorker(object):
             db_lb = self._loadbalancer_repo.get(
                 session,
                 id=original_load_balancer[octavia_consts.LOADBALANCER_ID])
-        self.queue.put((db_lb.vip.network_id, None))
+        self.queue.put_priority((db_lb.vip.network_id, None))
 
     def delete_load_balancer(self, load_balancer, cascade=False):
         with db_apis.session().begin() as session:
@@ -356,7 +356,7 @@ class ControllerWorker(object):
                 id=load_balancer[octavia_consts.LOADBALANCER_ID])
         # could be deleted by sync-loop meanwhile
         if db_lb:
-            self.queue.put((db_lb.vip.network_id, None))
+            self.queue.put_priority((db_lb.vip.network_id, None))
 
     """
     Listener
@@ -378,14 +378,14 @@ class ControllerWorker(object):
                         listener[octavia_consts.LISTENER_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((db_listener.load_balancer.vip.network_id, None))
+        self.queue.put_priority((db_listener.load_balancer.vip.network_id, None))
 
     def update_listener(self, listener, listener_updates):
         with db_apis.session().begin() as session:
             db_listener = self._listener_repo.get(
                 session,
                 id=listener[octavia_consts.LISTENER_ID])
-        self.queue.put((db_listener.load_balancer.vip.network_id, None))
+        self.queue.put_priority((db_listener.load_balancer.vip.network_id, None))
 
     def delete_listener(self, listener):
         with db_apis.session().begin() as session:
@@ -394,7 +394,7 @@ class ControllerWorker(object):
                 id=listener[octavia_consts.LISTENER_ID])
         # could be deleted by sync-loop meanwhile
         if db_listener:
-            self.queue.put((db_listener.load_balancer.vip.network_id, None))
+            self.queue.put_priority((db_listener.load_balancer.vip.network_id, None))
 
     """
     Pool
@@ -416,14 +416,14 @@ class ControllerWorker(object):
                         pool[octavia_consts.POOL_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((db_pool.load_balancer.vip.network_id, None))
+        self.queue.put_priority((db_pool.load_balancer.vip.network_id, None))
 
     def update_pool(self, origin_pool, pool_updates):
         with db_apis.session().begin() as session:
             db_pool = self._pool_repo.get(
                 session,
                 id=origin_pool[octavia_consts.POOL_ID])
-        self.queue.put((db_pool.load_balancer.vip.network_id, None))
+        self.queue.put_priority((db_pool.load_balancer.vip.network_id, None))
 
     def delete_pool(self, pool):
         with db_apis.session().begin() as session:
@@ -432,7 +432,7 @@ class ControllerWorker(object):
                 id=pool[octavia_consts.POOL_ID])
         # could be deleted by sync-loop meanwhile
         if db_pool:
-            self.queue.put((db_pool.load_balancer.vip.network_id, None))
+            self.queue.put_priority((db_pool.load_balancer.vip.network_id, None))
 
     """
     Member
@@ -455,7 +455,7 @@ class ControllerWorker(object):
             raise db_exceptions.NoResultFound
 
         self.ensure_amphora_exists(db_member.pool.load_balancer.id)
-        self.queue.put((db_member.pool.load_balancer.vip.network_id, None))
+        self.queue.put_priority((db_member.pool.load_balancer.vip.network_id, None))
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
@@ -494,14 +494,14 @@ class ControllerWorker(object):
             pool = updated_members[0][0][octavia_consts.POOL_ID]
         else:
             return
-        self.queue.put((pool.load_balancer.vip.network_id, None))
+        self.queue.put_priority((pool.load_balancer.vip.network_id, None))
 
     def update_member(self, member, member_updates):
         with db_apis.session().begin() as session:
             db_member = self._member_repo.get(
                 session,
                 id=member[octavia_consts.MEMBER_ID])
-        self.queue.put((db_member.pool.load_balancer.vip.network_id, None))
+        self.queue.put_priority((db_member.pool.load_balancer.vip.network_id, None))
 
     def delete_member(self, member):
         with db_apis.session().begin() as session:
@@ -509,7 +509,7 @@ class ControllerWorker(object):
                 session,
                 id=member[octavia_consts.MEMBER_ID])
         # could be deleted by sync-loop meanwhile
-        self.queue.put((db_member.pool.load_balancer.vip.network_id, None))
+        self.queue.put_priority((db_member.pool.load_balancer.vip.network_id, None))
 
     """
     Health Monitor
@@ -531,8 +531,8 @@ class ControllerWorker(object):
                         health_monitor[octavia_consts.HEALTHMONITOR_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((db_health_monitor.pool.load_balancer.vip.network_id,
-                        None))
+        self.queue.put_priority((
+            db_health_monitor.pool.load_balancer.vip.network_id, None))
 
     def update_health_monitor(self, original_health_monitor,
                               health_monitor_updates):
@@ -540,8 +540,8 @@ class ControllerWorker(object):
             db_health_monitor = self._health_mon_repo.get(
                 session,
                 id=original_health_monitor[octavia_consts.HEALTHMONITOR_ID])
-        self.queue.put((db_health_monitor.pool.load_balancer.vip.network_id,
-                        None))
+        self.queue.put_priority((
+            db_health_monitor.pool.load_balancer.vip.network_id, None))
 
     def delete_health_monitor(self, health_monitor):
         with db_apis.session().begin() as session:
@@ -550,8 +550,9 @@ class ControllerWorker(object):
                 id=health_monitor[octavia_consts.HEALTHMONITOR_ID])
         # could be deleted by sync-loop meanwhile
         if db_health_monitor:
-            self.queue.put((db_health_monitor.pool.load_balancer.vip.network_id,
-                            None))
+            self.queue.put_priority((
+                db_health_monitor.pool.load_balancer.vip.network_id,
+                None))
 
     """
     l7policy
@@ -573,16 +574,16 @@ class ControllerWorker(object):
                         l7policy[octavia_consts.L7POLICY_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((db_l7policy.listener.load_balancer.vip.network_id,
-                        None))
+        self.queue.put_priority((
+            db_l7policy.listener.load_balancer.vip.network_id, None))
 
     def update_l7policy(self, original_l7policy, l7policy_updates):
         with db_apis.session().begin() as session:
             db_l7policy = self._l7policy_repo.get(
                 session,
                 id=original_l7policy[octavia_consts.L7POLICY_ID])
-        self.queue.put((db_l7policy.listener.load_balancer.vip.network_id,
-                        None))
+        self.queue.put_priority((
+            db_l7policy.listener.load_balancer.vip.network_id, None))
 
     def delete_l7policy(self, l7policy):
         with db_apis.session().begin() as session:
@@ -591,8 +592,8 @@ class ControllerWorker(object):
                 id=l7policy[octavia_consts.L7POLICY_ID])
         # could be deleted by sync-loop meanwhile
         if db_l7policy:
-            self.queue.put((db_l7policy.listener.load_balancer.vip.network_id,
-                            None))
+            self.queue.put_priority((
+                db_l7policy.listener.load_balancer.vip.network_id, None))
 
     """
     l7rule
@@ -614,14 +615,16 @@ class ControllerWorker(object):
                         l7rule[octavia_consts.L7RULE_ID])
             raise db_exceptions.NoResultFound
 
-        self.queue.put((db_l7rule.l7policy.listener.load_balancer.vip.network_id, None))
+        self.queue.put_priority((
+            db_l7rule.l7policy.listener.load_balancer.vip.network_id, None))
 
     def update_l7rule(self, original_l7rule, l7rule_updates):
         with db_apis.session().begin() as session:
             db_l7rule = self._l7rule_repo.get(
                 session,
                 id=original_l7rule[octavia_consts.L7RULE_ID])
-        self.queue.put((db_l7rule.l7policy.listener.load_balancer.vip.network_id, None))
+        self.queue.put_priority((
+            db_l7rule.l7policy.listener.load_balancer.vip.network_id, None))
 
     def delete_l7rule(self, l7rule):
         with db_apis.session().begin() as session:
@@ -630,7 +633,8 @@ class ControllerWorker(object):
                 id=l7rule[octavia_consts.L7RULE_ID])
         # could be deleted by sync-loop meanwhile
         if db_l7rule:
-            self.queue.put((db_l7rule.l7policy.listener.load_balancer.vip.network_id, None))
+            self.queue.put_priority((
+                db_l7rule.l7policy.listener.load_balancer.vip.network_id, None))
 
     """
     Amphora
