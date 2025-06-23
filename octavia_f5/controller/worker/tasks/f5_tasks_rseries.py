@@ -269,4 +269,26 @@ class RemoveVLANIfNotOwnedByGuest(task.Task):
         if not res.ok:
             LOG.warning("%s: Failed RemoveVLANIfNotOwnedByGuest for vlan_id=%s: %s",
                         bigip.hostname, network.vlan_id, res.content)
-        res.raise_for_status()
+
+        # There is another bug (not F5 bug 1759761 noted above, which is the
+        # one for which we retry) - where VLAN detachment from the guest comes
+        # back with HTTP 200 even though it's not finished yet. And if it then
+        # ends up failing, because there are still objects on the guest that
+        # depend on the VLAN, the vlan-listener object will still exist and
+        # block VLAN deletion, even though the device config says the VLAN is
+        # detached from the guest. vlan-listeners cannot be deleted.
+        # The only fix is to attach and detach the VLAN to/from the guest
+        # again. But since this incurs a performance penalty and the issue does
+        # not impede LB configuration, we instead simply ignore failed VLAN
+        # deletion. The VLAN can safely be reused later - a subsequent creation
+        # request for it yields HTTP 201. This is the easiest option that
+        # doesn't cause problems.
+        # Note that this effectively disables the tenacity backoff-retry
+        # mechanism on this method, since this method will never raise an
+        # exception. That's okay, since orphaned VLANs are okay (see above).
+        # But the retry code must not be removed, because when this bug is
+        # fixed, bug 1759761 might still be around. They have to be treated
+        # separately.
+        # FIXME reenable raise_for_status when this bug is fixed or when guest
+        # cleanup code is guaranteed to finish before host cleanup code.
+        # res.raise_for_status()
