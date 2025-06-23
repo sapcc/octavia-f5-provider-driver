@@ -24,7 +24,7 @@ from octavia.common import constants
 from octavia.network import data_models as network_models
 # pylint: disable=unused-import
 from octavia_f5.common import config  # noqa
-from octavia_f5.controller.worker.flows import f5_flows_iseries
+from octavia_f5.controller.worker.flows import f5_flows_iseries, f5_flows_rseries
 from octavia_f5.network import data_models as f5_network_models
 from octavia_f5.restclient import as3restclient
 
@@ -456,7 +456,7 @@ class TestF5Flows(base.TestCase):
         )
         mock_bigip.patch.assert_not_called()
 
-    def test_ensure_vcmp_l2_flow(self):
+    def test_ensure_vcmp_l2_flow_iseries(self):
         """Check that the ensure_vcmp_l2_flow flow correctly configures the VLAN"""
 
         mock_network_id = 'test-network-id'
@@ -513,7 +513,78 @@ class TestF5Flows(base.TestCase):
             path='/mgmt/tm/net/vlan'
         )
 
-    def test_remove_vcmp_l2_flow(self):
+    def test_ensure_vcmp_l2_flow_rseries(self):
+        """Check that the ensure_vcmp_l2_flow flow correctly configures the VLAN on an rSeries host"""
+
+        mock_network_id = 'test-network-id'
+        mock_subnet_id = 'test-subnet-id'
+        mock_network = f5_network_models.Network(
+            mtu=9000, id=mock_network_id, subnets=[mock_subnet_id],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+
+        mock_guests_response = MockResponse({}, 200)
+        mock_vlan_get_response = MockResponse({
+            'ietf-restconf:errors': {
+                'error': [{
+                    "error-type": "application",
+                    "error-tag": "invalid-value",
+                    "error-message": "uri keypath not found",
+                }]
+            }
+        }, 404)
+        mock_tenants_response = MockResponse({
+            "f5-tenants:tenants":{
+                "tenant":[
+                    {
+                        "name": "test-host-1",
+                        "config": {
+                            "vlans": [], # VLAN not yet configured
+                        }
+                    }
+                ]
+            }
+        }, 200)
+        mock_vlan_put_response = MockResponse({}, 201)
+        mock_interface_response = MockResponse({}, 201)
+        mock_vcmp = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_vcmp.get.side_effect = [mock_vlan_get_response,
+                                     mock_tenants_response]
+        mock_vcmp.put.side_effect = [mock_vlan_put_response,
+                                     mock_interface_response,
+                                     mock_guests_response,
+                                     mock_guests_response]
+        f5flows = f5_flows_rseries.F5Flows()
+
+        store = {'network': mock_network,
+                 'bigip': mock_vcmp,
+                 # since F5OS-A API tenant endpoint yields only the hostname and not the whole domain (as
+                 # iControlREST does), we check it via startswith and a dot appended. But the hostname attribute of
+                 # the BigIPRestClient instance always contains the domain, so it has to be contained here as well.
+                 'bigip_guest_names': ['test-host-1.some.domain']
+                 }
+        ensure_vcmp_l2_flow = f5flows.make_ensure_vcmp_l2_flow()
+        engines.run(ensure_vcmp_l2_flow, store=store)
+
+        get_calls = [
+            mock.call(path='/api/data/openconfig-vlan:vlans/vlan=1234'),
+        ]
+        put_calls = [
+            mock.call(path="/api/data/openconfig-vlan:vlans/vlan=1234",
+                      json={'openconfig-vlan:vlan': [{
+                          'vlan-id': 1234, 'config': {'vlan-id': 1234, 'name': 'vlan-1234'}}
+                      ]}),
+            mock.call(path="/api/data/openconfig-interfaces:interfaces/interface=portchannel1/openconfig-if-aggregate"
+                           ":aggregation/openconfig-vlan:switched-vlan/config/trunk-vlans=1234",
+                      json={'openconfig-vlan:trunk-vlans': [1234]}),
+            mock.call(path="/api/data/f5-tenants:tenants/tenant=test-host-1/config/vlans=1234",
+                      json={'f5-tenants:vlans':[1234]}),
+        ]
+        mock_vcmp.get.assert_has_calls(get_calls)
+        mock_vcmp.put.assert_has_calls(put_calls)
+
+    def test_remove_vcmp_l2_flow_iseries(self):
         """Check correct L2 configuration on L2 removal"""
 
         mock_network_id = 'test-network-id'
@@ -547,7 +618,51 @@ class TestF5Flows(base.TestCase):
         mock_vcmp.patch.assert_called_with(json={'vlans': []},
                                            path='/mgmt/tm/vcmp/guest/test-host-1')
 
-    def test_remove_vcmp_l2_flow_vlan_in_use(self):
+    def test_remove_vcmp_l2_flow_rseries(self):
+        """Check correct L2 configuration on L2 removal on rSeries hosts"""
+
+        mock_network_id = 'test-network-id'
+        mock_subnet_id = 'test-subnet-id'
+        mock_network = f5_network_models.Network(
+            mtu=9000, id=mock_network_id, subnets=[mock_subnet_id],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+
+        mock_guests_response = MockResponse(
+            {'f5-tenants:tenants':{'tenant':[
+                {'name': 'test-host-1',
+                 'config': {'vlans': [1234]}},
+            ]}},
+            200)
+        mock_delete_response = MockResponse({}, 204)
+        delete_calls = [
+            mock.call(path='/api/data/f5-tenants:tenants/tenant=test-host-1/config/vlans=1234'),
+            mock.call(path="/api/data/openconfig-interfaces:interfaces/interface=portchannel1/openconfig-if-aggregate:" \
+                           "aggregation/openconfig-vlan:switched-vlan/config/trunk-vlans=1234"),
+            mock.call(path="/api/data/openconfig-vlan:vlans/vlan=1234"),
+        ]
+
+        mock_vcmp = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_vcmp.get.side_effect = [mock_guests_response]
+        mock_vcmp.delete.side_effect = [mock_delete_response,
+                                        mock_delete_response,
+                                        mock_delete_response]
+        f5flows = f5_flows_rseries.F5Flows()
+
+        store = {'network': mock_network,
+                 'bigip': mock_vcmp,
+                 # since F5OS-A API tenant endpoint yields only the hostname and not the whole domain (as
+                 # iControlREST does), we check it via startswith and a dot appended. But the hostname attribute of
+                 # the BigIPRestClient instance always contains the domain, so it has to be contained here as well.
+                 'bigip_guest_names': ['test-host-1.some.domain']}
+        remove_vcmp_l2_flow = f5flows.make_remove_vcmp_l2_flow()
+        engines.run(remove_vcmp_l2_flow, store=store)
+
+        mock_vcmp.get.assert_called_with(path='/api/data/f5-tenants:tenants')
+        mock_vcmp.delete.assert_has_calls(delete_calls)
+
+    def test_remove_vcmp_l2_flow_vlan_in_use_iseries(self):
         """Check that the remove_vcmp_l2_flow does not delete a VLAN in use by another guest"""
 
         mock_network_id = 'test-network-id'
@@ -578,3 +693,49 @@ class TestF5Flows(base.TestCase):
         mock_vcmp.delete.assert_not_called()
         mock_vcmp.patch.assert_called_with(json={'vlans': []},
                                            path='/mgmt/tm/vcmp/guest/test-host-1')
+
+    def test_remove_vcmp_l2_flow_vlan_in_use_rseries(self):
+        """Check that the remove_vcmp_l2_flow does not delete a VLAN in use by another guest"""
+
+        mock_network_id = 'test-network-id'
+        mock_subnet_id = 'test-subnet-id'
+        mock_network = f5_network_models.Network(
+            mtu=9000, id=mock_network_id, subnets=[mock_subnet_id],
+            segments=[{'provider:physical_network': 'physnet',
+                       'provider:segmentation_id': 1234}]
+        )
+
+        mock_guests_response = MockResponse(
+            {'f5-tenants:tenants':{'tenant':[
+                {'name': 'test-host-1',
+                 'config': {'vlans': [1234]}},
+                # other guest using the same VLAN
+                {'name': 'test-host-2',
+                 'config': {'vlans': [1234]}},
+            ]}},
+            200)
+        mock_delete_response = MockResponse({}, 204)
+        delete_calls = [
+            mock.call(path='/api/data/f5-tenants:tenants/tenant=test-host-1/config/vlans=1234'),
+            mock.call(path="/api/data/openconfig-interfaces:interfaces/interface=portchannel1/openconfig-if-aggregate:" \
+                           "aggregation/openconfig-vlan:switched-vlan/config/trunk-vlans=1234"),
+            # no VLAN deletion call
+        ]
+
+        mock_vcmp = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_vcmp.get.side_effect = [mock_guests_response]
+        mock_vcmp.delete.side_effect = [mock_delete_response,
+                                        mock_delete_response]
+        f5flows = f5_flows_rseries.F5Flows()
+
+        store = {'network': mock_network,
+                 'bigip': mock_vcmp,
+                 # since F5OS-A API tenant endpoint yields only the hostname and not the whole domain (as
+                 # iControlREST does), we check it via startswith and a dot appended. But the hostname attribute of
+                 # the BigIPRestClient instance always contains the domain, so it has to be contained here as well.
+                 'bigip_guest_names': ['test-host-1.some.domain']}
+        remove_vcmp_l2_flow = f5flows.make_remove_vcmp_l2_flow()
+        engines.run(remove_vcmp_l2_flow, store=store)
+
+        mock_vcmp.get.assert_called_with(path='/api/data/f5-tenants:tenants')
+        mock_vcmp.delete.assert_has_calls(delete_calls)
