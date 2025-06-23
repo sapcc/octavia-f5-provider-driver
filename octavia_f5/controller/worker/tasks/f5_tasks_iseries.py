@@ -20,7 +20,6 @@ from taskflow import task
 from taskflow.types import failure
 
 from octavia.network import data_models as network_models
-from octavia_f5.common import constants
 from octavia_f5.network import data_models as f5_network_models
 from octavia_f5.restclient.bigip import bigip_restclient
 from octavia_f5.utils import driver_utils, decorators
@@ -28,17 +27,6 @@ from octavia_f5.utils import driver_utils, decorators
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
-
-def selfip_for_subnet_exists(subnet_id, selfips):
-    for selfip in selfips:
-        for fixed_ip in selfip.fixed_ips:
-            if fixed_ip.subnet_id == subnet_id:
-                return True
-    return False
-
-def get_subnet_route_name(network_id, subnet_id):
-    return "{}{}_{}{}".format(constants.PREFIX_NETWORK, network_id,
-                              constants.PREFIX_SUBNET, subnet_id)
 
 
 class EnsureVLAN(task.Task):
@@ -71,6 +59,7 @@ class EnsureVLAN(task.Task):
             res.raise_for_status()
             return res.json()
 
+        # patch VLAN if it differs (<= is a subset operator here)
         if not vlan.items() <= existing_vlan.items():
             res = bigip.patch(path=f"/mgmt/tm/net/vlan/~Common~{vlan['name']}",
                               json=vlan)
@@ -112,7 +101,7 @@ class EnsureVLANInterface(task.Task):
             }]
         }
 
-        # Create vlan interface if not existing or not correct
+        # Create VLAN interface if not existing or not correct
         device_vlan_interfaces = device_vlan['interfacesReference'].get('items')
         if not device_vlan_interfaces or not interface.items() <= device_vlan_interfaces[0].items():
             res = bigip.patch(
@@ -121,12 +110,20 @@ class EnsureVLANInterface(task.Task):
             res.raise_for_status()
             return res.json()
 
+        # VLAN interface exists and is correct
         return None
 
 
-class EnsureGuestVLAN(task.Task):
-    default_provides = 'device_guest'
+class RemoveVLANInterface(task.Task):
+    """ Task to remove VLAN interface attachment """
 
+    def execute(self):
+        # we don't need to remove the VLAN interface attachment on iSeries devices, because they're automatically
+        # removed when the VLAN is deleted.
+        pass
+
+
+class EnsureGuestVLAN(task.Task):
     """ Task to assign correct vlan to vcmp guest """
 
     @decorators.RaisesIControlRestError()
@@ -135,7 +132,6 @@ class EnsureGuestVLAN(task.Task):
                 bigip_guest_names: [str],
                 device_vlan: dict):
 
-        device_guest = None
         device_response = bigip.get(path='/mgmt/tm/vcmp/guest')
         device_response.raise_for_status()
         guests = device_response.json()
@@ -144,8 +140,7 @@ class EnsureGuestVLAN(task.Task):
             if guest['name'] not in bigip_guest_names:
                 continue
 
-            device_guest = guest
-
+            # Check if the VLAN is already configured on the guest
             if device_vlan['name'] in ['/Common/' + vlan for vlan in guest['vlans']]:
                 continue
 
@@ -153,10 +148,6 @@ class EnsureGuestVLAN(task.Task):
                 path=f"/mgmt/tm/vcmp/guest/{guest['name']}",
                 json={'vlans': guest['vlans'] + [f"/Common/{device_vlan['name']}"]})
             res.raise_for_status()
-            return res.json()
-
-        # No Changes needed
-        return device_guest
 
 
 class EnsureRouteDomain(task.Task):
@@ -332,7 +323,7 @@ class GetExistingSubnetRoutesForNetwork(task.Task):
         routes = response.get('items', [])
 
         # filter for only the subnet routes belonging to this network
-        subnet_route_network_part = get_subnet_route_name(network.id, '')
+        subnet_route_network_part = driver_utils.get_subnet_route_name(network.id, '')
         return [r for r in routes if r['name'].startswith(subnet_route_network_part)]
 
 
@@ -394,7 +385,7 @@ class EnsureSubnetRoute(task.Task):
             return
 
         # payload
-        subnet_route_name = get_subnet_route_name(network.id, subnet_id)
+        subnet_route_name = driver_utils.get_subnet_route_name(network.id, subnet_id)
         network_driver = driver_utils.get_network_driver()
         subnet = network_driver.get_subnet(subnet_id)
         subnet_cidr = IPNetwork(subnet.cidr)
@@ -427,7 +418,7 @@ class EnsureSubnetRoute(task.Task):
                network: f5_network_models.Network,
                subnet_id, existing_subnet_routes,
                *args, **kwargs):
-        subnet_route_name = get_subnet_route_name(network.id, subnet_id)
+        subnet_route_name = driver_utils.get_subnet_route_name(network.id, subnet_id)
         # Don't remove the route if it existed before this task was executed
         if subnet_route_name in [r['name'] for r in existing_subnet_routes]:
             LOG.warning("Reverting EnsureSubnetRoute: Not deleting route, since it existed before the task was run: "

@@ -24,7 +24,7 @@ from octavia.common import constants
 from octavia.network import data_models as network_models
 # pylint: disable=unused-import
 from octavia_f5.common import config  # noqa
-from octavia_f5.controller.worker.flows import f5_flows
+from octavia_f5.controller.worker.flows import f5_flows_iseries
 from octavia_f5.network import data_models as f5_network_models
 from octavia_f5.restclient import as3restclient
 
@@ -90,7 +90,7 @@ class TestF5Flows(base.TestCase):
                                       empty_response(), empty_response(),
                                       empty_response(), empty_response(),
                                       MockResponse({'items': []}, status_code=200)]
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
 
         store = {'network': mock_network,
                  'bigip': mock_bigip,
@@ -174,7 +174,7 @@ class TestF5Flows(base.TestCase):
                                       mock_selfip_response,
                                       mock_route_response,
                                       MockResponse({'items': []}, status_code=200)]
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
 
         store = {'network': mock_network,
                  'bigip': mock_bigip,
@@ -222,7 +222,7 @@ class TestF5Flows(base.TestCase):
                  'existing_subnet_routes': []}
         needed_selfips = [selfip_port]
         subnets_that_need_routes = []
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
         ensure_selfips_and_subnet_routes_flow = f5flows.make_ensure_selfips_and_subnet_routes_flow(
             needed_selfips, subnets_that_need_routes, store=store)
         engines.run(ensure_selfips_and_subnet_routes_flow, store=store)
@@ -262,7 +262,7 @@ class TestF5Flows(base.TestCase):
                  'existing_subnet_routes': []}
         needed_selfips = []
         subnets_that_need_routes = [mock_subnet_id]
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
         ensure_selfips_and_subnet_routes_flow = f5flows.make_ensure_selfips_and_subnet_routes_flow(
             needed_selfips, subnets_that_need_routes, store=store)
         engines.run(ensure_selfips_and_subnet_routes_flow, store=store)
@@ -296,7 +296,7 @@ class TestF5Flows(base.TestCase):
                  'existing_subnet_routes': []}
         needed_selfips = []
         subnets_that_need_routes = []
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
         ensure_selfips_and_subnet_routes_flow = f5flows.make_remove_selfips_and_subnet_routes_flow(
             needed_selfips, subnets_that_need_routes, store=store)
         engines.run(ensure_selfips_and_subnet_routes_flow, store=store)
@@ -329,7 +329,7 @@ class TestF5Flows(base.TestCase):
                  'existing_subnet_routes': [subnet_route]}
         needed_selfips = []
         subnets_that_need_routes = []
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
         ensure_selfips_and_subnet_routes_flow = f5flows.make_remove_selfips_and_subnet_routes_flow(
             needed_selfips, subnets_that_need_routes, store=store)
         engines.run(ensure_selfips_and_subnet_routes_flow, store=store)
@@ -375,7 +375,7 @@ class TestF5Flows(base.TestCase):
                  'existing_subnet_routes': []}
         needed_selfips = []
         subnets_that_need_routes = [mock_subnet_id]
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
         sync_selfips_and_subnet_routes_flow = f5flows.make_sync_selfips_and_subnet_routes_flow(
             needed_selfips, subnets_that_need_routes, store=store)
         engines.run(sync_selfips_and_subnet_routes_flow, store=store)
@@ -434,7 +434,7 @@ class TestF5Flows(base.TestCase):
                  'existing_subnet_routes': [subnet_route]}
         needed_selfips = [selfip_port]
         subnets_that_need_routes = []
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
         sync_selfips_and_subnet_routes_flow = f5flows.make_sync_selfips_and_subnet_routes_flow(
             needed_selfips, subnets_that_need_routes, store=store)
         engines.run(sync_selfips_and_subnet_routes_flow, store=store)
@@ -483,7 +483,7 @@ class TestF5Flows(base.TestCase):
                                      mock_guests_response,
                                      mock_vlan_response]
         mock_vcmp.patch.side_effect = empty_response
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
 
         store = {'network': mock_network,
                  'bigip': mock_vcmp,
@@ -534,7 +534,7 @@ class TestF5Flows(base.TestCase):
 
         mock_vcmp = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_vcmp.get.side_effect = [mock_guests_response]
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
 
         store = {'network': mock_network,
                  'bigip': mock_vcmp,
@@ -566,7 +566,7 @@ class TestF5Flows(base.TestCase):
             ]}, 200)
         mock_vcmp = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_vcmp.get.side_effect = [mock_guests_response]
-        f5flows = f5_flows.F5Flows()
+        f5flows = f5_flows_iseries.F5Flows()
 
         remove_vcmp_l2_flow = f5flows.make_remove_vcmp_l2_flow()
         store = {'network': mock_network,
