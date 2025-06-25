@@ -7,6 +7,9 @@ The worker uses the driver-agent API, but it hooks more deeply into Octavia (sim
 
 ## F5-specific configuration
 
+### Naming conventions
+Some naming conventions are a bit different between the F5 provider driver and the BigIP devices it can provision. This is partly due to the fact that naming conventions changed between i-Series BigIP vCMP host devices and the newer r-Series BigIP vCMP host devices. E.&nbsp;g. in the i-Series, the term *tenant* is used to refer to partitions within vCMP guests (this provider driver maps one Neutron network to one such partition), so we use that term in the code as well. In the r-Series however the term *tenant* is also used to refer to a whole vCMP guest. To avoid confusion, we keep the old i-Series naming conventions.
+
 ### F5-specific config options
 There are lots of F5-specific configuration options. They can be found in `octavia_f5/common/config.py`.
 - If `agent_scheduler` in the `[networking]` section of the configuration is set to `loadbalancer`, new load balancers are scheduled to the device with the least amount of load balancers. This is the default. If it is set to `listener`, new load balancers are scheduled to the device with the least amount of listeners.

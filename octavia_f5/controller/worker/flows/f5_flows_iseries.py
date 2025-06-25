@@ -17,12 +17,17 @@ from taskflow import flow
 from taskflow.patterns import unordered_flow, linear_flow
 
 from octavia.network import data_models as network_models
-from octavia_f5.controller.worker.tasks import f5_tasks
+from octavia_f5.controller.worker.tasks import f5_tasks_iseries
+from octavia_f5.utils import driver_utils
 
 LOG = logging.getLogger(__name__)
 
 
 class F5Flows(object):
+
+    def __init__(self, tasks=f5_tasks_iseries):
+        self.tasks = tasks
+
     def make_ensure_l2_flow(self, selfips: [network_models.Port], store: dict) -> flow.Flow:
         """
         Construct and return a flow to ensure complete L2 configuration for a new partition.
@@ -38,7 +43,7 @@ class F5Flows(object):
         ensure_selfips_subflow = unordered_flow.Flow(
             f'ensure-selfips-subflow-{bigip_hostname}')
         for selfip_port in selfips:
-            ensure_selfip_task = f5_tasks.EnsureSelfIP(
+            ensure_selfip_task = self.tasks.EnsureSelfIP(
                 name=f'ensure-selfip-{bigip_hostname}-{selfip_port.id}',
                 inject={
                     # store data should come first because it also contains port data
@@ -51,14 +56,14 @@ class F5Flows(object):
         # create subnet routes for all subnets that don't have a SelfIP
         network = store['network']
         subnets_to_create_routes_for = [subnet for subnet in network.subnets
-                                        if not f5_tasks.selfip_for_subnet_exists(subnet, selfips)]
+                                        if not driver_utils.selfip_for_subnet_exists(subnet, selfips)]
         ensure_subnet_routes_subflow = unordered_flow.Flow(
             f'ensure-subnet-routes-subflow-{bigip_hostname}')
 
         # make subnet route creation subflow
         for subnet_id in subnets_to_create_routes_for:
-            subnet_route_name = f5_tasks.get_subnet_route_name(network.id, subnet_id)
-            ensure_subnet_route_task = f5_tasks.EnsureSubnetRoute(
+            subnet_route_name = driver_utils.get_subnet_route_name(network.id, subnet_id)
+            ensure_subnet_route_task = self.tasks.EnsureSubnetRoute(
                 name=f'ensure-subnet-route-{bigip_hostname}-{subnet_route_name}',
                 inject={
                     # store data should come first because it also contains subnet_id
@@ -68,19 +73,19 @@ class F5Flows(object):
             )
             ensure_subnet_routes_subflow.add(ensure_subnet_route_task)
 
-        get_existing_route_domain = f5_tasks.GetExistingRouteDomain(
+        get_existing_route_domain = self.tasks.GetExistingRouteDomain(
             name=f'get-existing-route-domain-{bigip_hostname}',
             inject=store)
-        ensure_route_domain = f5_tasks.EnsureRouteDomain(
+        ensure_route_domain = self.tasks.EnsureRouteDomain(
             name=f'ensure-route-domain-{bigip_hostname}',
             inject=store)
-        ensure_default_route = f5_tasks.EnsureDefaultRoute(
+        ensure_default_route = self.tasks.EnsureDefaultRoute(
             name=f'ensure-default-route-{bigip_hostname}',
             inject=store)
-        get_existing_vlan = f5_tasks.GetExistingVLAN(
+        get_existing_vlan = self.tasks.GetExistingVLAN(
             name=f'get-existing-vlan-{bigip_hostname}',
             inject=store)
-        ensure_vlan = f5_tasks.EnsureVLAN(
+        ensure_vlan = self.tasks.EnsureVLAN(
             name=f'ensure-vlan-{bigip_hostname}',
             inject=store)
 
@@ -113,7 +118,7 @@ class F5Flows(object):
         remove_subnet_routes_subflow = unordered_flow.Flow(
             f'remove-subnet-routes-subflow-{bigip_hostname}')
         for subnet_route in existing_subnet_routes:
-            remove_subnet_route_task = f5_tasks.RemoveSubnetRoute(
+            remove_subnet_route_task = self.tasks.RemoveSubnetRoute(
                 name=f"remove-subnet-route-{bigip_hostname}-{subnet_route['name']}",
                 inject={
                     'subnet_route': subnet_route,
@@ -125,7 +130,7 @@ class F5Flows(object):
         # remove SelfIPs
         remove_selfips_subflow = unordered_flow.Flow(f'remove-selfips-subflow-{bigip_hostname}')
         for selfip in existing_selfips:
-            remove_selfip_task = f5_tasks.RemoveSelfIP(
+            remove_selfip_task = self.tasks.RemoveSelfIP(
                 name=f"remove-selfip-{bigip_hostname}-{selfip['port_id']}",
                 inject={
                     'selfip': selfip,
@@ -135,19 +140,19 @@ class F5Flows(object):
             remove_selfips_subflow.add(remove_selfip_task)
 
         # remove other L2 objects
-        remove_default_route_task = f5_tasks.RemoveDefaultRoute(
+        remove_default_route_task = self.tasks.RemoveDefaultRoute(
             name=f'remove-defult-route-{bigip_hostname}',
             inject=store)
-        get_existing_route_domain = f5_tasks.GetExistingRouteDomain(
+        get_existing_route_domain = self.tasks.GetExistingRouteDomain(
             name=f'get-existing-route-domain-{bigip_hostname}',
             inject=store)
-        remove_route_domain_task = f5_tasks.RemoveRouteDomain(
+        remove_route_domain_task = self.tasks.RemoveRouteDomain(
             name=f'remove-route-domain-{bigip_hostname}',
             inject=store)
-        get_existing_vlan = f5_tasks.GetExistingVLAN(
+        get_existing_vlan = self.tasks.GetExistingVLAN(
             name=f'get-existing-vlan-{bigip_hostname}',
             inject=store)
-        remove_vlan_task = f5_tasks.RemoveVLAN(
+        remove_vlan_task = self.tasks.RemoveVLAN(
             name=f'remove-vlan-{bigip_hostname}',
             inject=store)
 
@@ -200,7 +205,7 @@ class F5Flows(object):
         existing_subnet_routes = store['existing_subnet_routes']
 
         # remove subnet routes that are existing but don't belong to one of the subnets that need routes
-        subnet_route_network_part = f5_tasks.get_subnet_route_name(network.id, '')
+        subnet_route_network_part = driver_utils.get_subnet_route_name(network.id, '')
         subnet_routes_to_remove = [r for r in existing_subnet_routes
                                    if r['name'].startswith(subnet_route_network_part)
                                    and r['name'][len(subnet_route_network_part):] not in subnets_that_need_routes]
@@ -209,7 +214,7 @@ class F5Flows(object):
         # make subnet routes removal subflow
         remove_subnet_routes_subflow = unordered_flow.Flow('remove-subnet-routes-subflow')
         for subnet_route in subnet_routes_to_remove:
-            remove_subnet_route_task = f5_tasks.RemoveSubnetRoute(name=f"remove-subnet-route-{subnet_route['name']}",
+            remove_subnet_route_task = self.tasks.RemoveSubnetRoute(name=f"remove-subnet-route-{subnet_route['name']}",
                                                                   inject={'subnet_route': subnet_route})
             remove_subnet_routes_subflow.add(remove_subnet_route_task)
 
@@ -220,7 +225,7 @@ class F5Flows(object):
         # make SelfIPs removal subflow
         remove_selfips_subflow = unordered_flow.Flow('remove-selfips-subflow')
         for selfip in selfips_to_remove:
-            remove_selfip = f5_tasks.RemoveSelfIP(name=f"remove-selfip-{selfip['port_id']}",
+            remove_selfip = self.tasks.RemoveSelfIP(name=f"remove-selfip-{selfip['port_id']}",
                                                   inject={'selfip': selfip})
             remove_selfips_subflow.add(remove_selfip)
 
@@ -250,13 +255,13 @@ class F5Flows(object):
         # make SelfIP creation subflow
         ensure_selfips_subflow = unordered_flow.Flow('ensure-selfips-subflow')
         for selfip_port in selfips_to_create:
-            ensure_selfip_task = f5_tasks.EnsureSelfIP(
+            ensure_selfip_task = self.tasks.EnsureSelfIP(
                 name=f'ensure-selfip-{store["bigip"].hostname}-{selfip_port.id}',
                 inject={'port': selfip_port})
             ensure_selfips_subflow.add(ensure_selfip_task)
 
         # find subnet routes for subnets that need them but don't have any yet
-        subnet_route_network_part = f5_tasks.get_subnet_route_name(network.id, '')
+        subnet_route_network_part = driver_utils.get_subnet_route_name(network.id, '')
         subnets_of_preexisting_subnet_routes = [
             r['name'][len(subnet_route_network_part):] for r in preexisting_subnet_routes
             if r['name'].startswith(subnet_route_network_part)
@@ -269,8 +274,8 @@ class F5Flows(object):
         # make subnet route creation subflow
         ensure_subnet_routes_subflow = unordered_flow.Flow('ensure-subnet-routes-subflow')
         for subnet_id in subnets_to_create_routes_for:
-            subnet_route_name = f5_tasks.get_subnet_route_name(network.id, subnet_id)
-            ensure_subnet_route_task = f5_tasks.EnsureSubnetRoute(name=f"ensure-subnet-route-{subnet_route_name}",
+            subnet_route_name = driver_utils.get_subnet_route_name(network.id, subnet_id)
+            ensure_subnet_route_task = self.tasks.EnsureSubnetRoute(name=f"ensure-subnet-route-{subnet_route_name}",
                                                                   inject={'subnet_id': subnet_id})
             ensure_subnet_routes_subflow.add(ensure_subnet_route_task)
 
@@ -284,8 +289,8 @@ class F5Flows(object):
         """Return a flow that gets all SelfIPs and subnet routes that currently
         exist on a particular device for a particular network."""
 
-        get_selfips_task = f5_tasks.GetExistingSelfIPsForVLAN(name='get-existing-selfips')
-        get_subnet_routes_task = f5_tasks.GetExistingSubnetRoutesForNetwork(name='get-existing-subnet-routes')
+        get_selfips_task = self.tasks.GetExistingSelfIPsForVLAN(name='get-existing-selfips')
+        get_subnet_routes_task = self.tasks.GetExistingSubnetRoutesForNetwork(name='get-existing-subnet-routes')
 
         get_existing_sip_sr_flow = unordered_flow.Flow('get-existing-selfips-and-subnet-routes-flow')
         get_existing_sip_sr_flow.add(get_selfips_task)
@@ -294,10 +299,10 @@ class F5Flows(object):
         return get_existing_sip_sr_flow
 
     def make_ensure_vcmp_l2_flow(self) -> flow.Flow:
-        get_existing_vlan = f5_tasks.GetExistingVLAN()
-        ensure_vlan = f5_tasks.EnsureVLAN()
-        ensure_vlan_interface = f5_tasks.EnsureVLANInterface()
-        ensure_guest_vlan = f5_tasks.EnsureGuestVLAN()
+        get_existing_vlan = self.tasks.GetExistingVLAN()
+        ensure_vlan = self.tasks.EnsureVLAN()
+        ensure_vlan_interface = self.tasks.EnsureVLANInterface()
+        ensure_guest_vlan = self.tasks.EnsureGuestVLAN()
 
         ensure_vcmp_l2_flow = linear_flow.Flow('ensure-vcmp-l2-flow')
         ensure_vcmp_l2_flow.add(get_existing_vlan,
@@ -307,12 +312,14 @@ class F5Flows(object):
         return ensure_vcmp_l2_flow
 
     def make_remove_vcmp_l2_flow(self) -> flow.Flow:
-        get_vcmp_guests = f5_tasks.GetVCMPGuests()
-        remove_guest_vlan = f5_tasks.RemoveGuestVLAN()
-        remove_vlan_if_not_owned_by_guest = f5_tasks.RemoveVLANIfNotOwnedByGuest()
+        get_vcmp_guests = self.tasks.GetVCMPGuests()
+        remove_guest_vlan = self.tasks.RemoveGuestVLAN()
+        remove_vlan_interface = self.tasks.RemoveVLANInterface()
+        remove_vlan_if_not_owned_by_guest = self.tasks.RemoveVLANIfNotOwnedByGuest()
 
         remove_vcmp_l2_flow = linear_flow.Flow('remove-vcmp-l2-flow')
         remove_vcmp_l2_flow.add(get_vcmp_guests,
                                 remove_guest_vlan,
+                                remove_vlan_interface,
                                 remove_vlan_if_not_owned_by_guest)
         return remove_vcmp_l2_flow

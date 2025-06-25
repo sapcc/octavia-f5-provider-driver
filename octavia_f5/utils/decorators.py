@@ -18,7 +18,7 @@ from urllib.parse import urlparse
 
 from requests import HTTPError
 
-from octavia_f5.utils.exceptions import IControlRestException
+from octavia_f5.utils.exceptions import IControlRestException, F5osaException
 
 
 class RunHookOnException(object):
@@ -38,21 +38,48 @@ class RunHookOnException(object):
         return wrapper
 
 
-class RaisesIControlRestError(ContextDecorator):
+class RaisesApiError(ContextDecorator):
+
+    def __init__(self):
+        self.exception_class = Exception
+
     def __enter__(self):
         return self
 
     def __exit__(self, exc_type, exc_val, traceback):
         if exc_type == HTTPError:
             parsed = urlparse(exc_val.request.url)
-            redacted = parsed._replace(netloc="{}:{}@{}".format(parsed.username, "???", parsed.hostname))
+
+            # if a username is present, display it, but hide the password,
+            # otherwise just display the hostname
+            if parsed.username:
+                redacted = parsed._replace(netloc=f"{parsed.username}:???@{parsed.hostname}")
+            else:
+                redacted = parsed.hostname
+
+            # get error message from response
             try:
-                message = exc_val.response.json()
-                if 'message' in message:
-                    message = message['message']
+                err_msg = exc_val.response.json()
+                if 'message' in err_msg:
+                    err_msg = err_msg['message']
             except Exception:
-                message = exc_val.response.content
-            raise IControlRestException(
-                f"HTTP {exc_val.response.status_code} for {exc_val.request.method} {redacted.geturl()}: {message}"
+                err_msg = exc_val.response.content
+
+            # raise exception
+            raise self.exception_class(
+                f"HTTP {exc_val.response.status_code} for {exc_val.request.method} {redacted.geturl()}: {err_msg}"
             )
+
         return False
+
+
+class RaisesIControlRestError(RaisesApiError):
+    def __init__(self):
+        super().__init__()
+        self.exception_class = IControlRestException
+
+
+class RaisesF5osaError(RaisesApiError):
+    def __init__(self):
+        super().__init__()
+        self.exception_class = F5osaException

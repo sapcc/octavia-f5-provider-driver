@@ -39,7 +39,7 @@ class BigIPRestClient(requests.Session):
     _metric_delete_exceptions = prometheus.metrics.Counter(
         'octavia_bigip_delete_exceptions', 'Number of exceptions at DELETE request sent to Big IP')
 
-    def __init__(self, bigip_url, verify=True, auth=None):
+    def __init__(self, bigip_url, verify=True, auth=None, f5os_a=False):
         super(BigIPRestClient, self).__init__()
         self.url = parse.urlparse(bigip_url, allow_fragments=False)
 
@@ -53,6 +53,7 @@ class BigIPRestClient(requests.Session):
         self.verify = verify
         self.auth = auth
         self._active = None
+        self.f5os_a = f5os_a
 
     def get_url(self, url):
         """Create the URL based off this partial path."""
@@ -123,6 +124,13 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
+        # add F5OS-A headers if needed
+        if self.f5os_a:
+            headers = kwargs.get('headers', {})
+            headers['Content-Type'] = 'application/yang-data+json'
+            headers['Accept'] = 'application/yang-data+json'
+            kwargs['headers'] = headers
+
         return super(BigIPRestClient, self).get(url, **kwargs)
 
     @_metric_post_exceptions.count_exceptions()
@@ -131,6 +139,13 @@ class BigIPRestClient(requests.Session):
         """
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
+
+        # add F5OS-A headers if needed
+        if self.f5os_a:
+            headers = kwargs.get('headers', {})
+            headers['Content-Type'] = 'application/yang-data+json'
+            headers['Accept'] = 'application/yang-data+json'
+            kwargs['headers'] = headers
 
         return super(BigIPRestClient, self).post(url, **kwargs)
 
@@ -141,6 +156,13 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
+        # add F5OS-A headers if needed
+        if self.f5os_a:
+            headers = kwargs.get('headers', {})
+            headers['Content-Type'] = 'application/yang-data+json'
+            headers['Accept'] = 'application/yang-data+json'
+            kwargs['headers'] = headers
+
         return super(BigIPRestClient, self).delete(url, **kwargs)
 
     @_metric_patch_exceptions.count_exceptions()
@@ -149,6 +171,13 @@ class BigIPRestClient(requests.Session):
         """
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
+
+        # add F5OS-A headers if needed
+        if self.f5os_a:
+            headers = kwargs.get('headers', {})
+            headers['Content-Type'] = 'application/yang-data+json'
+            headers['Accept'] = 'application/yang-data+json'
+            kwargs['headers'] = headers
 
         return super(BigIPRestClient, self).patch(url, **kwargs)
 
@@ -159,6 +188,14 @@ class BigIPRestClient(requests.Session):
         if 'path' in kwargs:
             url = self.get_url(kwargs.pop('path'))
 
+        # add F5OS-A headers if needed
+        if self.f5os_a:
+            headers = kwargs.get('headers', {})
+            headers['Content-Type'] = 'application/yang-data+json'
+            headers['Accept'] = 'application/yang-data+json'
+            kwargs['headers'] = headers
+
+        LOG.warning(f"Sending PUT to {url} with kwargs: {kwargs}")
         return super(BigIPRestClient, self).put(url, **kwargs)
 
     def config_sync(self, device_group):

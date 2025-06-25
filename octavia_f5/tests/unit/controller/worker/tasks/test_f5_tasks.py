@@ -24,7 +24,7 @@ import octavia.tests.unit.base as base
 from octavia.network import data_models as network_models
 # pylint: disable=unused-import
 from octavia_f5.common import config  # noqa
-from octavia_f5.controller.worker.tasks import f5_tasks
+from octavia_f5.controller.worker.tasks import f5_tasks_iseries
 from octavia_f5.network import data_models as f5_network_models
 from octavia_f5.restclient import as3restclient
 from octavia_f5.tests.unit.controller.worker.flows import test_f5_flows
@@ -63,7 +63,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_bigip.get.return_value = mock_route_response
 
-        engines.run(f5_tasks.EnsureDefaultRoute(),
+        engines.run(f5_tasks_iseries.EnsureDefaultRoute(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'subnet_id': 'test-subnet-id'})
@@ -97,7 +97,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404),
                                       mock_route_response]
 
-        engines.run(f5_tasks.EnsureDefaultRoute(),
+        engines.run(f5_tasks_iseries.EnsureDefaultRoute(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'subnet_id': 'test-subnet-id'})
@@ -135,7 +135,7 @@ class TestF5Tasks(base.TestCase):
         # Patch should fail
         mock_bigip.patch.side_effect = test_f5_flows.empty_response
 
-        engines.run(f5_tasks.EnsureDefaultRoute(),
+        engines.run(f5_tasks_iseries.EnsureDefaultRoute(),
                     store={'network': mock_network,
                            'bigip': mock_bigip,
                            'subnet_id': 'test-subnet-id'})
@@ -186,7 +186,7 @@ class TestF5Tasks(base.TestCase):
             'port': selfip_port,
             'existing_selfips': [],
         }
-        engines.run(f5_tasks.EnsureSelfIP(), store=store)
+        engines.run(f5_tasks_iseries.EnsureSelfIP(), store=store)
         mock_bigip.delete.assert_not_called()
         mock_bigip.get.assert_called_with(
             path=f"/mgmt/tm/net/self/{selfip_name}")
@@ -205,7 +205,7 @@ class TestF5Tasks(base.TestCase):
             test_f5_flows.MockResponse({'name': selfip_name}, 200),
         ]
         store['bigip'] = mock_bigip
-        engines.run(f5_tasks.EnsureSelfIP(), store=store)
+        engines.run(f5_tasks_iseries.EnsureSelfIP(), store=store)
         mock_bigip.delete.assert_not_called()
         mock_bigip.get.assert_called_with(
             path=f"/mgmt/tm/net/self/{selfip_name}")
@@ -246,7 +246,7 @@ class TestF5Tasks(base.TestCase):
             'subnet_id': mock_subnet.id,
             'existing_subnet_routes': [],
         }
-        engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
+        engines.run(f5_tasks_iseries.EnsureSubnetRoute(), store=store)
         mock_bigip.delete.assert_not_called()
         mock_bigip.get.assert_called_with(
             path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
@@ -265,7 +265,7 @@ class TestF5Tasks(base.TestCase):
             test_f5_flows.MockResponse({'name': subnet_route_name}, 200),
         ]
         store['bigip'] = mock_bigip
-        engines.run(f5_tasks.EnsureSubnetRoute(), store=store)
+        engines.run(f5_tasks_iseries.EnsureSubnetRoute(), store=store)
         mock_bigip.delete.assert_not_called()
         mock_bigip.get.assert_called_with(
             path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
@@ -310,7 +310,7 @@ class TestF5Tasks(base.TestCase):
             'port': selfip_port,
             'existing_selfips': [],
         }
-        self.assertRaises(TestException, engines.run, f5_tasks.EnsureSelfIP(), store=store)
+        self.assertRaises(TestException, engines.run, f5_tasks_iseries.EnsureSelfIP(), store=store)
         mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
         # delete is always called during rollback, ignoring 404
         mock_bigip.delete.assert_called_with(
@@ -348,7 +348,7 @@ class TestF5Tasks(base.TestCase):
             'subnet_id': mock_subnet_id,
             'existing_subnet_routes': [],
         }
-        self.assertRaises(TestException, engines.run, f5_tasks.EnsureSubnetRoute(), store=store)
+        self.assertRaises(TestException, engines.run, f5_tasks_iseries.EnsureSubnetRoute(), store=store)
         mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
         # delete is always called during rollback, ignoring 404
         mock_bigip.delete.assert_called_with(
@@ -403,7 +403,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
         store['bigip'] = mock_bigip
         store['existing_selfips'] = [selfip_port_dict]
-        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
+        self.assertRaises(TestException, engines.run, f5_tasks_iseries.RemoveSelfIP(), store=store)
         # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
         # calls in revert()
@@ -425,7 +425,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
         store['bigip'] = mock_bigip
         store['existing_selfips'] = []
-        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
+        self.assertRaises(TestException, engines.run, f5_tasks_iseries.RemoveSelfIP(), store=store)
         # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
         # calls in revert()
@@ -440,7 +440,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)] # only HTTP code matters
         store['bigip'] = mock_bigip
         store['existing_selfips'] = [selfip_port_dict]
-        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSelfIP(), store=store)
+        self.assertRaises(TestException, engines.run, f5_tasks_iseries.RemoveSelfIP(), store=store)
         # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_name}")
         # calls in revert()
@@ -489,7 +489,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
         store['bigip'] = mock_bigip
         store['existing_subnet_routes'] = [subnet_route]
-        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
+        self.assertRaises(TestException, engines.run, f5_tasks_iseries.RemoveSubnetRoute(), store=store)
         # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
         # calls in revert()
@@ -511,7 +511,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 404)]
         store['bigip'] = mock_bigip
         store['existing_subnet_routes'] = []
-        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
+        self.assertRaises(TestException, engines.run, f5_tasks_iseries.RemoveSubnetRoute(), store=store)
         # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
         # calls in revert()
@@ -526,7 +526,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.side_effect = [test_f5_flows.MockResponse({}, 200)] # only HTTP code matters
         store['bigip'] = mock_bigip
         store['existing_subnet_routes'] = [subnet_route]
-        self.assertRaises(TestException, engines.run, f5_tasks.RemoveSubnetRoute(), store=store)
+        self.assertRaises(TestException, engines.run, f5_tasks_iseries.RemoveSubnetRoute(), store=store)
         # calls in execute()
         mock_bigip.delete.assert_called_with(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
         # calls in revert()

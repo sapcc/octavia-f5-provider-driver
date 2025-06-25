@@ -27,8 +27,7 @@ from octavia.common.base_taskflow import BaseTaskFlowEngine
 from octavia.network import base
 from octavia.network import data_models as network_models
 from octavia_f5.common import constants
-from octavia_f5.controller.worker.flows import f5_flows
-from octavia_f5.controller.worker.tasks import f5_tasks
+from octavia_f5.controller.worker.flows import f5_flows_iseries, f5_flows_rseries
 from octavia_f5.restclient.bigip import bigip_auth
 from octavia_f5.restclient.bigip.bigip_restclient import BigIPRestClient
 from octavia_f5.utils import driver_utils, decorators
@@ -46,12 +45,16 @@ class L2SyncManager(BaseTaskFlowEngine):
     def __init__(self):
         super(L2SyncManager).__init__()
         self._bigips = list(self.initialize_bigips(CONF.f5_agent.bigip_urls))
-        self._vcmps = list(self.initialize_bigips(CONF.networking.vcmp_urls))
-        self._f5flows = f5_flows.F5Flows()
+        self._vcmps = list(self.initialize_bigips(CONF.networking.vcmp_urls,
+            r_series_vcmp_host=CONF.networking.vcmp_rseries))
+        # since (for rSeries) host and guest might use different APIs, we need
+        # two f5flows objects - one for host, one for guest
+        self._f5flows_host = f5_flows_rseries.F5Flows() if CONF.networking.vcmp_rseries else f5_flows_iseries.F5Flows()
+        self._f5flows_guest = f5_flows_iseries.F5Flows()
         self._network_driver = driver_utils.get_network_driver()
         self.executor = futures.ThreadPoolExecutor(max_workers=CONF.networking.max_workers)
 
-    def initialize_bigips(self, bigip_urls: [str]):
+    def initialize_bigips(self, bigip_urls: [str], r_series_vcmp_host=False):
         if CONF.f5_agent.dry_run:
             return []
 
@@ -63,11 +66,11 @@ class L2SyncManager(BaseTaskFlowEngine):
                       'verify': CONF.f5_agent.bigip_verify}
 
             if CONF.f5_agent.bigip_token:
-                kwargs['auth'] = bigip_auth.BigIPTokenAuth(bigip_url)
+                kwargs['auth'] = bigip_auth.BigIPTokenAuth(bigip_url, f5os_a=r_series_vcmp_host)
             else:
                 kwargs['auth'] = bigip_auth.BigIPBasicAuth(bigip_url)
 
-            instance = BigIPRestClient(**kwargs)
+            instance = BigIPRestClient(**kwargs, f5os_a=r_series_vcmp_host)
             instances.append(instance)
         return instances
 
@@ -89,7 +92,7 @@ class L2SyncManager(BaseTaskFlowEngine):
         for flow_data in data:
             # get existing SelfIPs and subnet routes - they are needed to determine,
             # which ones have to be created and which already exist
-            e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(),
+            e = self.taskflow_load(self._f5flows_guest.make_get_existing_selfips_and_subnet_routes_flow(),
                                    store=flow_data['store'])
             with tf_logging.LoggingListener(e, log=LOG):
                 e.run()
@@ -100,7 +103,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             flow_data['store']['existing_subnet_routes'] = e.storage.get('get-existing-subnet-routes')
 
             ensure_l2_flow.add(
-                self._f5flows.make_ensure_l2_flow(
+                self._f5flows_guest.make_ensure_l2_flow(
                     flow_data['selfips'], store=flow_data['store']))
 
         # We have to inject all required variables to each flow/task because these flows will
@@ -112,7 +115,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             e.run()
 
     def _do_ensure_vcmp_l2_flow(self, store: dict):
-        e = self.taskflow_load(self._f5flows.make_ensure_vcmp_l2_flow(), store=store)
+        e = self.taskflow_load(self._f5flows_host.make_ensure_vcmp_l2_flow(), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
@@ -120,7 +123,7 @@ class L2SyncManager(BaseTaskFlowEngine):
         remove_l2_flow = unordered_flow.Flow('remove-l2-flow-from-all-devices')
         for flow_data in data:
             # get existing SelfIPs and subnet routes
-            e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(),
+            e = self.taskflow_load(self._f5flows_guest.make_get_existing_selfips_and_subnet_routes_flow(),
                                    store=flow_data['store'])
             with tf_logging.LoggingListener(e, log=LOG):
                 e.run()
@@ -130,7 +133,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             flow_data['store']['existing_selfips'] = e.storage.get('get-existing-selfips')
             flow_data['store']['existing_subnet_routes'] = e.storage.get('get-existing-subnet-routes')
 
-            remove_l2_flow.add(self._f5flows.make_remove_l2_flow(store=flow_data['store']))
+            remove_l2_flow.add(self._f5flows_guest.make_remove_l2_flow(store=flow_data['store']))
 
         e = self.taskflow_load(remove_l2_flow)
         with tf_logging.LoggingListener(e, log=LOG):
@@ -144,7 +147,7 @@ class L2SyncManager(BaseTaskFlowEngine):
         before creation."""
 
         # get existing SelfIPs and subnet routes
-        e = self.taskflow_load(self._f5flows.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
+        e = self.taskflow_load(self._f5flows_guest.make_get_existing_selfips_and_subnet_routes_flow(), store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
         existing_selfips = e.storage.get('get-existing-selfips')
@@ -153,7 +156,7 @@ class L2SyncManager(BaseTaskFlowEngine):
         # subnet routes that must exist (subnets with SelfIPs already have routes)
         network = store['network']
         subnets_that_need_routes = [subnet for subnet in network.subnets if
-                                    not f5_tasks.selfip_for_subnet_exists(subnet, needed_selfips)]
+                                    not driver_utils.selfip_for_subnet_exists(subnet, needed_selfips)]
 
         # log the current and desired state
         hostname = store['bigip'].hostname
@@ -165,14 +168,14 @@ class L2SyncManager(BaseTaskFlowEngine):
         # get and run the sync flow
         store['existing_selfips'] = existing_selfips
         store['existing_subnet_routes'] = existing_subnet_routes
-        sync_flow = self._f5flows.make_sync_selfips_and_subnet_routes_flow(
+        sync_flow = self._f5flows_guest.make_sync_selfips_and_subnet_routes_flow(
             needed_selfips, subnets_that_need_routes, store)
         e = self.taskflow_load(sync_flow, store=store)
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
     def _do_remove_vcmp_l2_flow(self, store: dict):
-        e = self.taskflow_load(self._f5flows.make_remove_vcmp_l2_flow(), store=store)
+        e = self.taskflow_load(self._f5flows_host.make_remove_vcmp_l2_flow(), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
@@ -213,7 +216,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             self._do_ensure_l2_flow,
             data=ensure_l2_flow_data)] = self._bigips
 
-        # run VCMP l2 flow for all VCMPs in parallel
+        # run VCMP l2 flow for all VCMP hosts in parallel
         for vcmp in self._vcmps:
             store = {'bigip': vcmp, 'network': network}
             if CONF.networking.override_vcmp_guest_names:
@@ -377,7 +380,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                 needed_subnet_routes = []
                 for net, subs in [(n, networks[n].subnets) for n in networks]:
                     # lb_subnets is the list of subnets that don't have subnet routes but SelfIPs
-                    needed_subnet_routes.extend([f5_tasks.get_subnet_route_name(net, sub)
+                    needed_subnet_routes.extend([driver_utils.get_subnet_route_name(net, sub)
                                                  for sub in subs if sub not in lb_subnets])
                 if route['name'] in needed_subnet_routes:
                     continue
