@@ -53,7 +53,7 @@ class RaisesApiError(ContextDecorator):
             # if a username is present, display it, but hide the password,
             # otherwise just display the hostname
             if parsed.username:
-                redacted = parsed._replace(netloc=f"{parsed.username}:???@{parsed.hostname}")
+                redacted = parsed._replace(netloc=f"{parsed.username}:???@{parsed.hostname}").geturl()
             else:
                 redacted = parsed.hostname
 
@@ -67,7 +67,7 @@ class RaisesApiError(ContextDecorator):
 
             # raise exception
             raise self.exception_class(
-                f"HTTP {exc_val.response.status_code} for {exc_val.request.method} {redacted.geturl()}: {err_msg}"
+                f"HTTP {exc_val.response.status_code} for {exc_val.request.method} {redacted}: {err_msg}"
             )
 
         return False
