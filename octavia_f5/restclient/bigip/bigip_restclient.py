@@ -195,7 +195,6 @@ class BigIPRestClient(requests.Session):
             headers['Accept'] = 'application/yang-data+json'
             kwargs['headers'] = headers
 
-        LOG.warning(f"Sending PUT to {url} with kwargs: {kwargs}")
         return super(BigIPRestClient, self).put(url, **kwargs)
 
     def config_sync(self, device_group):
