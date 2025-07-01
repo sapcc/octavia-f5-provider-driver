@@ -44,7 +44,6 @@ class EnsureVLAN(task.Task):
                 existing_vlan: dict,
                 network: f5_network_models.Network):
         vlan_id = network.vlan_id
-        LOG.info(f"f5_tasks_rseries: EnsureVLAN for VLAN {vlan_id}")
         vlan_payload = {
             "vlan-id": vlan_id,
             "config": {
@@ -65,7 +64,6 @@ class EnsureVLAN(task.Task):
 
         # create missing VLAN
         res = bigip.put(path=f"/api/data/openconfig-vlan:vlans/vlan={vlan_id}", json=payload)
-        LOG.info("f5_tasks_rseries: EnsureVLAN: Result: %s", res)
         res.raise_for_status()
 
     @decorators.RaisesF5osaError()
@@ -73,7 +71,6 @@ class EnsureVLAN(task.Task):
                bigip: bigip_restclient.BigIPRestClient,
                existing_vlan, *args, **kwargs):
         vlan_id = network.vlan_id
-        LOG.info(f"f5_tasks_rseries: EnsureVLAN revert for VLAN {vlan_id}")
         if existing_vlan is not None:
             LOG.warning(f"EnsureVLAN revert: Not deleting VLAN {vlan_id}, since it existed before "
                         f"the task was run: {existing_vlan}")
@@ -93,19 +90,13 @@ class GetExistingVLAN(task.Task):
                 bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network):
         vlan_id = network.vlan_id
-        LOG.info(f"f5_tasks_rseries: GetExistingVLAN for VLAN {vlan_id}")
         res = bigip.get(path=f"/api/data/openconfig-vlan:vlans/vlan={vlan_id}")
         if res.status_code == 404:
             return None
         res.raise_for_status()
 
         # get and return VLAN dict from response json
-        try:
-            res_json = res.json()
-        except Exception as e:
-            LOG.warning(f"GetExistingVLAN: Can't call res.json() on response: {res}")
-        response_json = res.json()
-        vlan_list = response_json["openconfig-vlan:vlan"]
+        vlan_list = res.json()["openconfig-vlan:vlan"]
         if len(vlan_list) > 1:
             LOG.warning(f"GetExistingVLAN: Got multiple VLANs for ID {vlan_id}: {vlan_list} - only using the first one")
         return vlan_list[0]
@@ -119,7 +110,6 @@ class EnsureVLANInterface(task.Task):
                 bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network):
         vlan_id = network.vlan_id
-        LOG.info(f"f5_tasks_rseries: EnsureVLANInterface for VLAN {vlan_id}")
         network_driver = driver_utils.get_network_driver()
         lag_name = network_driver.physical_interface
         payload = {'openconfig-vlan:trunk-vlans': [vlan_id]}
@@ -140,7 +130,6 @@ class EnsureGuestVLAN(task.Task):
                 bigip_guest_names: [str],
                 network: f5_network_models.Network):
         vlan_id = network.vlan_id
-        LOG.info(f"f5_tasks_rseries: EnsureGuestVLAN for VLAN {vlan_id}")
 
         # the guests are called tenant in the F5OS-A API
         device_response = bigip.get(path='/api/data/f5-tenants:tenants')
@@ -175,7 +164,6 @@ class GetVCMPGuests(task.Task):
     @decorators.RaisesF5osaError()
     def execute(self,
                 bigip: bigip_restclient.BigIPRestClient):
-        LOG.info("f5_tasks_rseries: GetVCMPGuests")
         device_response = bigip.get(path='/api/data/f5-tenants:tenants')
         device_response.raise_for_status()
         return device_response.json()["f5-tenants:tenants"]["tenant"]
@@ -190,7 +178,6 @@ class RemoveGuestVLAN(task.Task):
                 device_guests: list,
                 network: f5_network_models.Network):
         vlan_id = network.vlan_id
-        LOG.info(f"f5_tasks_rseries: RemoveGuestVLAN for VLAN {vlan_id}")
         for guest in device_guests:
             guest_name = guest['name']
 
@@ -222,7 +209,6 @@ class RemoveVLANInterface(task.Task):
         network_driver = driver_utils.get_network_driver()
         lag_name = network_driver.physical_interface
         vlan_id = network.vlan_id
-        LOG.info(f"f5_tasks_rseries: RemoveVLANInterface for VLAN {vlan_id}")
 
         path = f"/api/data/openconfig-interfaces:interfaces/interface={lag_name}" \
                f"/openconfig-if-aggregate:aggregation/openconfig-vlan:switched-vlan/config/trunk-vlans={vlan_id}"
@@ -253,7 +239,6 @@ class RemoveVLANIfNotOwnedByGuest(task.Task):
                 network: f5_network_models.Network):
         """ Task to delete VLAN on a VCMP Host  """
         vlan_id = network.vlan_id
-        LOG.info(f"f5_tasks_rseries: RemoveVLANIfNotOwnedByGuest for VLAN {vlan_id}")
 
         for guest in device_guests:
             # skip own guest
