@@ -12,11 +12,14 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from octavia_lib.api.drivers import data_models
-from octavia_lib.common import constants
 from oslo_config import cfg
 from oslo_log import log as logging
 from stevedore import driver
+
+from octavia_lib.api.drivers import data_models
+from octavia_lib.common import constants
+
+from octavia_f5.common import constants as f5_constants
 
 
 CONF = cfg.CONF
@@ -54,3 +57,15 @@ def lb_to_vip_obj(lb):
         vip_obj.qos_policy_id = lb.vip_qos_policy_id
     vip_obj.load_balancer = lb
     return vip_obj
+
+
+def selfip_for_subnet_exists(subnet_id, selfips):
+    for selfip in selfips:
+        for fixed_ip in selfip.fixed_ips:
+            if fixed_ip.subnet_id == subnet_id:
+                return True
+    return False
+
+
+def get_subnet_route_name(network_id, subnet_id):
+    return f"{f5_constants.PREFIX_NETWORK}{network_id}_{f5_constants.PREFIX_SUBNET}{subnet_id}"
