@@ -33,6 +33,10 @@ class IControlRestException(ProviderDriverException):
     pass
 
 
+class F5osaException(ProviderDriverException):
+    pass
+
+
 class PolicyHasNoRules(AS3Exception):
     pass
 
