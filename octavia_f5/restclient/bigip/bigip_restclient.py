@@ -82,14 +82,16 @@ class BigIPRestClient(requests.Session):
         """
         Check if BigIP device is available for communications.
         """
-        available = True
         try:
             requests.get(self.url.scheme + '://' + self.url.hostname, timeout=timeout, verify=False)
             LOG.info(f'Found device with URL {self.url.hostname}')
+            return True
         except requests.exceptions.Timeout:
-            LOG.info(f'Device timed out, considering it unavailable. Timeout: {timeout}s Hostname: {self.url.hostname}')
-            available = False
-        return available
+            # This catches both connection timeouts and read timeouts
+            LOG.warning(f"Device {self.url.hostname} timed out after {timeout}s, considering it unavailable.")
+        except requests.exceptions.ConnectionError:
+            LOG.warning(f"Device {self.url.hostname} cannot be connected to, considering it unavailable.")
+        return False
 
     def update_status(self):
         """ Update status if device is active or not
