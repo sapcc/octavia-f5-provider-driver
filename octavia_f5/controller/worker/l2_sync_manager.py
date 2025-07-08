@@ -206,9 +206,9 @@ class L2SyncManager(BaseTaskFlowEngine):
             if device and bigip.hostname != device:
                 continue
 
-            # Check if device available by symple GET request
+            # skip unavailable devices
             if not bigip.is_available(timeout=CONF.status_manager.failover_timeout):
-                LOG.debug(f"Device {bigip.hostname} is unreachable for API requests.")
+                LOG.warning(f"ensure_l2_flow: Skipping unavailable device {bigip.hostname}")
                 continue
 
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
@@ -362,6 +362,12 @@ class L2SyncManager(BaseTaskFlowEngine):
         executor = futures.ThreadPoolExecutor(max_workers=1)
         fs = []
         for bigip in self._bigips:
+
+            # skip unavailable devices
+            if not bigip.is_available(timeout=CONF.status_manager.failover_timeout):
+                LOG.warning(f"full_sync: Skipping unavailable device {bigip.hostname}")
+                continue
+
             """ 1. Delete all orphaned routes """
             res = bigip.get(path='/mgmt/tm/net/route')
             res.raise_for_status()
