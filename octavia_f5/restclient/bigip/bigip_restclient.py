@@ -83,8 +83,9 @@ class BigIPRestClient(requests.Session):
         Check if BigIP device is available for communications.
         """
         try:
-            requests.get(self.url.scheme + '://' + self.url.hostname, timeout=timeout, verify=False)
-            LOG.info(f'Found device with URL {self.url.hostname}')
+            # we don't need a response body, so HTTP HEAD suffices
+            requests.head(self.url.scheme + '://' + self.url.hostname, timeout=timeout, verify=False)
+            LOG.info(f"Found device with URL {self.url.hostname}")
             return True
         except requests.exceptions.Timeout:
             # This catches both connection timeouts and read timeouts
