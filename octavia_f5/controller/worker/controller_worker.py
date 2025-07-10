@@ -26,6 +26,7 @@ from octavia_lib.common import constants as lib_consts
 from oslo_concurrency import lockutils
 from oslo_config import cfg
 from oslo_db import api as oslo_db_api
+from oslo_db.sqlalchemy import enginefacade
 from oslo_log import log as logging
 from oslo_utils import excutils, uuidutils
 from requests import HTTPError
@@ -156,7 +157,11 @@ class ControllerWorker(object):
     @periodics.periodic(60 * 60 * 24, run_immediately=CONF.f5_agent.sync_immediately)
     def cleanup_orphaned_tenants(self):
         LOG.info("Running (24h) tenant cleanup")
-        session = db_apis.get_session()
+        try:
+            session = db_apis.get_session(reader=True)
+        except enginefacade.AlreadyStartedError:
+            # handle race condition for sessions initialisation, skip one sync
+            return
         session.begin()
 
         for device in self.sync.devices():
@@ -181,7 +186,11 @@ class ControllerWorker(object):
 
     @periodics.periodic(60 * 4, run_immediately=CONF.f5_agent.sync_immediately)
     def full_sync_reappearing_devices(self):
-        session = db_apis.get_session()
+        try:
+            session = db_apis.get_session()
+        except enginefacade.AlreadyStartedError:
+            # handle race condition for sessions initialisation, skip one sync
+            return
         session.begin()
 
         # Get all pending devices
@@ -209,7 +218,11 @@ class ControllerWorker(object):
 
     @periodics.periodic(60 * 60 * 24, run_immediately=CONF.f5_agent.sync_immediately)
     def full_sync_l2(self):
-        session = db_apis.get_session()
+        try:
+            session = db_apis.get_session(reader=True)
+        except enginefacade.AlreadyStartedError:
+            # handle race condition for sessions initialisation, skip one sync
+            return
 
         # get all load balancers (of this host)
         with session.begin():
@@ -225,9 +238,12 @@ class ControllerWorker(object):
         - deletes load balancers that are PENDING_DELETE
         - executes a full sync on F5 devices that were offline but are now back online
         """
-
+        try:
+            session = db_apis.get_session(reader=True)
+        except enginefacade.AlreadyStartedError:
+            # handle race condition for sessions initialisation, skip one sync
+            return
         # delete load balancers that are PENDING_DELETE
-        session = db_apis.get_session()
         with session.begin():
             lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
                 session, provisioning_status=lib_consts.PENDING_DELETE)
