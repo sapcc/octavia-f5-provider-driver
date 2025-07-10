@@ -587,6 +587,9 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
     def update_vip_sg(self, load_balancer, vip):
         pass
 
+    def update_aap_port_sg(self, load_balancer, amphora, vip):
+        pass
+
     def plug_aap_port(self, load_balancer, vip, amphora, subnet):
         pass
 
