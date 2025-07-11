@@ -46,10 +46,10 @@ def get_engine():
     return context.get_engine()
 
 
-def get_session(reader=False):
+def get_session():
     """Helper method to grab session."""
-    return _get_sessionmaker(reader)()
+    return _get_sessionmaker()()
 
 
-def session(reader=False):
-    return _get_sessionmaker(reader)
+def session():
+    return _get_sessionmaker()

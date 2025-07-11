@@ -158,7 +158,7 @@ class ControllerWorker(object):
     def cleanup_orphaned_tenants(self):
         LOG.info("Running (24h) tenant cleanup")
         try:
-            session = db_apis.get_session(reader=True)
+            session = db_apis.get_session()
         except enginefacade.AlreadyStartedError:
             # handle race condition for sessions initialisation, skip one sync
             return
@@ -219,7 +219,7 @@ class ControllerWorker(object):
     @periodics.periodic(60 * 60 * 24, run_immediately=CONF.f5_agent.sync_immediately)
     def full_sync_l2(self):
         try:
-            session = db_apis.get_session(reader=True)
+            session = db_apis.get_session()
         except enginefacade.AlreadyStartedError:
             # handle race condition for sessions initialisation, skip one sync
             return
@@ -239,7 +239,7 @@ class ControllerWorker(object):
         - executes a full sync on F5 devices that were offline but are now back online
         """
         try:
-            session = db_apis.get_session(reader=True)
+            session = db_apis.get_session()
         except enginefacade.AlreadyStartedError:
             # handle race condition for sessions initialisation, skip one sync
             return
