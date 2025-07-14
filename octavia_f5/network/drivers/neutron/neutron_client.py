@@ -138,7 +138,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
                 if (port.network_id == load_balancer.vip.network_id and fixed_ip_found):
                     LOG.info('Port %s already exists. Nothing to be done.',
                              load_balancer.vip.port_id)
-                    return self._port_to_vip(port, load_balancer)[0]
+                    return self._port_to_vip(port, load_balancer)
                 LOG.error('Neutron VIP mis-match. Expected ip %s on '
                           'subnet %s in network %s. Neutron has fixed_ips %s '
                           'in network %s. Deleting and recreating the VIP '
@@ -180,7 +180,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
                 vip_port = engine.storage.fetch("vip_port")
                 LOG.debug("Successfully allocated SelfIPs %s for VIP %s",
                           [selfip.id for selfip in selfips], vip_port.id)
-                return self._port_to_vip(vip_port, load_balancer)[0]
+                return self._port_to_vip(vip_port, load_balancer)
         except WrappedFailure as f:
             # Unwrap Allocation error and re-raise
             for e in f:
@@ -585,6 +585,9 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         pass
 
     def update_vip_sg(self, load_balancer, vip):
+        pass
+
+    def update_aap_port_sg(self, load_balancer, amphora, vip):
         pass
 
     def plug_aap_port(self, load_balancer, vip, amphora, subnet):

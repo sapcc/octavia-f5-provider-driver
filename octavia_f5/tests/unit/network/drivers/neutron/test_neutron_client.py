@@ -184,7 +184,7 @@ class TestNeutronClient(base.TestCase):
                                       network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
-        vip = self.driver.allocate_vip(fake_lb)
+        vip, _ = self.driver.allocate_vip(fake_lb)
         create_port.assert_has_calls([mock.call(**EXP_MOCK_NEUTRON_PORT),
                                       mock.call(**EXP_MOCK_SELFIP_PORT)],
                                      any_order=True)
@@ -302,7 +302,7 @@ class TestNeutronClient(base.TestCase):
             network_id=t_constants.MOCK_NETWORK_ID,
             ip_address=t_constants.MOCK_IP_ADDRESS)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip)
-        vip = self.driver.allocate_vip(fake_lb)
+        vip, _ = self.driver.allocate_vip(fake_lb)
         self.assertIsInstance(vip, data_models.Vip)
         self.assertEqual(t_constants.MOCK_IP_ADDRESS, vip.ip_address)
         self.assertEqual(MOCK_SUBNET_ID, vip.subnet_id)
@@ -333,7 +333,7 @@ class TestNeutronClient(base.TestCase):
                                       octavia_owned=True)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
-        vip = self.driver.allocate_vip(fake_lb)
+        vip, _ = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
             'name': 'loadbalancer-1',
             'network_id': t_constants.MOCK_NETWORK_ID,
@@ -373,7 +373,7 @@ class TestNeutronClient(base.TestCase):
                                       port_id=t_constants.MOCK_PORT_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
-        vip = self.driver.allocate_vip(fake_lb)
+        vip, _ = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
             'name': 'loadbalancer-1',
             'network_id': t_constants.MOCK_NETWORK_ID,
@@ -419,7 +419,7 @@ class TestNeutronClient(base.TestCase):
                                       network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
-        vip = self.driver.allocate_vip(fake_lb)
+        vip, _ = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
             'name': 'loadbalancer-1',
             'network_id': t_constants.MOCK_NETWORK_ID,
@@ -454,7 +454,7 @@ class TestNeutronClient(base.TestCase):
                                       ip_address=t_constants.MOCK_IP_ADDRESS)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
-        vip = self.driver.allocate_vip(fake_lb)
+        vip, _ = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
             'name': 'loadbalancer-1',
             'network_id': t_constants.MOCK_NETWORK_ID,
@@ -488,7 +488,7 @@ class TestNeutronClient(base.TestCase):
         fake_lb_vip = data_models.Vip(network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id='test-project')
-        vip = self.driver.allocate_vip(fake_lb)
+        vip, _ = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
             'name': 'loadbalancer-1',
             'network_id': t_constants.MOCK_NETWORK_ID,
@@ -519,7 +519,7 @@ class TestNeutronClient(base.TestCase):
                                       network_id=t_constants.MOCK_NETWORK_ID)
         fake_lb = data_models.LoadBalancer(id='1', vip=fake_lb_vip,
                                            project_id=t_constants.MOCK_PROJECT_ID)
-        vip = self.driver.allocate_vip(fake_lb)
+        vip, _ = self.driver.allocate_vip(fake_lb)
         exp_create_port_call = {
             'name': 'loadbalancer-1',
             'network_id': t_constants.MOCK_NETWORK_ID,
