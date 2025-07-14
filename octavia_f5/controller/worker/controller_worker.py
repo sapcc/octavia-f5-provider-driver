@@ -249,7 +249,7 @@ class ControllerWorker(object):
                 session, provisioning_status=lib_consts.PENDING_DELETE)
         for lb in lbs_to_delete:
             LOG.info("Found pending deletion of lb %s", lb.id)
-            self.delete_load_balancer(lb.id)
+            self.delete_load_balancer({octavia_consts.LOADBALANCER_ID: lb.id})
 
         # Find pending loadbalancer not yet finally assigned to this host
         lbs = []
