@@ -535,6 +535,11 @@ class UpdateStatsDb(update_base.StatsUpdateBase, stats.StatsMixin):
             listeners = health_message['listeners']
             for listener_id, listener in listeners.items():
                 listener_stats = listener.get('stats')
+                # set statistics to 0 if there are no data because
+                # Octavia's DB does not allow NULL values
+                for val in ['rx', 'tx', 'conns', 'totconns', 'ereq']:
+                    if listener_stats[val] is None:
+                        listener_stats[val] = 0
                 stats_args = {'bytes_in': listener_stats['rx'], 'bytes_out': listener_stats['tx'],
                               'active_connections': listener_stats['conns'],
                               'total_connections': listener_stats['totconns'],
