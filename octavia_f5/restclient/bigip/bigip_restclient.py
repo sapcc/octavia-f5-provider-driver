@@ -110,7 +110,7 @@ class BigIPRestClient(requests.Session):
             LOG.error("F5 status response is empty, return cached status")
             return self._active or False
         if len(statuses) < 2:
-            LOG.error("F5 status response contain less than 2 devices: %s", statuses)
+            LOG.warning("F5 status response contains less than 2 devices: %s", statuses)
         statuses = {d['name']: d['failoverState'] == 'active' for d in statuses}
         LOG.debug("got F5 devices statuses: %s", statuses)
         if not any(statuses.values()):
