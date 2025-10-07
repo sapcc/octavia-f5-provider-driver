@@ -366,14 +366,13 @@ class StatusManager(object):
                 else:
                     amp_dict['role'] = constants.ROLE_BACKUP
 
-                # generate ID for the object if needed
-                # it is required after SQLalchemy upgrade
-                # https://github.com/sapcc/octavia/commit/b15a6e8c7dcdcb83adb5545b7016d0400c2221d1
-                if not amp_dict.get('id'):
-                    amp_dict['id'] = uuidutils.generate_uuid()
-
                 # create/modify entry
                 if not device_entry:
+                    # generate ID for the object if needed
+                    # it is required after SQLalchemy upgrade
+                    # https://github.com/sapcc/octavia/commit/b15a6e8c7dcdcb83adb5545b7016d0400c2221d1
+                    if not amp_dict.get('id'):
+                        amp_dict['id'] = uuidutils.generate_uuid()
                     self.amp_repo.create(session, **amp_dict)
                 else:
                     self.amp_repo.update(session, device_entry.id, **amp_dict)
