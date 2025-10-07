@@ -21,7 +21,7 @@ import prometheus_client as prometheus
 from oslo_config import cfg
 from oslo_db import exception as db_exc
 from oslo_log import log as logging
-from oslo_utils import excutils
+from oslo_utils import excutils, uuidutils
 
 from octavia.common import constants as o_const
 from octavia.common import rpc
@@ -368,6 +368,11 @@ class StatusManager(object):
 
                 # create/modify entry
                 if not device_entry:
+                    # generate ID for the object if needed
+                    # it is required after SQLalchemy upgrade
+                    # https://github.com/sapcc/octavia/commit/b15a6e8c7dcdcb83adb5545b7016d0400c2221d1
+                    if not amp_dict.get('id'):
+                        amp_dict['id'] = uuidutils.generate_uuid()
                     self.amp_repo.create(session, **amp_dict)
                 else:
                     self.amp_repo.update(session, device_entry.id, **amp_dict)
