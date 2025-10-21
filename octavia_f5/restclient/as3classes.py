@@ -312,7 +312,7 @@ class Data_Group(BaseDescription):
         super().__init__(locals())
         setattr(self, 'class', 'Data_Group')
         self.require('keyDataType')
-        setattr(self, 'records', [{"key": r} for r in _records])
+        setattr(self, 'records', _records)
 
 
 class Cipher_Group(BaseDescription):

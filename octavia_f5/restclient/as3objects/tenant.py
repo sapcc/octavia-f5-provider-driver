@@ -35,7 +35,7 @@ def get_name(network_id):
 
 
 # pylint: disable=too-many-positional-arguments
-def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_manager, esd_repo):
+def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_manager, network_manager, esd_repo):
 
     project_id = None
     if loadbalancers:
@@ -60,11 +60,14 @@ def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_ma
         # Create generic application
         app = Application(constants.APPLICATION_GENERIC, label=loadbalancer.id)
 
+        # Parse Security Groups attached to LoadBalancer
+        parsed_rules = _get_sg_rules_for_lb(network_manager, loadbalancer.vip.sg_ids)
+
         # Attach Octavia listeners as AS3 service objects
         for listener in loadbalancer.listeners:
             if not driver_utils.pending_delete(listener):
                 try:
-                    service_entities = m_service.get_service(listener, cert_manager, esd_repo)
+                    service_entities = m_service.get_service(listener, cert_manager, esd_repo, parsed_rules)
                     app.add_entities(service_entities)
                 except o_exceptions.CertificateRetrievalException as e:
                     if getattr(e, 'status_code', 0) != 400:
@@ -86,3 +89,76 @@ def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_ma
         tenant.add_application(m_app.get_name(loadbalancer.id), app)
 
     return tenant
+
+
+def _get_sg_rules_for_lb(network_manager, sg_ids):
+    parsed_rules = []
+    parsed_sgs = []
+    for sg_id in sg_ids:
+        if sg_id in parsed_sgs:
+            # skip SGs that we already parsed as remote groups
+            continue
+        sub_sgs, sub_rules = _get_sg_rules_for_sg(network_manager, sg_id)
+        parsed_sgs += sub_sgs
+        parsed_rules += sub_rules
+
+    qnique_rules = []
+    for rn in parsed_rules:
+        if rn not in qnique_rules:
+            qnique_rules.append(rn)
+
+    return qnique_rules
+
+
+def _get_sg_rules_for_sg(network_manager, sg_id, parent_rule=None):
+    parsed_rules = []
+    parsed_sgs = [sg_id]
+
+    all_rules = list(tuple(network_manager.network_proxy.security_group_rules(
+        security_group_id=sg_id)))
+    for rule in all_rules:
+        if (rule.get('direction') != 'ingress' or
+                rule.get('protocol') is None or
+                rule['protocol'].upper() not in
+                [lib_consts.PROTOCOL_TCP, lib_consts.PROTOCOL_UDP]):
+            LOG.debug(f"Skip SG rule with protocol {rule.get('protocol')} and direction {rule.get('direction')}")
+            continue
+
+        if parent_rule:
+            # Override protocol and ports from parent SG rule because protocol
+            # required for any rules and it cannot be differnet for parent and
+            # sub rules.
+            parsed_rule = parent_rule.copy()
+        else:
+            # None means Any port
+            if rule['port_range_min'] is None:
+                rule['port_range_min'] = 1
+            if rule['port_range_max'] is None:
+                rule['port_range_max'] = 65535
+            parsed_rule = {
+                'protocol': rule['protocol'].upper(),
+                'ports': (rule['port_range_min'], rule['port_range_max'])
+            }
+
+        prefixes = []
+        remote_ag_id = rule.get('remote_address_group_id')
+        remote_sg_id = rule.get('remote_group_id')
+
+        if remote_ag_id:
+            addr_group = network_manager.network_proxy.get_address_group(
+                address_group=remote_ag_id)
+            prefixes = addr_group['addresses']
+        elif remote_sg_id:
+            sub_sgs, sub_rules = _get_sg_rules_for_sg(
+                network_manager, remote_sg_id, parsed_rule)
+            parsed_sgs += sub_sgs
+            parsed_rules += sub_rules
+        else:
+            if rule['remote_ip_prefix']:
+                prefixes.append(rule['remote_ip_prefix'])
+
+        if prefixes:
+            parsed_rule['prefixes'] = prefixes
+            parsed_rules.append(parsed_rule)
+
+    return parsed_sgs, parsed_rules

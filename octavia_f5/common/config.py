@@ -129,8 +129,8 @@ f5_agent_opts = [
                        "declaration.")),
     cfg.StrOpt('availability_zone', default=None,
                help=_("Name of the availability zone the F5 device of this worker is assigned to.")),
-    cfg.StrOpt('irule_allowed_cidrs', default='cc_allowed_cidrs',
-               help=_("Name of iRule used for allowed_cidrs filtering.")),
+    cfg.StrOpt('irule_access_filtering', default='sci_access_filtering',
+               help=_("Name of iRule used for Security Groups and Allowed CIDRs filtering.")),
 ]
 
 f5_tls_shared = {

@@ -58,7 +58,7 @@ class AS3DeclarationManager(object):
             # get Tenant
             name = m_tenant.get_name(network_id)
             tenant = m_tenant.get_tenant(segmentation_id, loadbalancers, self_ips,
-                                         self._status_manager, self._cert_manager, self._esd_repo)
+                                         self._status_manager, self._cert_manager, self._network_driver, self._esd_repo)
             adc.set_tenant(name, tenant)
 
         return declaration

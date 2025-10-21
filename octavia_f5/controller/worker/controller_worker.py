@@ -28,12 +28,15 @@ from oslo_config import cfg
 from oslo_db import api as oslo_db_api
 from oslo_db.sqlalchemy import enginefacade
 from oslo_log import log as logging
+import oslo_messaging as messaging
 from oslo_utils import excutils, uuidutils
 from requests import HTTPError
 from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.common import constants as octavia_consts
+from octavia.common import rpc
 from octavia.db import repositories as repo
+from octavia.db import models as db_models
 from octavia_f5.common import constants as octavia_f5_consts
 from octavia_f5.controller.worker import status_manager, sync_manager, l2_sync_manager
 from octavia_f5.controller.worker.set_queue import SetQueue
@@ -850,3 +853,90 @@ class ControllerWorker(object):
                     'availability_zone_profile_id': azp_dict['id']
                 }
                 self._az_repo.create(lock_session, **az_dict)
+
+
+class ControllerWorkerNotifications(object):
+
+    def __init__(self):
+        self._loadbalancer_repo = f5_repos.LoadBalancerRepository()
+        self._vip_repo = repo.VipRepository()
+
+        # instantiate managers/drivers
+        self.network_driver = driver_utils.get_network_driver()
+
+        # RPC client to send notifications to another workers
+        self.target = messaging.Target(
+            namespace=octavia_consts.RPC_NAMESPACE_CONTROLLER_AGENT,
+            topic=octavia_consts.TOPIC_AMPHORA_V2, version="2.0", fanout=False)
+        self.rpc_client = rpc.get_client(self.target)
+
+        super().__init__()
+
+    def _get_server(self, loadbalancer):
+        """ Get scheduled host of the loadbalancer.
+        :param loadbalancer: loadbalancer data
+        :return: scheduled host
+        """
+        if loadbalancer.server_group_id:
+            return loadbalancer.server_group_id
+        # fetch scheduled server from VIP port
+        return self.network_driver.get_scheduled_host(loadbalancer.vip.port_id)
+
+    def _get_all_sgs(self, security_group):
+        found_sgs = [security_group]
+        rules = list(tuple(self.network_driver.network_proxy.security_group_rules(
+            security_group_id=security_group)))
+        for rule in rules:
+            if rule.get('remote_group_id'):
+                found_sgs += self._get_all_sgs(rule['remote_group_id'])
+        return found_sgs
+
+    def process_security_group_update_notification(self, security_group_id, action):
+        notifications = {}
+        with db_apis.session().begin() as session:
+            loadbalancers = self._loadbalancer_repo.get_all_by_security_group(
+                session, security_group_id=security_group_id)
+            if not loadbalancers:
+                LOG.debug("No loadbalancers using Security Group "
+                          f"{security_group_id}, notification will be ignored")
+                return
+            for lb in loadbalancers:
+                db_groups = list(lb.vip.sg_ids)
+                # If security group was deleted we have to update database
+                # before load_balancer update notification
+                if action == 'deleted':
+                    LOG.debug(f"Security Group {security_group_id} attached to "
+                              f"LoadBalancer {lb.id} will be removed from the "
+                              f"list {','.join(db_groups)}")
+                    db_groups.remove(security_group_id)
+                    self._vip_repo.update(session, lb.id, sg_ids=db_groups)
+                else:
+                    found_sgs = []
+                    for sg in db_groups:
+                        found_sgs += self._get_all_sgs(sg)
+                    # Check if there remote SGs that we have to watch
+                    if set(found_sgs) != set(db_groups):
+                        for vip_sg_id in set(set(found_sgs) - set(db_groups)):
+                            vip_sg = db_models.VipSecurityGroup(
+                                load_balancer_id=lb.id,
+                                sg_id=vip_sg_id)
+                            session.add(vip_sg)
+                            session.flush()
+                            LOG.debug(f"Remote Security group {vip_sg_id} was added to Loadbalancer {lb.id}")
+                # Send notification that LoadBalancer updated
+                server = self._get_server(lb)
+                notifications[lb.id] = server
+                LOG.debug(f"Notify worker {server} about {action} Security Group "
+                          f"{security_group_id} attached to LoadBalancer {lb.id}")
+        # We have to notify workers about updates outside database
+        # transaction to be sure that database already updated
+        for lb_id, worker in notifications.items():
+            # notify correct worker about loadbalancer changes
+            payload = {
+                octavia_consts.ORIGINAL_LOADBALANCER: {
+                    octavia_consts.LOADBALANCER_ID: lb_id
+                },
+                octavia_consts.LOAD_BALANCER_UPDATES: {}
+            }
+            client = self.rpc_client.prepare(server=worker)
+            client.cast({}, 'update_load_balancer', **payload)

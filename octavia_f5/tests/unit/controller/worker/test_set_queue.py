@@ -12,7 +12,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import octavia.tests.unit.base as base
+from octavia.tests.unit import base
 from octavia_f5.controller.worker.set_queue import SetQueue
 
 

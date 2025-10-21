@@ -12,9 +12,11 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-import mock
+from unittest import mock
 from oslo_config import cfg
 from oslo_config import fixture as oslo_fixture
+
+from octavia_lib.api.drivers import data_models as driver_dm
 
 from octavia.common import constants as consts
 from octavia.common import exceptions
@@ -22,7 +24,6 @@ from octavia.tests.unit import base
 from octavia.tests.common import sample_data_models
 from octavia_f5.api.drivers.f5_driver import driver
 from octavia_f5.common import constants as f5_consts
-from octavia_lib.api.drivers import data_models as driver_dm
 
 
 class TestF5Driver(base.TestRpc):

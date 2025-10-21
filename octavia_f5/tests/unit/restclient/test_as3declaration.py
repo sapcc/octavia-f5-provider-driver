@@ -19,7 +19,7 @@ from oslo_config import fixture as oslo_fixture
 
 from octavia.db import models
 from octavia.tests.unit import base
-from octavia_f5.common import config  # noqa
+from octavia_f5.common import config  # pylint: disable=unused-import # noqa
 from octavia_f5.restclient import as3declaration
 
 CONF = None
@@ -43,6 +43,7 @@ class TestGetDeclaration(base.TestCase):
         mock_lb = mock.Mock(spec=models.LoadBalancer)
         mock_lb.pools = []
         mock_lb.listeners = []
+        mock_lb.vip.sg_ids = []
 
         self.assertIsInstance(as3, as3declaration.AS3DeclarationManager)
 

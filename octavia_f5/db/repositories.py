@@ -67,6 +67,22 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
 
         return [model.to_data_model() for model in query.all()]
 
+    def get_all_by_security_group(self, session, security_group_id):
+        """ Get all loadbalancers by security group used for VIP
+
+        :param session: A Sql Alchemy database session.
+        :param security_group_id: specify amphora host to fetch loadbalancer from.
+        :returns: [octavia.common.data_model]
+        """
+        query = session.query(models.LoadBalancer)
+        query = query.filter(
+            models.LoadBalancer.id == models.VipSecurityGroup.load_balancer_id,
+            models.VipSecurityGroup.sg_id == security_group_id)
+        query = query.filter(
+            models.LoadBalancer.provisioning_status != consts.DELETED)
+
+        return [model.to_data_model() for model in query.all()]
+
 
 class PoolRepository(repositories.PoolRepository):
     def get_pending_from_host(self, session, host=None):
