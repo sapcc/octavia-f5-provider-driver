@@ -115,15 +115,6 @@ class EnsureVLANInterface(task.Task):
         return None
 
 
-class RemoveVLANInterface(task.Task):
-    """ Task to remove VLAN interface attachment """
-
-    def execute(self):
-        # we don't need to remove the VLAN interface attachment on iSeries devices, because they're automatically
-        # removed when the VLAN is deleted.
-        pass
-
-
 class EnsureGuestVLAN(task.Task):
     """ Task to assign correct vlan to vcmp guest """
 

@@ -199,27 +199,6 @@ class RemoveGuestVLAN(task.Task):
             res.raise_for_status()
 
 
-class RemoveVLANInterface(task.Task):
-    """ Task to remove VLAN interface attachment """
-
-    @decorators.RaisesF5osaError()
-    def execute(self,
-                bigip: bigip_restclient.BigIPRestClient,
-                network: f5_network_models.Network):
-        network_driver = driver_utils.get_network_driver()
-        lag_name = network_driver.physical_interface
-        vlan_id = network.vlan_id
-
-        path = f"/api/data/openconfig-interfaces:interfaces/interface={lag_name}" \
-               f"/openconfig-if-aggregate:aggregation/openconfig-vlan:switched-vlan/config/trunk-vlans={vlan_id}"
-        res = bigip.delete(path=path)
-
-        if res.status_code == 404:
-            LOG.warning(f"Can't detach VLAN {vlan_id} from LAG {lag_name} for host {bigip.hostname}. Already detached?")
-            return
-        res.raise_for_status()
-
-
 class RemoveVLANIfNotOwnedByGuest(task.Task):
 
     @decorators.RaisesF5osaError()

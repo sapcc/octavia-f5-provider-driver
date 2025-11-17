@@ -638,8 +638,6 @@ class TestF5Flows(base.TestCase):
         mock_delete_response = MockResponse({}, 204)
         delete_calls = [
             mock.call(path='/api/data/f5-tenants:tenants/tenant=test-host-1/config/vlans=1234'),
-            mock.call(path=("/api/data/openconfig-interfaces:interfaces/interface=portchannel1/openconfig-if-aggregate:"
-                            "aggregation/openconfig-vlan:switched-vlan/config/trunk-vlans=1234")),
             mock.call(path="/api/data/openconfig-vlan:vlans/vlan=1234"),
         ]
 
@@ -717,8 +715,6 @@ class TestF5Flows(base.TestCase):
         mock_delete_response = MockResponse({}, 204)
         delete_calls = [
             mock.call(path='/api/data/f5-tenants:tenants/tenant=test-host-1/config/vlans=1234'),
-            mock.call(path=("/api/data/openconfig-interfaces:interfaces/interface=portchannel1/openconfig-if-aggregate:"
-                            "aggregation/openconfig-vlan:switched-vlan/config/trunk-vlans=1234")),
             # no VLAN deletion call
         ]
 
