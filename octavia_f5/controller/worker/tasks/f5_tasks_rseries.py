@@ -199,7 +199,7 @@ class UnassignVLANFromGuest(task.Task):
             res.raise_for_status()
 
 
-class RemoveVLANIfNotOwnedByGuest(task.Task):
+class RemoveVLANIfNotOwnedByOtherGuest(task.Task):
 
     @decorators.RaisesF5osaError()
     # This backoff-retry mechanism is needed due to known F5 bug 1759761.
@@ -231,7 +231,7 @@ class RemoveVLANIfNotOwnedByGuest(task.Task):
 
         res = bigip.delete(path=f"/api/data/openconfig-vlan:vlans/vlan={vlan_id}")
         if not res.ok:
-            LOG.warning("%s: Failed RemoveVLANIfNotOwnedByGuest for vlan_id=%s: %s",
+            LOG.warning("%s: Failed RemoveVLANIfNotOwnedByOtherGuest for vlan_id=%s: %s",
                         bigip.hostname, network.vlan_id, res.content)
 
         # There is another bug (not F5 bug 1759761 noted above, which is the

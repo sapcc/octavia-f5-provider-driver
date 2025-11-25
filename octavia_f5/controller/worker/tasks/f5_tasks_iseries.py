@@ -608,7 +608,7 @@ class GetVCMPGuests(task.Task):
         return device_response.json()['items']
 
 
-class RemoveVLANIfNotOwnedByGuest(task.Task):
+class RemoveVLANIfNotOwnedByOtherGuest(task.Task):
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
                 bigip_guest_names: List[str],
@@ -627,7 +627,7 @@ class RemoveVLANIfNotOwnedByGuest(task.Task):
 
         res = bigip.delete(path=f"/mgmt/tm/net/vlan/{name}")
         if not res.ok:
-            LOG.warning("%s: Failed RemoveVLANIfNotOwnedByGuest for vlan_id=%s: %s",
+            LOG.warning("%s: Failed RemoveVLANIfNotOwnedByOtherGuest for vlan_id=%s: %s",
                         bigip.hostname, network.vlan_id, res.content)
 
 
