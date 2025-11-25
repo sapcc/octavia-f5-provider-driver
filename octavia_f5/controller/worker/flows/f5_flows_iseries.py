@@ -302,24 +302,24 @@ class F5Flows(object):
         get_existing_vlan = self.tasks.GetExistingVLAN()
         ensure_vlan = self.tasks.EnsureVLAN()
         ensure_vlan_interface = self.tasks.EnsureVLANInterface()
-        ensure_guest_vlan = self.tasks.EnsureGuestVLAN()
+        assign_vlan_to_guest = self.tasks.AssignVLANToGuest()
 
         ensure_vcmp_l2_flow = linear_flow.Flow('ensure-vcmp-l2-flow')
         ensure_vcmp_l2_flow.add(get_existing_vlan,
                                 ensure_vlan,
                                 ensure_vlan_interface,
-                                ensure_guest_vlan)
+                                assign_vlan_to_guest)
         return ensure_vcmp_l2_flow
 
     def make_remove_vcmp_l2_flow(self) -> flow.Flow:
         get_vcmp_guests = self.tasks.GetVCMPGuests()
-        remove_guest_vlan = self.tasks.RemoveGuestVLAN()
+        remove_vlan_from_guest = self.tasks.UnassignVLANFromGuest()
         # no need to unassign the VLAN from the interface/LAG, because that is
         # going to happen at VLAN deletioni anyway.
         remove_vlan_if_not_owned_by_guest = self.tasks.RemoveVLANIfNotOwnedByGuest()
 
         remove_vcmp_l2_flow = linear_flow.Flow('remove-vcmp-l2-flow')
         remove_vcmp_l2_flow.add(get_vcmp_guests,
-                                remove_guest_vlan,
+                                remove_vlan_from_guest,
                                 remove_vlan_if_not_owned_by_guest)
         return remove_vcmp_l2_flow
