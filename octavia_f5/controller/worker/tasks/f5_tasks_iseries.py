@@ -657,5 +657,5 @@ class RemoveVLANGuestAssignment(task.Task):
                 path=f"/mgmt/tm/vcmp/guest/{guest['name']}",
                 json={'vlans': vlans})
             if not res.ok:
-                LOG.warning("%s: Failed removing guest VLAN for vlan_id=%s: %s",
+                LOG.warning("%s: Failed removing guest assignment for vlan_id=%s: %s",
                             bigip.hostname, network.vlan_id, res.content)

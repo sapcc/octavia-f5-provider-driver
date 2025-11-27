@@ -194,7 +194,7 @@ class RemoveVLANGuestAssignment(task.Task):
             res = bigip.delete(
                 path=f"/api/data/f5-tenants:tenants/tenant={guest_name}/config/vlans={vlan_id}")
             if not res.ok:
-                LOG.warning("%s: Failed removing guest VLAN for vlan_id=%s: %s",
+                LOG.warning("%s: Failed removing guest assignment for vlan_id=%s: %s",
                             bigip.hostname, network.vlan_id, res.content)
             res.raise_for_status()
 
