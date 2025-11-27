@@ -121,7 +121,7 @@ class EnsureVLANInterface(task.Task):
         res.raise_for_status()
 
 
-class AssignVLANToGuest(task.Task):
+class EnsureVLANGuestAssignment(task.Task):
     """ Task to assign correct vlan to vcmp guest """
 
     @decorators.RaisesF5osaError()
@@ -169,7 +169,7 @@ class GetVCMPGuests(task.Task):
         return device_response.json()["f5-tenants:tenants"]["tenant"]
 
 
-class UnassignVLANFromGuest(task.Task):
+class RemoveVLANGuestAssignment(task.Task):
     """ Removes vlan assignment of a VCMP Guest """
     @decorators.RaisesF5osaError()
     def execute(self,

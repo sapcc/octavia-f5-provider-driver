@@ -115,7 +115,7 @@ class EnsureVLANInterface(task.Task):
         return None
 
 
-class AssignVLANToGuest(task.Task):
+class EnsureVLANGuestAssignment(task.Task):
     """ Task to assign correct vlan to vcmp guest """
 
     @decorators.RaisesIControlRestError()
@@ -631,7 +631,7 @@ class RemoveVLANIfNotOwnedByOtherGuest(task.Task):
                         bigip.hostname, network.vlan_id, res.content)
 
 
-class UnassignVLANFromGuest(task.Task):
+class RemoveVLANGuestAssignment(task.Task):
     """ Removes vlan assignment of a VCMP Guest """
     @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
