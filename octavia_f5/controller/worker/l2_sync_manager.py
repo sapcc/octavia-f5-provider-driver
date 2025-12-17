@@ -274,6 +274,21 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         # run l2 flow for all devices in parallel
         fs = {}
+
+        if CONF.networking.override_vcmp_guest_names:
+            guest_names = CONF.networking.override_vcmp_guest_names
+        else:
+            guest_names = [bigip.hostname for bigip in self._bigips]
+
+        for vcmp in self._vcmps:
+            store = {'bigip': vcmp, 'bigip_guest_names': guest_names, 'network': network}
+            fs[self.executor.submit(self._do_remove_vcmp_l2_flow, store=store)] = [vcmp]
+
+        # Execute tasks for host and wait until it's done, because we have to be sure
+        # that VLAN assignment was removed before we remove VLAN on the guest.
+        # This orede is required for rSeries devices.
+        self._execute_tasks_for_remove_l2_flow(fs)
+
         remove_l2_flow_data = []
         for bigip in self._bigips:
             if device and bigip.hostname != device:
@@ -292,15 +307,10 @@ class L2SyncManager(BaseTaskFlowEngine):
             self._do_remove_l2_flow,
             data=remove_l2_flow_data)] = self._bigips
 
-        if CONF.networking.override_vcmp_guest_names:
-            guest_names = CONF.networking.override_vcmp_guest_names
-        else:
-            guest_names = [bigip.hostname for bigip in self._bigips]
+        # Execute tasks for guest
+        self._execute_tasks_for_remove_l2_flow(fs)
 
-        for vcmp in self._vcmps:
-            store = {'bigip': vcmp, 'bigip_guest_names': guest_names, 'network': network}
-            fs[self.executor.submit(self._do_remove_vcmp_l2_flow, store=store)] = [vcmp]
-
+    def _execute_tasks_for_remove_l2_flow(self, fs):
         done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
         for f in done | not_done:
             bigips = fs[f]
@@ -369,7 +379,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                 # Check if route name is a legacy route net-{network_id}
                 if route['name'] in [f"net-{id}" for id in network_ids]:
                     net_id = route['name'][len('net-'):]
-                    # Consider route with unexpected vlan to be obsoloted
+                    # Consider route with unexpected vlan to be obsoleted
                     if net_id in networks and route['network'].endswith(str(networks[net_id].vlan_id)):
                         continue
 
@@ -417,7 +427,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             for route_domain in res.json().get('items', []):
                 if route_domain['name'] in [f"net-{id}" for id in network_ids]:
                     net_id = route_domain['name'][len('net-'):]
-                    # Consider routedomain with unexpected vlan to be obsoloted
+                    # Consider route domain with unexpected vlan to be obsoleted
                     if net_id in networks and route_domain['id'] == networks[net_id].vlan_id:
                         continue
 
@@ -428,7 +438,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                 if not (route_domain['name'].startswith('net-') or route_domain['name'].startswith('vlan-')):
                     continue
 
-                # Cleanup Route-Domain
+                # Cleanup route domain
                 path = f"/mgmt/tm/net/route-domain/{route_domain['fullPath'].replace('/', '~')}"
                 fs.append(executor.submit(bigip.delete, path=path))
 
@@ -443,7 +453,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                 if not vlan['name'].startswith('vlan'):
                     continue
 
-                # Cleanup Route-Domain
+                # Cleanup route domain
                 path = f"/mgmt/tm/net/vlan/{vlan['fullPath'].replace('/', '~')}"
                 fs.append(executor.submit(bigip.delete, path=path))
 
