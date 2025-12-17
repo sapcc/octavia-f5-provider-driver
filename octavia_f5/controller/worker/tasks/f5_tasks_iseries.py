@@ -115,7 +115,7 @@ class EnsureVLANInterface(task.Task):
         return None
 
 
-class EnsureGuestVLAN(task.Task):
+class EnsureVLANGuestAssignment(task.Task):
     """ Task to assign correct vlan to vcmp guest """
 
     @decorators.RaisesIControlRestError()
@@ -608,7 +608,7 @@ class GetVCMPGuests(task.Task):
         return device_response.json()['items']
 
 
-class RemoveVLANIfNotOwnedByGuest(task.Task):
+class RemoveVLANIfNotOwnedByOtherGuest(task.Task):
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
                 bigip_guest_names: List[str],
@@ -627,11 +627,11 @@ class RemoveVLANIfNotOwnedByGuest(task.Task):
 
         res = bigip.delete(path=f"/mgmt/tm/net/vlan/{name}")
         if not res.ok:
-            LOG.warning("%s: Failed RemoveVLANIfNotOwnedByGuest for vlan_id=%s: %s",
+            LOG.warning("%s: Failed RemoveVLANIfNotOwnedByOtherGuest for vlan_id=%s: %s",
                         bigip.hostname, network.vlan_id, res.content)
 
 
-class RemoveGuestVLAN(task.Task):
+class RemoveVLANGuestAssignment(task.Task):
     """ Removes vlan assignment of a VCMP Guest """
     @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
@@ -657,5 +657,5 @@ class RemoveGuestVLAN(task.Task):
                 path=f"/mgmt/tm/vcmp/guest/{guest['name']}",
                 json={'vlans': vlans})
             if not res.ok:
-                LOG.warning("%s: Failed removing guest VLAN for vlan_id=%s: %s",
+                LOG.warning("%s: Failed removing guest assignment for vlan_id=%s: %s",
                             bigip.hostname, network.vlan_id, res.content)

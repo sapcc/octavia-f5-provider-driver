@@ -121,7 +121,7 @@ class EnsureVLANInterface(task.Task):
         res.raise_for_status()
 
 
-class EnsureGuestVLAN(task.Task):
+class EnsureVLANGuestAssignment(task.Task):
     """ Task to assign correct vlan to vcmp guest """
 
     @decorators.RaisesF5osaError()
@@ -169,7 +169,7 @@ class GetVCMPGuests(task.Task):
         return device_response.json()["f5-tenants:tenants"]["tenant"]
 
 
-class RemoveGuestVLAN(task.Task):
+class RemoveVLANGuestAssignment(task.Task):
     """ Removes vlan assignment of a VCMP Guest """
     @decorators.RaisesF5osaError()
     def execute(self,
@@ -194,12 +194,12 @@ class RemoveGuestVLAN(task.Task):
             res = bigip.delete(
                 path=f"/api/data/f5-tenants:tenants/tenant={guest_name}/config/vlans={vlan_id}")
             if not res.ok:
-                LOG.warning("%s: Failed removing guest VLAN for vlan_id=%s: %s",
+                LOG.warning("%s: Failed removing guest assignment for vlan_id=%s: %s",
                             bigip.hostname, network.vlan_id, res.content)
             res.raise_for_status()
 
 
-class RemoveVLANIfNotOwnedByGuest(task.Task):
+class RemoveVLANIfNotOwnedByOtherGuest(task.Task):
 
     @decorators.RaisesF5osaError()
     # This backoff-retry mechanism is needed due to known F5 bug 1759761.
@@ -231,7 +231,7 @@ class RemoveVLANIfNotOwnedByGuest(task.Task):
 
         res = bigip.delete(path=f"/api/data/openconfig-vlan:vlans/vlan={vlan_id}")
         if not res.ok:
-            LOG.warning("%s: Failed RemoveVLANIfNotOwnedByGuest for vlan_id=%s: %s",
+            LOG.warning("%s: Failed RemoveVLANIfNotOwnedByOtherGuest for vlan_id=%s: %s",
                         bigip.hostname, network.vlan_id, res.content)
 
         # There is another bug (not F5 bug 1759761 noted above, which is the
