@@ -286,7 +286,7 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         # Execute tasks for host and wait until it's done, because we have to be sure
         # that VLAN assignment was removed before we remove VLAN on the guest.
-        # This orede is required for rSeries devices.
+        # This order is required for rSeries devices.
         self._execute_tasks_for_remove_l2_flow(fs)
 
         remove_l2_flow_data = []
