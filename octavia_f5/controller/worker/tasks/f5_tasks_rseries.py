@@ -43,6 +43,12 @@ class EnsureVLAN(task.Task):
                 bigip: bigip_restclient.BigIPRestClient,
                 existing_vlan: dict,
                 network: f5_network_models.Network):
+
+        # return if VLAN already exists
+        if existing_vlan:
+            return existing_vlan
+
+        # create payload
         vlan_id = network.vlan_id
         vlan_payload = {
             "vlan-id": vlan_id,
@@ -52,10 +58,6 @@ class EnsureVLAN(task.Task):
             }
         }
         payload = {'openconfig-vlan:vlan': [vlan_payload]}
-
-        # return if VLAN already exists
-        if existing_vlan:
-            return existing_vlan
 
         # contrary to the EnsureVLAN task for iSeries devices, we don't need to
         # patch the VLAN in this task, because it only contains the VLAN ID. In
