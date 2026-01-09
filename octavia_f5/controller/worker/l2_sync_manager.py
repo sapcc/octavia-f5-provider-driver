@@ -249,10 +249,10 @@ class L2SyncManager(BaseTaskFlowEngine):
         # raise error only if all pairs failed
         if self._bigips and all(bigip in failed_bigips for bigip in self._bigips):
             raise exceptions.ProviderDriverException(
-                f"Failed ensure_l2_flow for all bigip devices of network_id={network_id}")
+                f"Failed ensure_l2_flow for all bigip guests of network_id={network_id}")
         if self._vcmps and all(vcmp in failed_bigips for vcmp in self._vcmps):
             raise exceptions.ProviderDriverException(
-                f"Failed ensure_l2_flow for all vcmp devices of network_id={network_id}")
+                f"Failed ensure_l2_flow for all bigip hosts of network_id={network_id}")
 
     def remove_l2_flow(self, network_id: str, device=None):
         """ Runs the taskflows for cleanup of l2 configuration on all bigip devices in parallel

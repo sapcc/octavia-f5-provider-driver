@@ -57,10 +57,11 @@ class EnsureVLAN(task.Task):
         if existing_vlan:
             return existing_vlan
 
-        # contrary to the EnsureVLAN task for iSeries devices, we don't need to patch the VLAN in this task,
-        # because it only contains the VLAN ID. In fact, comparing the existing_vlan dictionary with the payload
-        # would be misleading, since existing_vlan may also include the "members" key, which can change pretty
-        # much arbitrarily.
+        # contrary to the EnsureVLAN task for iSeries devices, we don't need to
+        # patch the VLAN in this task, because it only contains the VLAN ID. In
+        # fact, comparing the existing_vlan dictionary with the payload would
+        # be misleading, since existing_vlan may also include the "members"
+        # key, which can change pretty much arbitrarily.
 
         # create missing VLAN
         res = bigip.put(path=f"/api/data/openconfig-vlan:vlans/vlan={vlan_id}", json=payload)
@@ -140,13 +141,14 @@ class EnsureVLANGuestAssignment(task.Task):
         for guest in guests:
             guest_name = guest['name']
 
-            # Check if it's a managed guest.
-            # F5OS-A API only gives the host part of the name, so we have to check with startswith. We have to
-            # check against the guest name with a dot appended, so that partial guest names don't match.
+            # Check if it's a managed guest. F5OS-A API only gives the host
+            # part of the name, so we have to check with startswith. We have to
+            # check against the guest name with a dot appended, so that partial
+            # guest names don't match.
             if not any(name.startswith(guest_name + ".") for name in bigip_guest_names):
                 continue
 
-            # Check if the VLAN is already configured on the guest
+            # Check whether the VLAN is already assigned to the guest
             if vlan_id in guest['config']['vlans']:
                 continue
 
