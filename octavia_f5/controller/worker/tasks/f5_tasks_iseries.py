@@ -132,7 +132,7 @@ class EnsureVLANGuestAssignment(task.Task):
             if guest['name'] not in bigip_guest_names:
                 continue
 
-            # Check if the VLAN is already configured on the guest
+            # Check whether the VLAN is already assigned to the guest
             if device_vlan['name'] in ['/Common/' + vlan for vlan in guest['vlans']]:
                 continue
 
