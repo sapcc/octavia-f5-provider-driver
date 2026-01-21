@@ -80,13 +80,13 @@ class TestL2SyncManager(base.TestCase):
         super().setUp()
 
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_ensure_vcmp_l2_flow")
+                "L2SyncManager._do_ensure_l2_host_flow")
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_ensure_l2_flow")
+                "L2SyncManager._do_ensure_l2_guest_flow")
     @mock.patch('octavia_f5.network.drivers.noop_driver_f5.driver.'
                 'NoopNetworkDriverF5.get_network')
     def test_ensure_l2_flow_all_available(self, mock_get_network,
-                                          mock_l2_flow, mock_vcmp_l2_flow):
+                                          mock_l2_guest_flow, mock_l2_host_flow):
         mocked_selfips = [
             network_models.Port(
                 name=f"local-{MOCK_BIGIP_HOSTNAME}_0-{MOCK_FIXED_IP.subnet_id}",
@@ -100,7 +100,7 @@ class TestL2SyncManager(base.TestCase):
                 name=f"local-OTHER_HOST-{uuidutils.generate_uuid()}")
         ]
         self.manager.ensure_l2_flow(mocked_selfips, 'test-network-id')
-        mock_l2_flow.assert_called_once_with(data=[
+        mock_l2_guest_flow.assert_called_once_with(data=[
             {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
@@ -113,23 +113,23 @@ class TestL2SyncManager(base.TestCase):
                           'network': mock_get_network.return_value,
                           'subnet_id': MOCK_FIXED_IP.subnet_id}
             }])
-        self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
+        self.assertEqual(mock_l2_host_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                              'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]}),
             mock.call(store={'bigip': self.manager._vcmps[1], 'network': mock_get_network.return_value,
                              'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]})
         ]
-        mock_vcmp_l2_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
+        mock_l2_host_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
 
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_ensure_vcmp_l2_flow")
+                "L2SyncManager._do_ensure_l2_host_flow")
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_ensure_l2_flow")
+                "L2SyncManager._do_ensure_l2_guest_flow")
     @mock.patch('octavia_f5.network.drivers.noop_driver_f5.driver.'
                 'NoopNetworkDriverF5.get_network')
     def test_ensure_l2_flow_second_unavailable(self, mock_get_network,
-                                               mock_l2_flow, mock_vcmp_l2_flow):
+                                               mock_l2_guest_flow, mock_l2_host_flow):
         mocked_selfips = [
             network_models.Port(
                 name=f"local-{MOCK_BIGIP_HOSTNAME}_0-{MOCK_FIXED_IP.subnet_id}",
@@ -146,30 +146,30 @@ class TestL2SyncManager(base.TestCase):
         self.manager.ensure_l2_flow(mocked_selfips, 'test-network-id')
         self.manager._bigips[1].is_available.assert_called_once_with(timeout=5)
         # expect only one call for BigIP, only for available device
-        mock_l2_flow.assert_called_once_with(data=[
+        mock_l2_guest_flow.assert_called_once_with(data=[
             {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value,
                           'subnet_id': MOCK_FIXED_IP.subnet_id}
             }])
-        self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
+        self.assertEqual(mock_l2_host_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                              'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]}),
             mock.call(store={'bigip': self.manager._vcmps[1], 'network': mock_get_network.return_value,
                              'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]})
         ]
-        mock_vcmp_l2_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
+        mock_l2_host_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
 
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_ensure_vcmp_l2_flow")
+                "L2SyncManager._do_ensure_l2_host_flow")
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_ensure_l2_flow")
+                "L2SyncManager._do_ensure_l2_guest_flow")
     @mock.patch('octavia_f5.network.drivers.noop_driver_f5.driver.'
                 'NoopNetworkDriverF5.get_network')
     def test_ensure_l2_flow_override_host(self, mock_get_network,
-                                          mock_l2_flow, mock_vcmp_l2_flow):
+                                          mock_l2_guest_flow, mock_l2_host_flow):
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         conf.config(group='networking',
                     override_vcmp_guest_names=['test-host-2'])
@@ -186,7 +186,7 @@ class TestL2SyncManager(base.TestCase):
                 name=f"local-OTHER_HOST-{uuidutils.generate_uuid()}")
         ]
         self.manager.ensure_l2_flow(mocked_selfips, 'test-network-id')
-        mock_l2_flow.assert_called_once_with(data=[
+        mock_l2_guest_flow.assert_called_once_with(data=[
             {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
@@ -199,23 +199,23 @@ class TestL2SyncManager(base.TestCase):
                           'network': mock_get_network.return_value,
                           'subnet_id': MOCK_FIXED_IP.subnet_id}
             }])
-        self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
+        self.assertEqual(mock_l2_host_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                              'bigip_guest_names': ['test-host-2']}),
             mock.call(store={'bigip': self.manager._vcmps[1], 'network': mock_get_network.return_value,
                              'bigip_guest_names': ['test-host-2']})
         ]
-        mock_vcmp_l2_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
+        mock_l2_host_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
 
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_ensure_vcmp_l2_flow", side_effect=Exception('Boom!'))
+                "L2SyncManager._do_ensure_l2_host_flow", side_effect=Exception('Boom!'))
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_ensure_l2_flow")
+                "L2SyncManager._do_ensure_l2_guest_flow")
     @mock.patch('octavia_f5.network.drivers.noop_driver_f5.driver.'
                 'NoopNetworkDriverF5.get_network')
     def test_ensure_l2_flow_exception(self, mock_get_network,
-                                      mock_l2_flow, mock_vcmp_l2_flow):
+                                      mock_l2_guest_flow, mock_l2_host_flow):
         mocked_selfips = [
             network_models.Port(
                 name=f"local-{MOCK_BIGIP_HOSTNAME}_0-{MOCK_FIXED_IP.subnet_id}",
@@ -232,7 +232,7 @@ class TestL2SyncManager(base.TestCase):
             self.assertEqual("Failed ensure_l2_flow for all vcmp devices of network_id=test-network-id",
                              e.args[0])
 
-        mock_l2_flow.assert_called_once_with(data=[
+        mock_l2_guest_flow.assert_called_once_with(data=[
             {
                 'selfips': [mocked_selfips[0]],
                 'store': {'bigip': self.manager._bigips[0],
@@ -245,18 +245,18 @@ class TestL2SyncManager(base.TestCase):
                           'network': mock_get_network.return_value,
                           'subnet_id': MOCK_FIXED_IP.subnet_id}
             }])
-        self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
+        self.assertEqual(mock_l2_host_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                              'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]}),
             mock.call(store={'bigip': self.manager._vcmps[1], 'network': mock_get_network.return_value,
                              'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]})
         ]
-        mock_vcmp_l2_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
+        mock_l2_host_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test__do_ensure_l2_flow_nothing_exist_no_errors(self, mock_get_subnet):
+    def test__do_ensure_l2_guest_flow_nothing_exist_no_errors(self, mock_get_subnet):
         mock_get_subnet.return_value = network_models.Subnet(
             id='test-subnet-id-1', gateway_ip='1.2.3.1',
             cidr='1.2.3.0/24', network_id='test-network-id')
@@ -298,7 +298,7 @@ class TestL2SyncManager(base.TestCase):
                 }
             }
         ]
-        self.manager._do_ensure_l2_flow(data=data)
+        self.manager._do_ensure_l2_guest_flow(data=data)
         # check that both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigips[0].get.call_count, 9)
         self.assertEqual(mock_bigips[1].get.call_count, 9)
@@ -328,7 +328,7 @@ class TestL2SyncManager(base.TestCase):
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
-    def test__do_ensure_l2_flow_nothing_exist_route_domain_failed_on_second_device(
+    def test__do_ensure_l2_guest_flow_nothing_exist_route_domain_failed_on_second_device(
             self, mock_get_subnet):
         mock_get_subnet.return_value = network_models.Subnet(
             id='test-subnet-id', gateway_ip='1.2.3.1',
@@ -388,7 +388,7 @@ class TestL2SyncManager(base.TestCase):
                 }
             }
         ]
-        self.assertRaises(Exception, self.manager._do_ensure_l2_flow, data=data)
+        self.assertRaises(Exception, self.manager._do_ensure_l2_guest_flow, data=data)
         # check that both devices were called and REVERT tasks were also called
         self.assertEqual(mock_bigip_1.get.call_count, 10)
         self.assertEqual(mock_bigip_2.get.call_count, 7)
@@ -414,15 +414,16 @@ class TestL2SyncManager(base.TestCase):
         mock_bigip_2.delete.assert_has_calls(bigip_2_delete_calls, any_order=True)
 
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_remove_vcmp_l2_flow")
+                "L2SyncManager._do_remove_l2_host_flow")
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
                 "L2SyncManager._do_remove_l2_flow")
     @mock.patch('octavia_f5.network.drivers.noop_driver_f5.driver.'
                 'NoopNetworkDriverF5.get_network')
     def test_remove_l2_flow_all_available(self, mock_get_network,
-                                          mock_l2_flow, mock_vcmp_l2_flow):
+                                                mock_remove_l2_flow,
+                                                mock_remove_l2_host_flow):
         self.manager.remove_l2_flow('test-network-id')
-        mock_l2_flow.assert_called_once_with(data=[
+        mock_remove_l2_flow.assert_called_once_with(data=[
             {
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value}
@@ -431,40 +432,41 @@ class TestL2SyncManager(base.TestCase):
                 'store': {'bigip': self.manager._bigips[1],
                           'network': mock_get_network.return_value}
             }])
-        self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
+        self.assertEqual(mock_remove_l2_host_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                       'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]}),
             mock.call(store={'bigip': self.manager._vcmps[1], 'network': mock_get_network.return_value,
                       'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]})
         ]
-        mock_vcmp_l2_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
+        mock_remove_l2_host_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
 
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
-                "L2SyncManager._do_remove_vcmp_l2_flow")
+                "L2SyncManager._do_remove_l2_host_flow")
     @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
                 "L2SyncManager._do_remove_l2_flow")
     @mock.patch('octavia_f5.network.drivers.noop_driver_f5.driver.'
                 'NoopNetworkDriverF5.get_network')
     def test_remove_l2_flow_second_unavailable(self, mock_get_network,
-                                               mock_l2_flow, mock_vcmp_l2_flow):
+                                                     mock_remove_l2_flow,
+                                                     mock_remove_l2_host_flow):
         self.manager._bigips[1].is_available.side_effect = [False]
         self.manager.remove_l2_flow('test-network-id')
         self.manager._bigips[1].is_available.assert_called_once_with(timeout=5)
         # expect only one call for BigIP, only for available device
-        mock_l2_flow.assert_called_once_with(data=[
+        mock_remove_l2_flow.assert_called_once_with(data=[
             {
                 'store': {'bigip': self.manager._bigips[0],
                           'network': mock_get_network.return_value}
             }])
-        self.assertEqual(mock_vcmp_l2_flow.call_count, 2)
+        self.assertEqual(mock_remove_l2_host_flow.call_count, 2)
         vcmp_l2_flow_calls = [
             mock.call(store={'bigip': self.manager._vcmps[0], 'network': mock_get_network.return_value,
                       'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]}),
             mock.call(store={'bigip': self.manager._vcmps[1], 'network': mock_get_network.return_value,
                       'bigip_guest_names': [MOCK_BIGIP_HOSTNAME + "_0", MOCK_BIGIP_HOSTNAME + "_1"]})
         ]
-        mock_vcmp_l2_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
+        mock_remove_l2_host_flow.assert_has_calls(vcmp_l2_flow_calls, any_order=True)
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")

@@ -27,7 +27,7 @@ class F5Flows(object):
     def __init__(self, tasks=f5_tasks_iseries):
         self.tasks = tasks
 
-    def make_ensure_l2_flow(self, selfips: [network_models.Port], store: dict) -> flow.Flow:
+    def make_ensure_l2_guest_flow(self, selfips: [network_models.Port], store: dict) -> flow.Flow:
         """
         Construct and return a flow to ensure complete L2 configuration for a new partition.
         The flow assumes that no L2 objects exist yet for the network so nothing is cleaned up.
@@ -88,8 +88,8 @@ class F5Flows(object):
             name=f'ensure-vlan-{bigip_hostname}',
             inject=store)
 
-        ensure_l2_flow = linear_flow.Flow(f'ensure-l2-flow-{bigip_hostname}')
-        ensure_l2_flow.add(get_existing_vlan,
+        ensure_l2_guest_flow = linear_flow.Flow(f'ensure-l2-guest-flow-{bigip_hostname}')
+        ensure_l2_guest_flow.add(get_existing_vlan,
                            ensure_vlan,
                            get_existing_route_domain,
                            ensure_route_domain,
@@ -97,7 +97,7 @@ class F5Flows(object):
                            ensure_selfips_subflow,
                            ensure_default_route,
                            ensure_subnet_routes_subflow)
-        return ensure_l2_flow
+        return ensure_l2_guest_flow
 
     def make_remove_l2_flow(self, store: dict) -> flow.Flow:
         """
@@ -155,7 +155,7 @@ class F5Flows(object):
             name=f'remove-vlan-{bigip_hostname}',
             inject=store)
 
-        remove_l2_flow = linear_flow.Flow(f'remove-l2-flow-{bigip_hostname}')
+        remove_l2_flow = linear_flow.Flow(f'remove-l2-guest-flow-{bigip_hostname}')
         remove_l2_flow.add(remove_subnet_routes_subflow,
                            remove_default_route_task,
                            # SelfIPs must be deleted after routes, otherwise a route would be unreachable
@@ -298,20 +298,20 @@ class F5Flows(object):
 
         return get_existing_sip_sr_flow
 
-    def make_ensure_vcmp_l2_flow(self) -> flow.Flow:
+    def make_ensure_l2_host_flow(self) -> flow.Flow:
         get_existing_vlan = self.tasks.GetExistingVLAN()
         ensure_vlan = self.tasks.EnsureVLAN()
         ensure_vlan_interface = self.tasks.EnsureVLANInterface()
         ensure_vlan_guest_assignment = self.tasks.EnsureVLANGuestAssignment()
 
-        ensure_vcmp_l2_flow = linear_flow.Flow('ensure-vcmp-l2-flow')
-        ensure_vcmp_l2_flow.add(get_existing_vlan,
+        ensure_l2_host_flow = linear_flow.Flow('ensure-vcmp-l2-flow')
+        ensure_l2_host_flow.add(get_existing_vlan,
                                 ensure_vlan,
                                 ensure_vlan_interface,
                                 ensure_vlan_guest_assignment)
-        return ensure_vcmp_l2_flow
+        return ensure_l2_host_flow
 
-    def make_remove_vcmp_l2_flow(self) -> flow.Flow:
+    def make_remove_l2_host_flow(self) -> flow.Flow:
         get_vcmp_guests = self.tasks.GetVCMPGuests()
         remove_vlan_guest_assignment = self.tasks.RemoveVLANGuestAssignment()
         # Don't unassign the VLAN from the interface/LAG. It's going to happen
@@ -319,8 +319,8 @@ class F5Flows(object):
         # succeeds.
         remove_vlan_if_not_owned_by_other_guest = self.tasks.RemoveVLANIfNotOwnedByOtherGuest()
 
-        remove_vcmp_l2_flow = linear_flow.Flow('remove-vcmp-l2-flow')
-        remove_vcmp_l2_flow.add(get_vcmp_guests,
+        remove_l2_host_flow = linear_flow.Flow('remove-vcmp-l2-flow')
+        remove_l2_host_flow.add(get_vcmp_guests,
                                 remove_vlan_guest_assignment,
                                 remove_vlan_if_not_owned_by_other_guest)
-        return remove_vcmp_l2_flow
+        return remove_l2_host_flow

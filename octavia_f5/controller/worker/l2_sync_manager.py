@@ -88,8 +88,8 @@ class L2SyncManager(BaseTaskFlowEngine):
         for bigip in self._bigips:
             bigip.update_status()
 
-    def _do_ensure_l2_flow(self, data: list):
-        ensure_l2_flow = unordered_flow.Flow('ensure-l2-flow-from-all-devices')
+    def _do_ensure_l2_guest_flow(self, data: list):
+        ensure_l2_guest_flow = unordered_flow.Flow('ensure-l2-guest-flow-from-all-devices')
         for flow_data in data:
             # get existing SelfIPs and subnet routes - they are needed to determine,
             # which ones have to be created and which already exist
@@ -103,25 +103,25 @@ class L2SyncManager(BaseTaskFlowEngine):
             flow_data['store']['existing_selfips'] = e.storage.get('get-existing-selfips')
             flow_data['store']['existing_subnet_routes'] = e.storage.get('get-existing-subnet-routes')
 
-            ensure_l2_flow.add(
-                self._f5flows_guest.make_ensure_l2_flow(
+            ensure_l2_guest_flow.add(
+                self._f5flows_guest.make_ensure_l2_guest_flow(
                     flow_data['selfips'], store=flow_data['store']))
 
         # We have to inject all required variables to each flow/task because these flows will
         # be running as part of Graph flow and storage contains equal variables but for two F5
         # devices, their variables' names overlap. Also in graph flow, every subflow/task should
         # have a unique name that's why we have to add BigIP hostname.
-        e = self.taskflow_load(ensure_l2_flow)
+        e = self.taskflow_load(ensure_l2_guest_flow)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
-    def _do_ensure_vcmp_l2_flow(self, store: dict):
-        e = self.taskflow_load(self._f5flows_host.make_ensure_vcmp_l2_flow(), store=store)
+    def _do_ensure_l2_host_flow(self, store: dict):
+        e = self.taskflow_load(self._f5flows_host.make_ensure_l2_host_flow(), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
     def _do_remove_l2_flow(self, data: list):
-        remove_l2_flow = unordered_flow.Flow('remove-l2-flow-from-all-devices')
+        remove_l2_flow = unordered_flow.Flow('remove-l2-guest-flow-from-all-devices')
         for flow_data in data:
             # get existing SelfIPs and subnet routes
             e = self.taskflow_load(self._f5flows_guest.make_get_existing_selfips_and_subnet_routes_flow(),
@@ -178,8 +178,8 @@ class L2SyncManager(BaseTaskFlowEngine):
         with tf_logging.LoggingListener(e, log=LOG):
             e.run()
 
-    def _do_remove_vcmp_l2_flow(self, store: dict):
-        e = self.taskflow_load(self._f5flows_host.make_remove_vcmp_l2_flow(), store=store)
+    def _do_remove_l2_host_flow(self, store: dict):
+        e = self.taskflow_load(self._f5flows_host.make_remove_l2_host_flow(), store=store)
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
@@ -201,7 +201,7 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         # run l2 flow for all devices in parallel
         fs = {}
-        ensure_l2_flow_data = []
+        ensure_l2_guest_flow_data = []
         for bigip in self._bigips:
             if device and bigip.hostname != device:
                 continue
@@ -213,13 +213,13 @@ class L2SyncManager(BaseTaskFlowEngine):
 
             selfips_for_host = [selfip for selfip in selfips if bigip.hostname in selfip.name]
             subnet_ids = set(sip.fixed_ips[0].subnet_id for sip in selfips_for_host)
-            ensure_l2_flow_data.append({
+            ensure_l2_guest_flow_data.append({
                 'store': {'bigip': bigip, 'network': network, 'subnet_id': subnet_ids.pop()},
                 'selfips': selfips_for_host,
             })
         fs[self.executor.submit(
-            self._do_ensure_l2_flow,
-            data=ensure_l2_flow_data)] = self._bigips
+            self._do_ensure_l2_guest_flow,
+            data=ensure_l2_guest_flow_data)] = self._bigips
 
         # run VCMP l2 flow for all VCMP hosts in parallel
         for vcmp in self._vcmps:
@@ -228,7 +228,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                 store['bigip_guest_names'] = CONF.networking.override_vcmp_guest_names
             else:
                 store['bigip_guest_names'] = [bigip.hostname for bigip in self._bigips]
-            fs[self.executor.submit(self._do_ensure_vcmp_l2_flow, store=store)] = [vcmp]
+            fs[self.executor.submit(self._do_ensure_l2_host_flow, store=store)] = [vcmp]
 
         # wait for all flows to finish
         failed_bigips = []
@@ -282,7 +282,7 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         for vcmp in self._vcmps:
             store = {'bigip': vcmp, 'bigip_guest_names': guest_names, 'network': network}
-            fs[self.executor.submit(self._do_remove_vcmp_l2_flow, store=store)] = [vcmp]
+            fs[self.executor.submit(self._do_remove_l2_host_flow, store=store)] = [vcmp]
 
         # Execute tasks for host and wait until it's done, because we have to be sure
         # that VLAN assignment was removed before we remove VLAN on the guest.
@@ -322,7 +322,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                     # consider both device flows as failed, since we don't know
                     # which one the error originated in.
                     self._metric_failed_futures.labels(hostname, 'remove_l2_flow').inc()
-                LOG.error(f"Failed running remove_l2_flow for hosts {', '.join(hostnames)}: {e}")
+                LOG.error(f"Failed running remove_l2_flow for devices {', '.join(hostnames)}: {e}")
 
     def sync_l2_selfips_and_subnet_routes_flow(self, selfips: List[network_models.Port], network_id: str, device=None):
         """ Runs the taskflows to sync (add/remove) SelfIPs and subnet routes on all bigip devices in parallel
