@@ -97,7 +97,7 @@ class TestF5Flows(base.TestCase):
                  'subnet_id': mock_subnet_id,
                  'existing_selfips': []}
         needed_selfips = [selfip_port]
-        ensure_l2_flow = f5flows.make_ensure_l2_flow(needed_selfips, store=store)
+        ensure_l2_flow = f5flows.make_ensure_l2_guest_flow(needed_selfips, store=store)
         engines.run(ensure_l2_flow, store=store)
 
         # check that VLAN, RD, SelfIP, and default route have been created
@@ -181,7 +181,7 @@ class TestF5Flows(base.TestCase):
                  'subnet_id': mock_subnet_id,
                  'existing_selfips': []}
         needed_selfips = [selfip_port]
-        ensure_l2_flow = f5flows.make_ensure_l2_flow(needed_selfips, store=store)
+        ensure_l2_flow = f5flows.make_ensure_l2_guest_flow(needed_selfips, store=store)
         engines.run(ensure_l2_flow, store=store)
 
         mock_bigip.get.assert_called()
@@ -488,7 +488,7 @@ class TestF5Flows(base.TestCase):
         store = {'network': mock_network,
                  'bigip': mock_vcmp,
                  'bigip_guest_names': ['test-host-1']}
-        ensure_vcmp_l2_flow = f5flows.make_ensure_vcmp_l2_flow()
+        ensure_vcmp_l2_flow = f5flows.make_ensure_l2_host_flow()
         engines.run(ensure_vcmp_l2_flow, store=store)
 
         get_calls = [
@@ -564,7 +564,7 @@ class TestF5Flows(base.TestCase):
                  # the BigIPRestClient instance always contains the domain, so it has to be contained here as well.
                  'bigip_guest_names': ['test-host-1.some.domain']
                  }
-        ensure_vcmp_l2_flow = f5flows.make_ensure_vcmp_l2_flow()
+        ensure_vcmp_l2_flow = f5flows.make_ensure_l2_host_flow()
         engines.run(ensure_vcmp_l2_flow, store=store)
 
         get_calls = [
@@ -610,7 +610,7 @@ class TestF5Flows(base.TestCase):
         store = {'network': mock_network,
                  'bigip': mock_vcmp,
                  'bigip_guest_names': ['test-host-1']}
-        remove_vcmp_l2_flow = f5flows.make_remove_vcmp_l2_flow()
+        remove_vcmp_l2_flow = f5flows.make_remove_l2_host_flow()
         engines.run(remove_vcmp_l2_flow, store=store)
 
         mock_vcmp.get.assert_called_with(path='/mgmt/tm/vcmp/guest')
@@ -654,7 +654,7 @@ class TestF5Flows(base.TestCase):
                  # iControlREST does), we check it via startswith and a dot appended. But the hostname attribute of
                  # the BigIPRestClient instance always contains the domain, so it has to be contained here as well.
                  'bigip_guest_names': ['test-host-1.some.domain']}
-        remove_vcmp_l2_flow = f5flows.make_remove_vcmp_l2_flow()
+        remove_vcmp_l2_flow = f5flows.make_remove_l2_host_flow()
         engines.run(remove_vcmp_l2_flow, store=store)
 
         mock_vcmp.get.assert_called_with(path='/api/data/f5-tenants:tenants')
@@ -681,7 +681,7 @@ class TestF5Flows(base.TestCase):
         mock_vcmp.get.side_effect = [mock_guests_response]
         f5flows = f5_flows_iseries.F5Flows()
 
-        remove_vcmp_l2_flow = f5flows.make_remove_vcmp_l2_flow()
+        remove_vcmp_l2_flow = f5flows.make_remove_l2_host_flow()
         store = {'network': mock_network,
                  'bigip': mock_vcmp,
                  'bigip_guest_names': ['test-host-1']}
@@ -730,7 +730,7 @@ class TestF5Flows(base.TestCase):
                  # iControlREST does), we check it via startswith and a dot appended. But the hostname attribute of
                  # the BigIPRestClient instance always contains the domain, so it has to be contained here as well.
                  'bigip_guest_names': ['test-host-1.some.domain']}
-        remove_vcmp_l2_flow = f5flows.make_remove_vcmp_l2_flow()
+        remove_vcmp_l2_flow = f5flows.make_remove_l2_host_flow()
         engines.run(remove_vcmp_l2_flow, store=store)
 
         mock_vcmp.get.assert_called_with(path='/api/data/f5-tenants:tenants')

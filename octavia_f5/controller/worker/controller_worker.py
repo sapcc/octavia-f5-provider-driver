@@ -121,7 +121,7 @@ class ControllerWorker(object):
             if all(lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers):
                 self.sync.tenant_delete(network_id, device).raise_for_status()
                 # Cleanup l2 configuration and remove selfip ports
-                self.l2sync.remove_l2_flow(network_id, device)
+                self.l2sync.remove_l2_guest_flow(network_id, device)
                 self.network_driver.cleanup_selfips(selfips)
             else:
                 if all(lb.provisioning_status in [lib_consts.PENDING_CREATE, lib_consts.PENDING_DELETE]
@@ -795,7 +795,7 @@ class ControllerWorker(object):
         else:
             # this was the last load balancer - delete everything
             self.sync.tenant_delete(network_id).raise_for_status()
-            self.l2sync.remove_l2_flow(network_id)
+            self.l2sync.remove_l2_guest_flow(network_id)
             self.network_driver.cleanup_selfips(selfips)
 
         # invalidate cache so that workers forget about the old host
