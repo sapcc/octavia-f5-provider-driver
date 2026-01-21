@@ -82,14 +82,17 @@ class BigIPRestClient(requests.Session):
         """
         Check if BigIP device is available for communications.
         """
-        available = True
         try:
-            requests.get(self.url.scheme + '://' + self.url.hostname, timeout=timeout, verify=False)
-            LOG.info(f'Found device with URL {self.url.hostname}')
+            # we don't need a response body, so HTTP HEAD suffices
+            requests.head(self.url.scheme + '://' + self.url.hostname, timeout=timeout, verify=False)
+            LOG.info(f"Found device with URL {self.url.hostname}")
+            return True
         except requests.exceptions.Timeout:
-            LOG.info(f'Device timed out, considering it unavailable. Timeout: {timeout}s Hostname: {self.url.hostname}')
-            available = False
-        return available
+            # This catches both connection timeouts and read timeouts
+            LOG.warning(f"Device {self.url.hostname} timed out after {timeout}s, considering it unavailable.")
+        except requests.exceptions.ConnectionError:
+            LOG.warning(f"Device {self.url.hostname} cannot be connected to, considering it unavailable.")
+        return False
 
     def update_status(self):
         """ Update status if device is active or not
@@ -107,7 +110,7 @@ class BigIPRestClient(requests.Session):
             LOG.error("F5 status response is empty, return cached status")
             return self._active or False
         if len(statuses) < 2:
-            LOG.error("F5 status response contain less than 2 devices: %s", statuses)
+            LOG.warning("F5 status response contains less than 2 devices: %s", statuses)
         statuses = {d['name']: d['failoverState'] == 'active' for d in statuses}
         LOG.debug("got F5 devices statuses: %s", statuses)
         if not any(statuses.values()):
