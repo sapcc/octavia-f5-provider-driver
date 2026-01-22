@@ -71,7 +71,7 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
         """ Get all loadbalancers by security group used for VIP
 
         :param session: A Sql Alchemy database session.
-        :param security_group_id: specify amphora host to fetch loadbalancer from.
+        :param security_group_id: VIP security group ID.
         :returns: [octavia.common.data_model]
         """
         query = session.query(models.LoadBalancer)

@@ -102,12 +102,12 @@ def _get_sg_rules_for_lb(network_manager, sg_ids):
         parsed_sgs += sub_sgs
         parsed_rules += sub_rules
 
-    qnique_rules = []
-    for rn in parsed_rules:
-        if rn not in qnique_rules:
-            qnique_rules.append(rn)
+    unique_rules = []
+    for rule in parsed_rules:
+        if rule not in unique_rules:
+            unique_rules.append(rule)
 
-    return qnique_rules
+    return unique_rules
 
 
 def _get_sg_rules_for_sg(network_manager, sg_id, parent_rule=None):
