@@ -202,7 +202,12 @@ class L2SyncManager(BaseTaskFlowEngine):
         return failed
 
     def ensure_l2_flow(self, selfips: List[network_models.Port], network_id: str, device=None):
-        """ Runs the taskflows for ensuring correct l2 configuration on all bigip devices in parallel
+        """ Runs the taskflows for ensuring correct l2 configuration on all
+        bigip devices in parallel, first on the vCMP hosts, then on the guests.
+        When guest flows fail, only they are reverted, but not the host flows,
+        since L2 objects on the host are still needed for the eventually
+        succeeding guest l2 flows. They are only deleted at LB deletion in the
+        corresponding L2 removal method.
 
         :param selfips: Neutron SelfIP ports
         :param network_id: Neutron Network ID
