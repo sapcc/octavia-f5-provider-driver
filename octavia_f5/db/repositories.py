@@ -167,3 +167,22 @@ class QuotasRepository(repositories.BaseRepository):
     def update(self, session, project_id, **model_kwargs):  # pylint: disable=arguments-renamed
         session.query(self.model_class).filter_by(
             project_id=project_id).update(model_kwargs)
+
+    def delete(self, session, project_id):
+        """Override delete to remove the quota row entirely for F5 provider.
+
+        The upstream implementation clears quota columns but leaves the row
+        present, which causes the quotas table to grow with many unused rows
+        (one per project) over time. For provider-managed projects we prefer
+        deleting the row when quotas are reset to defaults.
+        """
+        quotas = (
+            session.query(self.model_class)
+            .filter_by(project_id=project_id)
+            .populate_existing()
+            .with_for_update().first())
+        if not quotas:
+            # No quotas row exists for this project; nothing to delete.
+            return
+        session.delete(quotas)
+        session.flush()

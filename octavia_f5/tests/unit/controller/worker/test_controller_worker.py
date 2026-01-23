@@ -26,12 +26,14 @@ CONF = cfg.CONF
 
 LB_ID = uuidutils.generate_uuid()
 NETWORK_ID = uuidutils.generate_uuid()
+PROJECT_ID = uuidutils.generate_uuid()
 _status_manager = mock.MagicMock()
 _vip_mock = mock.MagicMock()
 _vip_mock.network_id = NETWORK_ID
 _listener_mock = mock.MagicMock()
 _load_balancer_mock = mock.MagicMock()
 _load_balancer_mock.id = LB_ID
+_load_balancer_mock.project_id = PROJECT_ID
 _load_balancer_mock.listeners = [_listener_mock]
 _load_balancer_mock.vip = _vip_mock
 _load_balancer_mock.flavor_id = None
@@ -110,3 +112,24 @@ class TestControllerWorker(base.TestCase):
         mock_lb_repo_get.assert_called_once_with(begin_session, id=LB_ID)
         mock_ensure_selfips.assert_called_with([_load_balancer_mock], CONF.host, cleanup_orphans=False)
         mock_cleanup_selfips.assert_called_with([_selfip])
+
+    #@mock.patch('octavia.db.repositories.LoadBalancerRepository.get',
+    #            return_value=_load_balancer_mock)
+    #@mock.patch('octavia_f5.db.repositories.LoadBalancerRepository.count',
+    #            return_value=1)
+    #@mock.patch('octavia_f5.db.repositories.QuotasRepository.delete')
+    #def test_delete_loadbalancer_last_deletes_quota(self,
+    #                                                mock_quota_delete,
+    #                                                mock_lb_count,
+    #                                                mock_lb_get,
+    #                                                mock_api_session,
+    #                                                mock_sync_manager,
+    #                                                mock_status_manager):
+    #    cw = controller_worker.ControllerWorker()
+    #    lb = {octavia_consts.LOADBALANCER_ID: LB_ID}
+    #    cw.delete_load_balancer(lb)
+
+    #    begin_session = mock_api_session().begin().__enter__()
+    #    mock_lb_get.assert_called_once_with(begin_session, id=LB_ID)
+    #    mock_lb_count.assert_called_once_with(begin_session, project_id=PROJECT_ID, show_deleted=False)
+    #    mock_quota_delete.assert_called_once_with(begin_session, project_id=PROJECT_ID)

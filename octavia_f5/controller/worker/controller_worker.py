@@ -366,12 +366,29 @@ class ControllerWorker(object):
         self.queue.put_priority((db_lb.vip.network_id, None))
 
     def delete_load_balancer(self, load_balancer, cascade=False):
+        lb_id = load_balancer[octavia_consts.LOADBALANCER_ID]
         with db_apis.session().begin() as session:
-            db_lb = self._loadbalancer_repo.get(
-                session,
-                id=load_balancer[octavia_consts.LOADBALANCER_ID])
-        # could be deleted by sync-loop meanwhile
-        if db_lb:
+            db_lb = self._loadbalancer_repo.get(session, id=lb_id)
+
+            # could have been deleted by the sync-loop in the meantime
+            if not db_lb:
+                return
+
+            # If this is the last non-deleted loadbalancer for the project,
+            # remove the project's quotas row to avoid leaving a stale entry.
+            # This has to be done before syncing the LB's network, otherwise we
+            # have a race condition between the sync and this counting.
+            lb_count = self._loadbalancer_repo.count(
+                session, project_id=db_lb.project_id, show_deleted=False)
+            # This LB is still existing, so 1 LB in this project is fine at
+            # this point.
+            if lb_count <= 1:
+                try:
+                    self._quota_repo.delete(session, project_id=db_lb.project_id)
+                except Exception:
+                    LOG.exception('Failed to delete quotas for project %s', db_lb.project_id)
+
+            # sync network without this LB
             self.queue.put_priority((db_lb.vip.network_id, None))
 
     """
