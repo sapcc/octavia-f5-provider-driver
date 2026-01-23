@@ -635,3 +635,47 @@ class TestL2SyncManager(base.TestCase):
                       json={'name': 'vlan-1234', 'vlans': ['/Common/vlan-1234'], 'id': '1234'}),
         ]
         mock_bigip_1.post.assert_has_calls(bigip_1_post_calls, any_order=True)
+
+    @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
+                "L2SyncManager._do_ensure_vcmp_l2_flow")
+    @mock.patch("octavia_f5.controller.worker.l2_sync_manager."
+                "L2SyncManager._do_ensure_l2_flow")
+    @mock.patch('octavia_f5.network.drivers.noop_driver_f5.driver.'
+                'NoopNetworkDriverF5.get_network')
+    def test_ensure_l2_flow_hosts_before_guests(self, mock_get_network,
+                                                mock_l2_guest_flow, mock_l2_host_flow):
+        """Ensure VCMP host flows finish before guest flows start."""
+        import time
+        host_times = []
+        guest_times = []
+
+        def host_side_effect(store):
+            # simulate some work
+            time.sleep(0.05)
+            host_times.append(time.time())
+
+        def guest_side_effect(data):
+            guest_times.append(time.time())
+
+        mock_l2_host_flow.side_effect = host_side_effect
+        mock_l2_guest_flow.side_effect = guest_side_effect
+
+        mocked_selfips = [
+            network_models.Port(
+                name=f"local-{MOCK_BIGIP_HOSTNAME}_0-{MOCK_FIXED_IP.subnet_id}",
+                fixed_ips=[MOCK_FIXED_IP]
+            ),
+            network_models.Port(
+                name=f"local-{MOCK_BIGIP_HOSTNAME}_1-{MOCK_FIXED_IP.subnet_id}",
+                fixed_ips=[MOCK_FIXED_IP]
+            ),
+        ]
+
+        self.manager.ensure_l2_flow(mocked_selfips, 'test-network-id')
+
+        # expect host flows called for both vcmps
+        self.assertEqual(mock_l2_host_flow.call_count, 2)
+        self.assertTrue(len(guest_times) >= 1)
+        self.assertTrue(len(host_times) >= 2)
+        # assert that the latest host completion time is before the guest start time
+        self.assertLess(max(host_times), min(guest_times))
