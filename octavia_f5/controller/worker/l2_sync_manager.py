@@ -199,8 +199,36 @@ class L2SyncManager(BaseTaskFlowEngine):
             raise exceptions.ProviderDriverException(
                 f"Failed ensure_l2_flow for network_id={network_id}: No segment bound")
 
-        # run l2 flow for all devices in parallel
+        # run vCMP L2 flow for all VCMP hosts in parallel
         fs = {}
+        for vcmp in self._vcmps:
+            store = {'bigip': vcmp, 'network': network}
+            if CONF.networking.override_vcmp_guest_names:
+                store['bigip_guest_names'] = CONF.networking.override_vcmp_guest_names
+            else:
+                store['bigip_guest_names'] = [bigip.hostname for bigip in self._bigips]
+            fs[self.executor.submit(self._do_ensure_l2_host_flow, store=store)] = [vcmp]
+
+        # wait for vCMP L2 flows to finish
+        failed_bigips = []
+        done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
+        for f in done | not_done:
+            bigips = fs[f]
+            try:
+                f.result(0)
+            except Exception as e:
+                hostnames = [bigip.hostname for bigip in bigips]
+                for hostname in hostnames:
+                    self._metric_failed_futures.labels(hostname, 'ensure_l2_flow').inc()
+                    failed_bigips.append(hostname)
+                LOG.error(f"Failed running ensure_l2_flow for hosts {', '.join(hostnames)}: {e}")
+
+        # raise error only if all hosts failed
+        if self._vcmps and all(vcmp in failed_bigips for vcmp in self._vcmps):
+            raise exceptions.ProviderDriverException(
+                f"Failed ensure_l2_flow for all bigip hosts of network_id={network_id}")
+
+        # run l2 flow for all guests in parallel
         ensure_l2_guest_flow_data = []
         for bigip in self._bigips:
             if device and bigip.hostname != device:
@@ -217,42 +245,26 @@ class L2SyncManager(BaseTaskFlowEngine):
                 'store': {'bigip': bigip, 'network': network, 'subnet_id': subnet_ids.pop()},
                 'selfips': selfips_for_host,
             })
-        fs[self.executor.submit(
-            self._do_ensure_l2_guest_flow,
-            data=ensure_l2_guest_flow_data)] = self._bigips
 
-        # run VCMP l2 flow for all VCMP hosts in parallel
-        for vcmp in self._vcmps:
-            store = {'bigip': vcmp, 'network': network}
-            if CONF.networking.override_vcmp_guest_names:
-                store['bigip_guest_names'] = CONF.networking.override_vcmp_guest_names
-            else:
-                store['bigip_guest_names'] = [bigip.hostname for bigip in self._bigips]
-            fs[self.executor.submit(self._do_ensure_l2_host_flow, store=store)] = [vcmp]
+        guest_future = self.executor.submit(self._do_ensure_l2_guest_flow, data=ensure_l2_guest_flow_data)
 
-        # wait for all flows to finish
+        # wait for guest L2 flows to finish
         failed_bigips = []
-        done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
+        done, not_done = futures.wait({guest_future: self._bigips}, timeout=CONF.networking.l2_timeout)
         for f in done | not_done:
-            bigips = fs[f]
+            bigips = self._bigips
             try:
                 f.result(0)
             except Exception as e:
-                hostnames = [bigip.hostname for bigip in bigips]
-                for hostname in hostnames:
-                    # consider both device flows as failed, since we don't know
-                    # which one the error originated in.
-                    self._metric_failed_futures.labels(hostname, 'ensure_l2_flow').inc()
-                    failed_bigips.append(hostname)
-                LOG.error(f"Failed running ensure_l2_flow for hosts {', '.join(hostnames)}: {e}")
+                for bigip in bigips:
+                    self._metric_failed_futures.labels(bigip.hostname, 'ensure_l2_flow').inc()
+                    failed_bigips.append(bigip)
+                LOG.error(f"Failed running ensure_l2_flow for guests {', '.join([b.hostname for b in bigips])}: {e}")
 
-        # raise error only if all pairs failed
+        # raise error only if all guests failed
         if self._bigips and all(bigip in failed_bigips for bigip in self._bigips):
             raise exceptions.ProviderDriverException(
                 f"Failed ensure_l2_flow for all bigip guests of network_id={network_id}")
-        if self._vcmps and all(vcmp in failed_bigips for vcmp in self._vcmps):
-            raise exceptions.ProviderDriverException(
-                f"Failed ensure_l2_flow for all bigip hosts of network_id={network_id}")
 
     def remove_l2_flow(self, network_id: str, device=None):
         """ Runs the taskflows for cleanup of l2 configuration on all bigip devices in parallel
