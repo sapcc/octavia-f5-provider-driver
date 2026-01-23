@@ -183,6 +183,24 @@ class L2SyncManager(BaseTaskFlowEngine):
         with tf_logging.DynamicLoggingListener(e, log=LOG):
             e.run()
 
+    def _wait_for_futures(self, fs, timeout, metric_task_name):
+        """Wait for futures, collect failed hostnames and increment metrics."""
+        failed = []
+        done, not_done = futures.wait(fs, timeout=timeout)
+        for f in done | not_done:
+            bigips = fs[f]
+            # normalize to list
+            bigips_list = bigips if isinstance(bigips, (list, tuple, set)) else [bigips]
+            try:
+                f.result(0)
+            except Exception as e:
+                hostnames = [bigip.hostname for bigip in bigips_list]
+                for hostname in hostnames:
+                    self._metric_failed_futures.labels(hostname, metric_task_name).inc()
+                    failed.append(hostname)
+                LOG.error(f"Failed running {metric_task_name} for hosts {', '.join(hostnames)}: {e}")
+        return failed
+
     def ensure_l2_flow(self, selfips: List[network_models.Port], network_id: str, device=None):
         """ Runs the taskflows for ensuring correct l2 configuration on all bigip devices in parallel
 
@@ -210,18 +228,7 @@ class L2SyncManager(BaseTaskFlowEngine):
             fs[self.executor.submit(self._do_ensure_l2_host_flow, store=store)] = [vcmp]
 
         # wait for vCMP L2 flows to finish
-        failed_bigips = []
-        done, not_done = futures.wait(fs, timeout=CONF.networking.l2_timeout)
-        for f in done | not_done:
-            bigips = fs[f]
-            try:
-                f.result(0)
-            except Exception as e:
-                hostnames = [bigip.hostname for bigip in bigips]
-                for hostname in hostnames:
-                    self._metric_failed_futures.labels(hostname, 'ensure_l2_flow').inc()
-                    failed_bigips.append(hostname)
-                LOG.error(f"Failed running ensure_l2_flow for hosts {', '.join(hostnames)}: {e}")
+        failed_bigips = self._wait_for_futures(fs, timeout=CONF.networking.l2_timeout, metric_task_name='ensure_l2_flow')
 
         # raise error only if all hosts failed
         if self._vcmps and all(vcmp in failed_bigips for vcmp in self._vcmps):
@@ -249,17 +256,7 @@ class L2SyncManager(BaseTaskFlowEngine):
         guest_future = self.executor.submit(self._do_ensure_l2_guest_flow, data=ensure_l2_guest_flow_data)
 
         # wait for guest L2 flows to finish
-        failed_bigips = []
-        done, not_done = futures.wait({guest_future: self._bigips}, timeout=CONF.networking.l2_timeout)
-        for f in done | not_done:
-            bigips = self._bigips
-            try:
-                f.result(0)
-            except Exception as e:
-                for bigip in bigips:
-                    self._metric_failed_futures.labels(bigip.hostname, 'ensure_l2_flow').inc()
-                    failed_bigips.append(bigip)
-                LOG.error(f"Failed running ensure_l2_flow for guests {', '.join([b.hostname for b in bigips])}: {e}")
+        failed_bigips = self._wait_for_futures({guest_future: self._bigips}, timeout=CONF.networking.l2_timeout, metric_task_name='ensure_l2_flow')
 
         # raise error only if all guests failed
         if self._bigips and all(bigip in failed_bigips for bigip in self._bigips):
