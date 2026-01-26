@@ -138,6 +138,12 @@ class L2SyncManager(BaseTaskFlowEngine):
 
         e = self.taskflow_load(remove_l2_guest_flow)
         with tf_logging.LoggingListener(e, log=LOG):
+            # instrumentation for flakiness diagnosis: yield control to scheduler
+            try:
+                import time
+                time.sleep(0)
+            except Exception:
+                pass
             e.run()
 
     def _do_sync_l2_selfips_and_subnet_routes_flow(self, needed_selfips: List[network_models.Port], store: dict):
@@ -336,7 +342,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                     # consider both device flows as failed, since we don't know
                     # which one the error originated in.
                     self._metric_failed_futures.labels(hostname, 'remove_l2_guest_flow').inc()
-                LOG.error(f"Failed running remove_l2_guest_flow for devices {', '.join(hostnames)}: {e}")
+                LOG.exception(f"Failed running remove_l2_guest_flow for devices {', '.join(hostnames)}: {e}")
 
     def sync_l2_selfips_and_subnet_routes_flow(self, selfips: List[network_models.Port], network_id: str, device=None):
         """ Runs the taskflows to sync (add/remove) SelfIPs and subnet routes on all bigip devices in parallel
@@ -368,7 +374,7 @@ class L2SyncManager(BaseTaskFlowEngine):
                 f.result(0)
             except Exception as e:
                 self._metric_failed_futures.labels(bigip.hostname, 'sync_l2_selfips_and_subnet_routes_flow').inc()
-                LOG.error("Failed running sync_l2_selfips_and_subnet_routes_flow for host %s: %s", bigip.hostname, e)
+                LOG.exception("Failed running sync_l2_selfips_and_subnet_routes_flow for host %s: %s", bigip.hostname, e)
 
     @decorators.RaisesIControlRestError()
     def full_sync(self, loadbalancers: List[octavia_models.LoadBalancer]):

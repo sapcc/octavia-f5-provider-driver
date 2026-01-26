@@ -29,6 +29,13 @@ from octavia_f5.utils import driver_utils, decorators
 LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
+# temporary instrumentation for flakiness diagnosis
+def instrumentation_log_start(task, bigip):
+    LOG.debug(f"[DIAG] Task {type(task).__name__} starting on {bigip.hostname}")
+    raise Exception("STOPPING NOW")
+def instrumentation_log_end(task, bigip):
+    LOG.debug(f"[DIAG] Task {type(task).__name__} ending on {bigip.hostname}")
+
 
 class EnsureVLAN(task.Task):
     default_provides = 'device_vlan'
@@ -443,6 +450,7 @@ class RemoveDefaultRoute(task.Task):
         ]
 
         res = None
+        instrumentation_log_start(self, bigip)
         for path in paths:
             if bigip.get(path=path).ok:
                 res = bigip.delete(path=path)
@@ -452,26 +460,32 @@ class RemoveDefaultRoute(task.Task):
             LOG.warning("%s: Failed removing route for network_id=%s vlan=%s "
                         "(could be already done by autosync): %s",
                         bigip.hostname, network.id, network.vlan_id, res.content)
+        instrumentation_log_end(self, bigip)
 
 
 class RemoveSubnetRoute(task.Task):
+
     """Task to remove a static subnet route."""
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
                 subnet_route):
         subnet_route_name = subnet_route['name']
+        instrumentation_log_start(self, bigip)
         res = bigip.delete(path=f"/mgmt/tm/net/route/~Common~{subnet_route_name}")
 
         if res.status_code == 404:
             LOG.warning(f"Subnet route {subnet_route_name} was already removed")
         else:
             res.raise_for_status()
+        instrumentation_log_end(self, bigip)
 
     @decorators.RaisesIControlRestError()
     def revert(self, bigip: bigip_restclient.BigIPRestClient,
                subnet_route, existing_subnet_routes, network,
                *args, **kwargs):
+        LOG.debug(f"RemoveSubnetRoute.revert: hostname={getattr(bigip,'hostname',None)}, subnet_route_name={subnet_route.get('name')}")
+        LOG.warning(f"RemoveSubnetRoute.revert called: host={getattr(bigip,'hostname',None)} subnet={subnet_route.get('name')}")
         subnet_route_name = subnet_route['name']
 
         # don't restore subnet route if it didn't exist before this task was executed
@@ -499,16 +513,20 @@ class RemoveSelfIP(task.Task):
 
     @decorators.RaisesIControlRestError()
     def execute(self, bigip: bigip_restclient.BigIPRestClient, selfip: dict):
+        instrumentation_log_start(self, bigip)
         res = bigip.delete(path=f"/mgmt/tm/net/self/port-{selfip['port_id']}")
 
         if res.status_code == 404:
             LOG.warning(f"SelfIP port-{selfip['port_id']} was already removed")
         else:
             res.raise_for_status()
+        instrumentation_log_end(self, bigip)
 
     @decorators.RaisesIControlRestError()
     def revert(self, bigip: bigip_restclient.BigIPRestClient,
                selfip: dict, existing_selfips: List[dict], *args, **kwargs):
+        LOG.debug(f"RemoveSelfIP.revert: hostname={getattr(bigip,'hostname',None)}, port_id={selfip.get('port_id')}")
+        LOG.warning(f"RemoveSelfIP.revert called: host={getattr(bigip,'hostname',None)} port={selfip.get('port_id')}")
 
         # don't restore SelfIP if it didn't exist before this task was executed
         if selfip['name'] not in [sip['name'] for sip in existing_selfips]:
@@ -545,6 +563,8 @@ class RemoveRouteDomain(task.Task):
     @decorators.RaisesIControlRestError()
     def revert(self, bigip: bigip_restclient.BigIPRestClient,
                existing_route_domain, result, *args, **kwargs):
+        LOG.debug(f"RemoveRouteDomain.revert: hostname={getattr(bigip,'hostname',None)}, rd_name={existing_route_domain.get('name') if existing_route_domain else None}")
+        LOG.warning(f"RemoveRouteDomain.revert called: host={getattr(bigip,'hostname',None)} rd={existing_route_domain.get('name') if existing_route_domain else None}")
         if isinstance(result, failure.Failure):
             # If this task failed it means that object was not removed
             return
@@ -576,6 +596,8 @@ class RemoveVLAN(task.Task):
     @decorators.RaisesIControlRestError()
     def revert(self, bigip: bigip_restclient.BigIPRestClient,
                existing_vlan: dict, result, *args, **kwargs):
+        LOG.debug(f"RemoveVLAN.revert: hostname={getattr(bigip,'hostname',None)}, vlan_name={existing_vlan.get('name') if existing_vlan else None}")
+        LOG.warning(f"RemoveVLAN.revert called: host={getattr(bigip,'hostname',None)} vlan={existing_vlan.get('name') if existing_vlan else None}")
         if isinstance(result, failure.Failure):
             # If this task failed it means that object was not removed
             return
