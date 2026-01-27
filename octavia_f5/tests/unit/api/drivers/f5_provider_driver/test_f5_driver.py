@@ -18,6 +18,7 @@ from oslo_config import fixture as oslo_fixture
 
 from octavia.common import constants as consts
 from octavia.common import exceptions
+from octavia_lib.api.drivers import exceptions as driver_exceptions
 from octavia.tests.unit import base
 from octavia.tests.common import sample_data_models
 from octavia_f5.api.drivers.f5_driver import driver
@@ -290,6 +291,26 @@ class TestF5Driver(base.TestRpc):
         mock_cast.assert_called_with({}, 'create_l7rule', **payload)
 
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
+    def test_l7rule_create_with_invalid_compare_type(self, mock_cast):
+        provider_l7rule = driver_dm.L7Rule(
+            l7rule_id=self.sample_data.l7rule1_id,
+            compare_type='REGEX')
+
+        with self.assertRaisesRegex(driver_exceptions.UnsupportedOptionError,
+                                    "Unsupported compare type REGEX"):
+            self.amp_driver.l7rule_create(provider_l7rule)
+
+    @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
+    def test_l7rule_create_with_invalid_type(self, mock_cast):
+        provider_l7rule = driver_dm.L7Rule(
+            l7rule_id=self.sample_data.l7rule1_id,
+            type='everything')
+
+        with self.assertRaisesRegex(driver_exceptions.UnsupportedOptionError,
+                                    "Unsupported type everything"):
+            self.amp_driver.l7rule_create(provider_l7rule)
+
+    @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
     def test_l7rule_delete(self, mock_cast):
         provider_l7rule = driver_dm.L7Rule(
             l7rule_id=self.sample_data.l7rule1_id)
@@ -318,3 +339,13 @@ class TestF5Driver(base.TestRpc):
         payload = {consts.ORIGINAL_L7RULE: {'l7rule_id': self.sample_data.l7rule1_id},
                    consts.L7RULE_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_l7rule', **payload)
+
+    @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
+    def test_l7rule_update_invalid_type(self, mock_cast):
+        old_provider_l7rule = driver_dm.L7Rule(
+            l7rule_id=self.sample_data.l7rule1_id)
+        provider_l7rule = driver_dm.L7Rule(
+            l7rule_id=self.sample_data.l7rule1_id, type="invalid-type")
+        with self.assertRaisesRegex(driver_exceptions.UnsupportedOptionError,
+                                    "Unsupported type invalid-type"):
+            self.amp_driver.l7rule_update(old_provider_l7rule, provider_l7rule)
