@@ -25,7 +25,6 @@ from octavia.db import api as db_apis
 from octavia_f5.api.drivers.f5_driver import arbiter
 from octavia_f5.common import constants as f5_consts
 from octavia_f5.utils import driver_utils
-from octavia_f5.restclient.as3objects import policy_endpoint
 
 CONF = cfg.CONF
 CONF.import_group('oslo_messaging', 'octavia.common.config')
@@ -231,11 +230,11 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
 
     # L7 Rule
     def _validate_l7rule(self, l7rule):
-        if l7rule.compare_type and l7rule.compare_type not in policy_endpoint.COMPARE_TYPE_MAP:
+        if l7rule.compare_type and l7rule.compare_type not in f5_consts.POLICY_COMPARE_TYPE_MAP:
             raise exceptions.UnsupportedOptionError(
                 user_fault_string=f'Unsupported compare type {l7rule.compare_type}')
 
-        if l7rule.type and l7rule.type not in policy_endpoint.COND_TYPE_MAP:
+        if l7rule.type and l7rule.type not in f5_consts.POLICY_COND_TYPE_MAP:
             raise exceptions.UnsupportedOptionError(
                 user_fault_string=f'Unsupported type {l7rule.type}')
 

@@ -12,6 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from octavia_lib.common import constants
+
 PROJECT_ID = 'project_id'
 
 BIGIP = 'bigip'
@@ -90,3 +92,33 @@ HEALTH_MONITOR_DELAY_MAX = 3600
 
 # The list of required ciphers for HTTP2
 CIPHERS_HTTP2 = ['ECDHE-RSA-AES128-GCM-SHA256']
+
+POLICY_COMPARE_TYPE_MAP = {
+    'STARTS_WITH': 'starts-with',
+    'ENDS_WITH': 'ends-with',
+    'CONTAINS': 'contains',
+    'EQUAL_TO': 'equals'
+}
+POLICY_COMPARE_TYPE_INVERT_MAP = {
+    'STARTS_WITH': 'does-not-start-with',
+    'ENDS_WITH': 'does-not-end-with',
+    'CONTAINS': 'does-not-contain',
+    'EQUAL_TO': 'does-not-equal'
+}
+POLICY_COND_TYPE_MAP = {
+    # constants.L7RULE_TYPE_HOST_NAME: {'match_key': 'host', 'type': 'httpUri'},
+    # Workaround for https://github.com/F5Networks/f5-appsvcs-extension/issues/229, match Host in httpHeader
+    constants.L7RULE_TYPE_HOST_NAME: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name',
+                                      'override_key': 'Host'},
+    constants.L7RULE_TYPE_PATH: {'match_key': 'path', 'type': 'httpUri'},
+    constants.L7RULE_TYPE_FILE_TYPE: {'match_key': 'extension', 'type': 'httpUri'},
+    constants.L7RULE_TYPE_HEADER: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name'},
+    constants.L7RULE_TYPE_SSL_DN_FIELD: {'match_key': 'serverName', 'type': 'sslExtension'},
+    constants.L7RULE_TYPE_COOKIE: {'match_key': 'all', 'type': 'httpCookie', 'key_name': 'name'},
+}
+POLICY_SUPPORTED_ACTION_TYPE = [
+    constants.L7POLICY_ACTION_REDIRECT_TO_POOL,
+    constants.L7POLICY_ACTION_REDIRECT_TO_URL,
+    constants.L7POLICY_ACTION_REDIRECT_PREFIX,
+    constants.L7POLICY_ACTION_REJECT
+]

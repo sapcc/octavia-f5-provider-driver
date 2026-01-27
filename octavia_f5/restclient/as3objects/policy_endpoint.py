@@ -21,36 +21,6 @@ from octavia_f5.restclient.as3classes import Policy_Compare_String, Policy_Condi
 from octavia_f5.restclient.as3objects import pool
 from octavia_f5.utils.exceptions import PolicyTypeNotSupported, CompareTypeNotSupported, PolicyActionNotSupported
 
-COMPARE_TYPE_MAP = {
-    'STARTS_WITH': 'starts-with',
-    'ENDS_WITH': 'ends-with',
-    'CONTAINS': 'contains',
-    'EQUAL_TO': 'equals'
-}
-COMPARE_TYPE_INVERT_MAP = {
-    'STARTS_WITH': 'does-not-start-with',
-    'ENDS_WITH': 'does-not-end-with',
-    'CONTAINS': 'does-not-contain',
-    'EQUAL_TO': 'does-not-equal'
-}
-COND_TYPE_MAP = {
-    # constants.L7RULE_TYPE_HOST_NAME: {'match_key': 'host', 'type': 'httpUri'},
-    # Workaround for https://github.com/F5Networks/f5-appsvcs-extension/issues/229, match Host in httpHeader
-    constants.L7RULE_TYPE_HOST_NAME: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name',
-                                      'override_key': 'Host'},
-    constants.L7RULE_TYPE_PATH: {'match_key': 'path', 'type': 'httpUri'},
-    constants.L7RULE_TYPE_FILE_TYPE: {'match_key': 'extension', 'type': 'httpUri'},
-    constants.L7RULE_TYPE_HEADER: {'match_key': 'all', 'type': 'httpHeader', 'key_name': 'name'},
-    constants.L7RULE_TYPE_SSL_DN_FIELD: {'match_key': 'serverName', 'type': 'sslExtension'},
-    constants.L7RULE_TYPE_COOKIE: {'match_key': 'all', 'type': 'httpCookie', 'key_name': 'name'},
-}
-SUPPORTED_ACTION_TYPE = [
-    constants.L7POLICY_ACTION_REDIRECT_TO_POOL,
-    constants.L7POLICY_ACTION_REDIRECT_TO_URL,
-    constants.L7POLICY_ACTION_REDIRECT_PREFIX,
-    constants.L7POLICY_ACTION_REJECT
-]
-
 
 def get_name(policy_id):
     return f"{f5_const.PREFIX_POLICY}{policy_id}"
@@ -61,19 +31,19 @@ def get_wrapper_name(listener_id):
 
 
 def _get_condition(l7rule):
-    if l7rule.type not in COND_TYPE_MAP:
+    if l7rule.type not in f5_const.POLICY_COND_TYPE_MAP:
         raise PolicyTypeNotSupported(
             f"l7policy-id={l7rule.l7policy_id}, l7rule-id={l7rule.id}, type={l7rule.type}")
-    if l7rule.compare_type not in COMPARE_TYPE_MAP:
+    if l7rule.compare_type not in f5_const.POLICY_COMPARE_TYPE_MAP:
         raise CompareTypeNotSupported(
             f"l7policy-id={l7rule.l7policy_id}, l7rule-id={l7rule.id}, type={l7rule.compare_type}")
 
     args = {}
     if l7rule.invert:
-        operand = COMPARE_TYPE_INVERT_MAP[l7rule.compare_type]
+        operand = f5_const.POLICY_COMPARE_TYPE_INVERT_MAP[l7rule.compare_type]
     else:
-        operand = COMPARE_TYPE_MAP[l7rule.compare_type]
-    condition = COND_TYPE_MAP[l7rule.type]
+        operand = f5_const.POLICY_COMPARE_TYPE_MAP[l7rule.compare_type]
+    condition = f5_const.POLICY_COND_TYPE_MAP[l7rule.type]
     values = [l7rule.value]
     compare_string = Policy_Compare_String(operand=operand, values=values)
     args[condition['match_key']] = compare_string
@@ -87,7 +57,7 @@ def _get_condition(l7rule):
 
 
 def _get_action(l7policy):
-    if l7policy.action not in SUPPORTED_ACTION_TYPE:
+    if l7policy.action not in f5_const.POLICY_SUPPORTED_ACTION_TYPE:
         raise PolicyActionNotSupported()
 
     args = {}
