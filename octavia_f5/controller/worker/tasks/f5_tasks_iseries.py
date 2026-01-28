@@ -32,7 +32,6 @@ CONF = cfg.CONF
 # temporary instrumentation for flakiness diagnosis
 def instrumentation_log_start(task, bigip):
     LOG.debug(f"[DIAG] Task {type(task).__name__} starting on {bigip.hostname}")
-    raise Exception("STOPPING NOW")
 def instrumentation_log_end(task, bigip):
     LOG.debug(f"[DIAG] Task {type(task).__name__} ending on {bigip.hostname}")
 
