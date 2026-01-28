@@ -12,6 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+import random
+
 import octavia.tests.unit.base as base
 from octavia_f5.controller.worker.set_queue import SetQueue
 
@@ -46,8 +48,8 @@ class TestSetQueue(base.TestCase):
         self.assertIn('item1', rest)
         self.assertIn('item2', rest)
 
-    def test_set_queue_unique_items(self):
-        # Test that SetQueue only contains unique items
+    def test_set_queue_deduplication(self):
+        """ Test that SetQueue only contains unique items """
         queue = SetQueue()
         queue.put('item1')
         queue.put('item1')
@@ -68,7 +70,7 @@ class TestSetQueue(base.TestCase):
         self.assertIn('item2', rest)
 
     def test_set_queue_size(self):
-        # Test the size of the SetQueue
+        """ Test the size of the SetQueue """
         queue = SetQueue()
         self.assertEqual(queue.qsize(), 0)
 
@@ -85,7 +87,8 @@ class TestSetQueue(base.TestCase):
         self.assertEqual(queue.qsize(), 2)
 
     def test_set_queue_empty(self):
-        # Test if the SetQueue is empty
+        """ Test if the SetQueue is empty """
+
         queue = SetQueue()
         self.assertTrue(queue.empty())
 
@@ -100,3 +103,33 @@ class TestSetQueue(base.TestCase):
 
         queue.get()
         self.assertTrue(queue.empty())
+
+    def test_set_queue_fifo(self):
+        """ Test that the queue is FIFO (first in, first out) """
+        queue = SetQueue()
+
+        # Put items into queue.
+        # - For simple order checking the values are strictly increasing.
+        # - Exposing absence of FIFO doesn't work with integer numbers (even
+        #   when they're of type float).
+        # - `for i in range(...): queue.put(i + some_iota)` does expose absence
+        #   of FIFO, but only after almost all items have been popped from the
+        #   queue, shortly before the queue is empty.
+        # Therefore we use a separate value which we increment by a random
+        # amount with each step. This way, absence of FIFO is exposed reliably
+        # and early - already after popping only a few items.
+        val = 0
+        for _ in range(10000):
+            val += random.random()
+            queue.put(val)
+
+        # take items out of queue and check strict monoticity
+        items_gotten = 0
+        last_item = None
+        while not queue.empty():
+            item = queue.get()
+            items_gotten += 1
+            if last_item is not None:
+                assert item > last_item, \
+                        f"After getting {items_gotten} items: SetQueue is not FIFO"
+            last_item = item
