@@ -41,7 +41,7 @@ class SetQueue(Queue):
             self.not_empty.notify()
 
     def _put(self, item):
-        if item not in self.queue:
+        if item not in self.priority_queue and item not in self.queue:
             self.queue.append(item)
 
     def _qsize(self):
