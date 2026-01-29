@@ -17,26 +17,32 @@ from queue import Queue
 
 class SetQueue(Queue):
     """
-    A thread-safe queue that stores unique items using sets and supports priority items.
+    A thread-safe queue that stores unique items using sets and supports
+    priority items.
 
-    Inherits from `Queue` but overrides the internal storage to use sets, ensuring all items are unique.
-    Items added via `put_priority` are returned first when retrieving from the queue.
+    Inherits from `Queue` but overrides the internal storage to use sets,
+    ensuring all items are unique.  Items added via `put_priority` are returned
+    first when retrieving from the queue.
     """
+
     def _init(self, maxsize):
         self.maxsize = maxsize
-        self.queue = set()
-        self.priority_queue = set()
+        self.queue = list()
+        self.priority_queue = list()
 
     def put_priority(self, item):
         """Add an item to the priority queue."""
-        self.priority_queue.add(item)
-        self.queue.discard(item)
+        if item not in self.priority_queue:
+            self.priority_queue.append(item)
+        if item in self.queue:
+            self.queue.remove(item)
         # notify polling threads
         with self.not_empty:  # acquire self.mutex for self.not_empty
             self.not_empty.notify()
 
     def _put(self, item):
-        self.queue.add(item)
+        if item not in self.queue:
+            self.queue.append(item)
 
     def _qsize(self):
         """Return the approximate size of the queue."""
@@ -45,7 +51,8 @@ class SetQueue(Queue):
     def _get(self):
         if len(self.priority_queue) > 0:
             # If there are priority items, return one of them
-            item = self.priority_queue.pop()
-            self.queue.discard(item)
+            item = self.priority_queue.pop(0)
+            if item in self.queue:
+                self.queue.remove(item)
             return item
-        return self.queue.pop()
+        return self.queue.pop(0)
