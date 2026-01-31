@@ -148,7 +148,7 @@ def _get_sg_rules_for_sg(network_manager, sg_id, parent_rule=None):
             addr_group = network_manager.network_proxy.get_address_group(
                 address_group=remote_ag_id)
             prefixes = addr_group['addresses']
-        elif remote_sg_id:
+        elif remote_sg_id and parent_rule is None:
             sub_sgs, sub_rules = _get_sg_rules_for_sg(
                 network_manager, remote_sg_id, parsed_rule)
             parsed_sgs += sub_sgs

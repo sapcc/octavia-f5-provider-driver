@@ -22,6 +22,7 @@ from octavia_f5.restclient.as3objects import tenant
 
 
 test_rules = [
+    # First level SG with ID 40d4e6bd-b202-4854-ba62-b45c5e7a03d1
     {
         "direction": "egress",
         "ether_type": "IPv6",
@@ -70,6 +71,7 @@ test_rules = [
         "security_group_id": "40d4e6bd-b202-4854-ba62-b45c5e7a03d1",
         "id": "dc45cadf-6f9a-45ff-8066-7bce3e1a9c14"
     },
+    # First level SG with ID 5674bef2-1ad3-4539-abc2-108874b754a6
     {
         "direction": "egress",
         "ether_type": "IPv6",
@@ -154,6 +156,7 @@ test_rules = [
         "security_group_id": "5674bef2-1ad3-4539-abc2-108874b754a6",
         "id": "f8f485c4-9de1-4bb3-ba0d-69f428a7aa22"
     },
+    # Second level remote group (parent: 5674bef2-1ad3-4539-abc2-108874b754a6)
     {
         "direction": "egress",
         "ether_type": "IPv6",
@@ -201,6 +204,20 @@ test_rules = [
         "remote_ip_prefix": "0.0.0.0/0",
         "security_group_id": "f6bdedc7-6887-41f1-9869-ef995d8f8c6b",
         "id": "ca71365a-94b9-49ff-a649-f3ed23337bbf"
+    },
+    # This rule should be ignored in the code because it contains third
+    # level link to remote group.
+    {
+        "direction": "ingress",
+        "ether_type": "IPv4",
+        "port_range_max": 8090,
+        "port_range_min": 8090,
+        "protocol": "tcp",
+        "remote_group_id": "40d4e6bd-b202-4854-ba62-b45c5e7a03d1",
+        "remote_address_group_id": None,
+        "remote_ip_prefix": None,
+        "security_group_id": "f6bdedc7-6887-41f1-9869-ef995d8f8c6b",
+        "id": "71a2105e-b6b0-44a3-bb61-f218503abefe"
     }
 ]
 test_address_groups = [

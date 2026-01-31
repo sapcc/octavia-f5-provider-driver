@@ -62,13 +62,15 @@ class ControllerWorkerNotifications(object):
         # fetch scheduled server from VIP port
         return self.network_driver.get_scheduled_host(loadbalancer.vip.port_id)
 
-    def _get_sgs_recursively(self, security_group):
+    def _get_sgs_with_remote_sgs(self, security_group):
         found_sgs = [security_group]
         rules = list(tuple(self.network_driver.network_proxy.security_group_rules(
             security_group_id=security_group)))
         for rule in rules:
             if rule.get('remote_group_id'):
-                found_sgs += self._get_sgs_recursively(rule['remote_group_id'])
+                # Remote Security Groups we parse only on the first level
+                # because we use only prefixes from them
+                found_sgs += [rule['remote_group_id']]
         return found_sgs
 
     def process_security_group_update_notification(self, security_group_id, action):
@@ -93,7 +95,7 @@ class ControllerWorkerNotifications(object):
                 else:
                     found_sgs = []
                     for sg in db_groups:
-                        found_sgs += self._get_sgs_recursively(sg)
+                        found_sgs += self._get_sgs_with_remote_sgs(sg)
                     # Check if there remote SGs that we have to watch
                     if set(found_sgs) != set(db_groups):
                         for vip_sg_id in set(found_sgs) - set(db_groups):

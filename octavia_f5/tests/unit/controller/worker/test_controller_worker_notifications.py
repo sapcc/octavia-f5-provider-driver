@@ -61,26 +61,24 @@ class TestControllerWorkerNotifications(base.TestCase):
         _network_driver.get_scheduled_host.return_value = 'test-host'
         self.assertEqual('test-host', cwn._get_scheduled_host(mock_lb))
 
-    def test__get_sgs_recursively(self, mock_api_session, mock_rpc_client, *args):
+    def test__get_sgs_with_remote_sgs(self, mock_api_session, mock_rpc_client, *args):
         _network_driver.network_proxy.security_group_rules.side_effect = [
             [{'remote_group_id': 'second-sg-id'}, {}, {}],
             [{}, {}, {'remote_group_id': 'third-sg-id'}],
             [{}, {}]
         ]
         cwn = controller_worker_notifications.ControllerWorkerNotifications()
-        sgs = cwn._get_sgs_recursively('first-sg-id')
-        self.assertEqual(['first-sg-id', 'second-sg-id', 'third-sg-id'], sgs)
-        self.assertEqual(3, _network_driver.network_proxy.security_group_rules.call_count)
+        sgs = cwn._get_sgs_with_remote_sgs('first-sg-id')
+        self.assertEqual(['first-sg-id', 'second-sg-id'], sgs)
+        self.assertEqual(1, _network_driver.network_proxy.security_group_rules.call_count)
         _network_driver.network_proxy.security_group_rules.assert_has_calls([
-            mock.call(security_group_id='first-sg-id'),
-            mock.call(security_group_id='second-sg-id'),
-            mock.call(security_group_id='third-sg-id')
+            mock.call(security_group_id='first-sg-id')
         ])
 
     @mock.patch.object(controller_worker_notifications.ControllerWorkerNotifications, '_get_scheduled_host')
-    @mock.patch.object(controller_worker_notifications.ControllerWorkerNotifications, '_get_sgs_recursively')
+    @mock.patch.object(controller_worker_notifications.ControllerWorkerNotifications, '_get_sgs_with_remote_sgs')
     def test_process_security_group_update_notification_sg_deleted(
-            self, mock_get_sgs_recursively, mock_scheduled_host, mock_api_session,
+            self, mock_get_sgs_with_remote_sgs, mock_scheduled_host, mock_api_session,
             mock_rpc_client, *args):
         lb_1 = mock.MagicMock()
         lb_1.id = 'lb-1-uuid'
@@ -102,7 +100,7 @@ class TestControllerWorkerNotifications(base.TestCase):
             mock.call(begin_session, 'lb-2-uuid', sg_ids=['third-sg-id'])
         ])
         mock_scheduled_host.assert_has_calls([mock.call(lb_1), mock.call(lb_2)])
-        self.assertEqual(0, mock_get_sgs_recursively.call_count)
+        self.assertEqual(0, mock_get_sgs_with_remote_sgs.call_count)
         mock_rpc_client.return_value.prepare.assert_has_calls([
             mock.call(server='server-1'),
             mock.call().cast({}, 'update_load_balancer',
@@ -116,10 +114,10 @@ class TestControllerWorkerNotifications(base.TestCase):
 
     # pylint: disable=too-many-positional-arguments
     @mock.patch.object(controller_worker_notifications.ControllerWorkerNotifications, '_get_scheduled_host')
-    @mock.patch.object(controller_worker_notifications.ControllerWorkerNotifications, '_get_sgs_recursively')
+    @mock.patch.object(controller_worker_notifications.ControllerWorkerNotifications, '_get_sgs_with_remote_sgs')
     @mock.patch('octavia.db.models.VipSecurityGroup', return_value=mock.MagicMock())
     def test_process_security_group_update_notification_sg_updated(
-            self, mock_model_vip, mock_get_sgs_recursively, mock_get_scheduled_host,
+            self, mock_model_vip, mock_get_sgs_with_remote_sgs, mock_get_scheduled_host,
             mock_api_session, mock_rpc_client, *args):
         lb_1 = mock.MagicMock()
         lb_1.id = 'lb-1-uuid'
@@ -130,7 +128,7 @@ class TestControllerWorkerNotifications(base.TestCase):
         _loadbalancer_repo.get_all_by_security_group.return_value = [lb_1, lb_2]
         mock_get_scheduled_host.side_effect = ['server-1', 'server-2']
         begin_session = mock_api_session().begin().__enter__()  # pylint: disable=unnecessary-dunder-call
-        mock_get_sgs_recursively.side_effect = [
+        mock_get_sgs_with_remote_sgs.side_effect = [
             ['test-sg-id'],
             ['first-sg-id'],
             ['second-sg-id', 'remote-sg-id-1'],
@@ -147,7 +145,7 @@ class TestControllerWorkerNotifications(base.TestCase):
         _loadbalancer_repo.get_all_by_security_group.assert_called_once_with(
             begin_session, security_group_id='test-sg-id')
         self.assertEqual(0, _vip_repo.update.call_count)
-        self.assertEqual(5, mock_get_sgs_recursively.call_count)
+        self.assertEqual(5, mock_get_sgs_with_remote_sgs.call_count)
         mock_model_vip.assert_has_calls([
             mock.call(load_balancer_id='lb-1-uuid', sg_id='remote-sg-id-1'),
             mock.call(load_balancer_id='lb-2-uuid', sg_id='remote-sg-id-2')
