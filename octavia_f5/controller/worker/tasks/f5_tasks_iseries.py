@@ -609,6 +609,7 @@ class GetVCMPGuests(task.Task):
 
 
 class RemoveVLANIfNotOwnedByOtherGuest(task.Task):
+    @decorators.RaisesIControlRestError()
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
                 bigip_guest_names: List[str],
@@ -626,9 +627,13 @@ class RemoveVLANIfNotOwnedByOtherGuest(task.Task):
                 return
 
         res = bigip.delete(path=f"/mgmt/tm/net/vlan/{name}")
-        if not res.ok:
+        if res.status_code == 404:
+            LOG.warning("%s: RemoveVLANIfNotOwnedByOtherGuest: VLAN %s was already removed",
+                        bigip.hostname, network.vlan_id)
+        elif not res.ok:
             LOG.warning("%s: Failed RemoveVLANIfNotOwnedByOtherGuest for vlan_id=%s: %s",
                         bigip.hostname, network.vlan_id, res.content)
+            res.raise_for_status()
 
 
 class RemoveVLANGuestAssignment(task.Task):
