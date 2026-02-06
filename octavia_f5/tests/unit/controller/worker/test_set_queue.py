@@ -131,5 +131,5 @@ class TestSetQueue(base.TestCase):
             items_gotten += 1
             if last_item is not None:
                 assert item > last_item, \
-                        f"After getting {items_gotten} items: SetQueue is not FIFO"
+                    f"After getting {items_gotten} items: SetQueue is not FIFO"
             last_item = item
