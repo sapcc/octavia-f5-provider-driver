@@ -27,8 +27,8 @@ class SetQueue(Queue):
 
     def _init(self, maxsize):
         self.maxsize = maxsize
-        self.queue = list()
-        self.priority_queue = list()
+        self.queue = []
+        self.priority_queue = []
 
     def put_priority(self, item):
         """Add an item to the priority queue."""
