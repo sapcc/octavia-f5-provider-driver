@@ -132,3 +132,40 @@ class TestSetQueue(base.TestCase):
                 assert item > last_item, \
                     f"After getting {items_gotten} items: SetQueue is not FIFO"
             last_item = item
+
+    def test_put_and_put_priority_respect_maxsize(self):
+        """Ensure both put and put_priority respect maxsize and block when full."""
+        import threading
+        import time
+
+        q = SetQueue(maxsize=1)
+        # fill the queue
+        q.put('a')
+
+        done = threading.Event()
+
+        def waiter():
+            # This should block until space is available
+            q.put_priority('b')
+            done.set()
+
+        t = threading.Thread(target=waiter)
+        t.start()
+
+        # Give the thread a moment to attempt the put_priority
+        time.sleep(0.1)
+
+        # The waiter should still be blocked and not have set the event
+        self.assertFalse(done.is_set(), "put_priority inserted item into full queue")
+        self.assertTrue(t.is_alive())
+
+        # Free up space
+        q.get()
+
+        # Wait for waiter to finish
+        t.join(timeout=1)
+        self.assertTrue(done.wait(timeout=1))
+
+        # The queue should now contain the priority item
+        self.assertEqual(q.qsize(), 1)
+        self.assertEqual(q.get(), 'b')
