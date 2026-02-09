@@ -12,7 +12,8 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
-from queue import Queue
+from queue import Queue, Full
+import time
 
 
 class SetQueue(Queue):
@@ -30,14 +31,35 @@ class SetQueue(Queue):
         self.queue = []
         self.priority_queue = []
 
-    def put_priority(self, item):
-        """Add an item to the priority queue."""
-        if item not in self.priority_queue:
-            self.priority_queue.append(item)
-        if item in self.queue:
-            self.queue.remove(item)
-        # notify polling threads
-        with self.not_empty:  # acquire self.mutex for self.not_empty
+    def put_priority(self, item, block=True, timeout=None):
+        """Add an item to the priority queue, respecting maxsize and blocking like
+        Queue.put.
+        """
+        with self.not_full:
+            # honor maxsize semantics from queue.Queue.put
+            if self.maxsize > 0:
+                if not block:
+                    if self._qsize() >= self.maxsize:
+                        raise Full
+                elif timeout is None:
+                    while self._qsize() >= self.maxsize:
+                        self.not_full.wait()
+                else:
+                    endtime = time.time() + timeout
+                    while self._qsize() >= self.maxsize:
+                        remaining = endtime - time.time()
+                        if remaining <= 0.0:
+                            raise Full
+                        self.not_full.wait(remaining)
+
+            # insert the priority item if it's not already present
+            if item not in self.priority_queue:
+                self.priority_queue.append(item)
+            if item in self.queue:
+                self.queue.remove(item)
+
+            # notify polling threads; notify() requires the lock to be held,
+            # which it already is via self.not_full, so call notify() directly.
             self.not_empty.notify()
 
     def _put(self, item):
