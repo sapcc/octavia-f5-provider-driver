@@ -19,7 +19,7 @@ from oslo_config import fixture as oslo_fixture
 from oslo_log import log as logging
 from oslo_utils import uuidutils
 
-import octavia.tests.unit.base as base
+from octavia.tests.unit import base
 from octavia.network import data_models as network_models
 # pylint: disable=unused-import
 from octavia_f5.common import config  # noqa
@@ -54,7 +54,7 @@ class MockResponse:
 
     def raise_for_status(self):
         if self.status_code > 500:
-            raise Exception('Boom!')
+            raise Exception('Boom!')  # pylint: disable=broad-exception-raised
 
 
 class TestL2SyncManager(base.TestCase):

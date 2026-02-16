@@ -19,7 +19,7 @@ from oslo_config import cfg
 from oslo_config import fixture as oslo_fixture
 from oslo_utils import uuidutils
 
-import octavia.tests.unit.base as base
+from octavia.tests.unit import base
 from octavia_f5.controller.worker import controller_worker
 
 CONF = cfg.CONF
@@ -38,6 +38,9 @@ _load_balancer_mock.flavor_id = None
 _load_balancer_mock.availability_zone = None
 _selfip = mock.MagicMock()
 _db_session = mock.MagicMock()
+_network_driver = mock.MagicMock()
+_loadbalancer_repo = mock.MagicMock()
+_vip_repo = mock.MagicMock()
 
 
 @mock.patch('octavia_f5.controller.worker.status_manager.StatusManager')
@@ -52,6 +55,7 @@ class TestControllerWorker(base.TestCase):
         # prevent ControllerWorker() from spawning threads
         conf.config(group="f5_agent", sync_immediately=False)
 
+    # pylint: disable=too-many-positional-arguments
     @mock.patch('octavia.db.repositories.AvailabilityZoneRepository')
     @mock.patch('octavia.db.repositories.AvailabilityZoneProfileRepository')
     def test_register_in_availability_zone(self,
@@ -64,7 +68,7 @@ class TestControllerWorker(base.TestCase):
         fake_azp_id = uuidutils.generate_uuid()
         cw = controller_worker.ControllerWorker()
 
-        begin_session = mock_api_session().begin().__enter__()
+        begin_session = mock_api_session().begin().__enter__()  # pylint: disable=unnecessary-dunder-call
 
         # existing empty az
         mock_az_repo_instance = mock_az_repo.return_value
@@ -104,7 +108,7 @@ class TestControllerWorker(base.TestCase):
         cw = controller_worker.ControllerWorker()
         cw.remove_loadbalancer(LB_ID)
 
-        begin_session = mock_api_session().begin().__enter__()
+        begin_session = mock_api_session().begin().__enter__()  # pylint: disable=unnecessary-dunder-call
 
         mock_lb_repo_get_all_by_network.assert_called_once_with(begin_session, network_id=NETWORK_ID, show_deleted=False)
         mock_lb_repo_get.assert_called_once_with(begin_session, id=LB_ID)

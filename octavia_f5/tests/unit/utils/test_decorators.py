@@ -30,7 +30,7 @@ class ToMockedClass(object):
 
         if self.hooked_func_calls <= 1:
             # Raise exception on first call
-            raise Exception()
+            raise Exception()  # pylint: disable=W0719
 
 
 class TestRunHookOnException(base.TestCase):

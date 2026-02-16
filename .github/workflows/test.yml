@@ -31,10 +31,6 @@ jobs:
         pip install pbr oslotest -c $UPPER_CONSTRAINTS
         pip install --exists-action w -e git+https://github.com/sapcc/octavia.git@stable/2025.1-m3#egg=octavia -c $UPPER_CONSTRAINTS
         pip install -e . -c $UPPER_CONSTRAINTS
-    - name: Lint with flake8
-      run: |
-        pip install flake8
-        flake8 ./octavia_f5 --count --ignore H104,W504 --enable-extensions H106,H203,H204,H205,H904 --max-line-length=127 --statistics
     - name: Test with pytest
       run: |
         pip install pytest -c $UPPER_CONSTRAINTS

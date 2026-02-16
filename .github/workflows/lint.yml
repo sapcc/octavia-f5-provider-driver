@@ -2,6 +2,9 @@ name: Linting the repository
 
 on: [push, pull_request]
 
+env:
+  UPPER_CONSTRAINTS: "https://raw.githubusercontent.com/sapcc/requirements/stable/2025.1-m3/upper-constraints.txt"
+
 jobs:
   lint:
     runs-on: ubuntu-latest
@@ -18,8 +21,9 @@ jobs:
       run: |
         set -xe
         python -m pip install --upgrade pip
-        pip install -r test-requirements.txt -c https://raw.githubusercontent.com/sapcc/requirements/stable/2025.1-m3/upper-constraints.txt
+        pip install flake8
+        pip install -r test-requirements.txt -c $UPPER_CONSTRAINTS
     - name: Analysing the code with pylint
       run: |
         tools/coding-checks.sh --pylint
-
+        flake8 ./octavia_f5 --count --ignore H104,W504 --enable-extensions H106,H203,H204,H205,H904 --max-line-length=127 --statistics

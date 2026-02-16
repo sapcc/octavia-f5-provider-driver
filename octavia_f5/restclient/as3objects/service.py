@@ -12,6 +12,7 @@
 # License for the specific language governing permissions and limitations
 # under the License.
 
+from netaddr import IPNetwork
 from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 from oslo_log import log as logging
@@ -49,7 +50,7 @@ def get_data_group_name(listener_id):
     :param listener_id: listener id
     :return: AS3 object name
     """
-    return f"{get_name(listener_id)}{f5_const.SUFFIX_ALLOWED_CIDRS}"
+    return f"{get_name(listener_id)}{f5_const.SUFFIX_ACCESS_FILTERING}"
 
 
 def get_esd_entities(servicetype, esd):
@@ -108,12 +109,13 @@ def get_esd_entities(servicetype, esd):
     return service_args
 
 
-def get_service(listener, cert_manager, esd_repository):
+def get_service(listener, cert_manager, esd_repository, sg_rules):
     """ Map Octavia listener -> AS3 Service
 
     :param listener: Octavia listener
-    :param cert_manager: cert_manager wrapper instance
+    :param cert_manager: Barbican client wrapper instance
     :param esd_repository: ESD repository object with function get_esd
+    :param sg_rules: list of Security Group Rules
     :return: AS3 Service + additional AS3 application objects
     """
 
@@ -205,13 +207,52 @@ def get_service(listener, cert_manager, esd_repository):
         service_args['iRules'].append(name)
         entities.append((name, irule))
 
+    # Add filtering via iRules
+    access_filtering_cidrs_v4 = []
+    access_filtering_cidrs_v6 = []
+    zero_v4_found = False
+    zero_v6_found = False
+
+    def add_filtering_cidrs(prefix, p_type, zero_v4, zero_v6):
+        net = IPNetwork(prefix)
+        if net.version == 4 and not zero_v4:
+            access_filtering_cidrs_v4.append({'key': prefix, 'value': p_type})
+            if prefix == '0.0.0.0/0':
+                zero_v4 = True
+        if net.version == 6 and not zero_v6:
+            access_filtering_cidrs_v6.append({'key': prefix, 'value': p_type})
+            if prefix == '::/0':
+                zero_v6 = True
+        return zero_v4, zero_v6
+
+    # Set security groups filtering with iRule
+    for sg_rule in sg_rules:
+        # Check that listener port inside the SG rule range and check Listener protocol
+        # pylint: disable=too-many-boolean-expressions
+        if (sg_rule['ports'][0] <= listener.protocol_port <= sg_rule['ports'][1] and
+                ((sg_rule['protocol'] == lib_consts.PROTOCOL_UDP == listener.protocol) or
+                    (sg_rule['protocol'] == lib_consts.PROTOCOL_TCP and
+                     service_args['_servicetype'] in f5_const.SERVICE_TCP_TYPES) or
+                    (sg_rule['protocol'] == lib_consts.PROTOCOL_TCP and
+                     service_args['_servicetype'] == f5_const.SERVICE_L4))):
+            for p in sg_rule['prefixes']:
+                zero_v4_found, zero_v6_found = add_filtering_cidrs(p, 'sg', zero_v4_found, zero_v6_found)
+
     # Set allowed cidrs
     if hasattr(listener, 'allowed_cidrs') and listener.allowed_cidrs:
-        cidrs = [c.cidr for c in listener.allowed_cidrs]
-        if '0.0.0.0/0' not in cidrs:
-            # 0.0.0.0/0 - means all sources are allowed, no filtering needed
-            entities.append((get_data_group_name(listener.id), as3.Data_Group(cidrs)))
-            service_args['iRules'].append(as3.BigIP(CONF.f5_agent.irule_allowed_cidrs))
+        for c in listener.allowed_cidrs:
+            zero_v4_found, zero_v6_found = add_filtering_cidrs(c.cidr, 'ac', zero_v4_found, zero_v6_found)
+
+    # Add Data Group and iRule to the listener
+    if access_filtering_cidrs_v4 or access_filtering_cidrs_v6:
+        filtering_list = []
+        if not zero_v4_found:
+            filtering_list += access_filtering_cidrs_v4
+        if not zero_v6_found:
+            filtering_list += access_filtering_cidrs_v6
+        if filtering_list:
+            entities.append((get_data_group_name(listener.id), as3.Data_Group(filtering_list)))
+            service_args['iRules'].append(as3.BigIP(CONF.f5_agent.irule_access_filtering))
 
     # maximum number of connections
     if listener.connection_limit > 0:

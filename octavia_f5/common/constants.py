@@ -36,7 +36,7 @@ PREFIX_SUBNET = 'sub_'
 PREFIX_IRULE = 'irule_'
 PREFIX_MEMBER = 'member_'
 PREFIX_SECRET = 'secret_'
-SUFFIX_ALLOWED_CIDRS = '_allowed_cidrs'
+SUFFIX_ACCESS_FILTERING = '_access_filtering'
 
 APPLICATION_TCP = 'tcp'
 APPLICATION_UDP = 'udp'

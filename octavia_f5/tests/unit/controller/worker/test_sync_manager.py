@@ -18,7 +18,7 @@ from oslo_config import cfg
 from oslo_config import fixture as oslo_fixture
 from oslo_log import log as logging
 
-import octavia.tests.unit.base as base
+from octavia.tests.unit import base
 from octavia.db import models
 from octavia.network import data_models as network_models
 # pylint: disable=unused-import
@@ -63,4 +63,3 @@ class TestSyncManager(base.TestCase):
             manager.tenant_update('test-net-id', selfips=selfips)
         mock_decl_manager.get_declaration.assert_called_with(
             {'test-net-id': [mock_lb]}, ['1.2.3.4'])
-        pass
