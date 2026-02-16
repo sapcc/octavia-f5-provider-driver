@@ -229,7 +229,18 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         client.cast({}, 'update_l7policy', **payload)
 
     # L7 Rule
+    def _validate_l7rule(self, l7rule):
+        if l7rule.compare_type and l7rule.compare_type not in f5_consts.POLICY_COMPARE_TYPE_MAP:
+            raise exceptions.UnsupportedOptionError(
+                user_fault_string=f'Unsupported compare type {l7rule.compare_type}')
+
+        if l7rule.type and l7rule.type not in f5_consts.POLICY_COND_TYPE_MAP:
+            raise exceptions.UnsupportedOptionError(
+                user_fault_string=f'Unsupported type {l7rule.type}')
+
     def l7rule_create(self, l7rule):
+        self._validate_l7rule(l7rule)
+
         with db_apis.session().begin() as session:
             db_l7 = self.repositories.l7policy.get(session, id=l7rule.l7policy_id)
 
@@ -246,6 +257,8 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         client.cast({}, 'delete_l7rule', **payload)
 
     def l7rule_update(self, old_l7rule, new_l7rule):
+        self._validate_l7rule(new_l7rule)
+
         with db_apis.session().begin() as session:
             db_l7 = self.repositories.l7policy.get(session, id=old_l7rule.l7policy_id)
 
