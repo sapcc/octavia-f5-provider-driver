@@ -24,7 +24,7 @@ import octavia.tests.unit.base as base
 from octavia.network import data_models as network_models
 # pylint: disable=unused-import
 from octavia_f5.common import config  # noqa
-from octavia_f5.controller.worker.tasks import f5_tasks_iseries
+from octavia_f5.controller.worker.tasks import f5_tasks_iseries, f5_tasks_rseries
 from octavia_f5.network import data_models as f5_network_models
 from octavia_f5.restclient import as3restclient
 from octavia_f5.tests.unit.controller.worker.flows import test_f5_flows
@@ -34,12 +34,258 @@ LOG = logging.getLogger(__name__)
 
 
 class TestF5Tasks(base.TestCase):
+
     def setUp(self):
         conf = self.useFixture(oslo_fixture.Config(cfg.CONF))
         conf.config(group="controller_worker",
                     network_driver='network_noop_driver_f5')
+        conf.config(group="networking", hardware_syncookie=False)
+        conf.config(group="networking", syn_flood_rate_limit=2000)
+        conf.config(group="networking", syncache_threshold=32000)
 
         super().setUp()
+
+
+    def test_EnsureVLAN_iSeries_existing_and_correct(self):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_network = f5_network_models.Network(
+                id='test-network-id',
+                name='test-network-name',
+                mtu=9000,
+                segments=[{'provider:physical_network': 'physnet',
+                    'provider:segmentation_id': 1234}]
+                )
+
+        # existing VLAN which is correct
+        existing_vlan = {
+            'name': f'vlan-{mock_network.vlan_id}',
+            'tag': mock_network.vlan_id,
+            'mtu': mock_network.mtu,
+            'hardwareSyncookie': 'disabled',
+            'synFloodRateLimit': 2000,
+            'syncacheThreshold': 32000,
+        }
+
+        engines.run(f5_tasks_iseries.EnsureVLAN(), store={
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'existing_vlan': existing_vlan
+            })
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+        mock_bigip.delete.assert_not_called()
+
+
+    def test_EnsureVLAN_iSeries_existing_and_needs_patching(self):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_network = f5_network_models.Network(
+                id='test-network-id',
+                name='test-network-name',
+                mtu=9000,
+                segments=[{'provider:physical_network': 'physnet',
+                    'provider:segmentation_id': 1234}]
+                )
+
+        # existing VLAN with wrong MTU
+        existing_vlan = {
+            'name': f'vlan-{mock_network.vlan_id}',
+            'tag': mock_network.vlan_id,
+            'mtu': mock_network.mtu + 1,
+            'hardwareSyncookie': 'disabled',
+            'synFloodRateLimit': 2000,
+            'syncacheThreshold': 32000,
+        }
+
+        # expect VLAN with correct MTU
+        expected_vlan = existing_vlan | {'mtu': mock_network.mtu}
+
+        engines.run(f5_tasks_iseries.EnsureVLAN(), store={
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'existing_vlan': existing_vlan
+            })
+        mock_bigip.post.assert_not_called()
+        # assert MTU has been corrected
+        mock_bigip.patch.assert_called_with(
+                path=f"/mgmt/tm/net/vlan/~Common~vlan-{mock_network.vlan_id}",
+                json=expected_vlan)
+        mock_bigip.delete.assert_not_called()
+
+
+    def test_EnsureVLAN_iSeries_new_vlan(self):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_network = f5_network_models.Network(
+                id='test-network-id',
+                name='test-network-name',
+                mtu=9000,
+                segments=[{'provider:physical_network': 'physnet',
+                    'provider:segmentation_id': 1234}]
+                )
+
+        # no VLAN exists yet
+        existing_vlan = None
+        expected_vlan = {
+            'name': f'vlan-{mock_network.vlan_id}',
+            'tag': mock_network.vlan_id,
+            'mtu': mock_network.mtu,
+            'hardwareSyncookie': 'disabled',
+            'synFloodRateLimit': 2000,
+            'syncacheThreshold': 32000,
+        }
+
+        engines.run(f5_tasks_iseries.EnsureVLAN(), store={
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'existing_vlan': existing_vlan
+            })
+        # assert VLAN has been created...
+        mock_bigip.post.assert_called_with(
+                path='/mgmt/tm/net/vlan',
+                json=expected_vlan)
+        # ...but no patching happened
+        mock_bigip.patch.assert_not_called()
+        mock_bigip.delete.assert_not_called()
+
+
+    def test_revert_EnsureVLAN_iSeries(self):
+        vlan_id = 1234
+        mock_network = f5_network_models.Network(
+                id='test-network-id',
+                name='test-network-name',
+                mtu=9000,
+                segments=[{'provider:physical_network': 'physnet',
+                    'provider:segmentation_id': vlan_id}]
+                )
+        class TestException(Exception):
+            pass
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.post.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureVLAN")
+
+        store = {
+                'bigip': mock_bigip,
+                'network': mock_network,
+                'existing_vlan': None,
+                }
+        self.assertRaises(TestException, engines.run,
+                f5_tasks_iseries.EnsureVLAN(), store=store)
+        mock_bigip.post.assert_called()
+        mock_bigip.delete.assert_called_with(
+                path=f"/mgmt/tm/net/vlan/~Common~vlan-{vlan_id}")
+
+
+    def test_revert_EnsureVLAN_iSeries_nop(self):
+        mock_network = f5_network_models.Network(
+                id='test-network-id',
+                name='test-network-name',
+                mtu=9000,
+                segments=[{'provider:physical_network': 'physnet',
+                    'provider:segmentation_id': 1234}]
+                )
+        class TestException(Exception):
+            pass
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        # since we pass something for existing_vlan, POST won't be called, but PATCH
+        mock_bigip.patch.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureVLAN")
+
+        store = {
+                'bigip': mock_bigip,
+                'network': mock_network,
+                'existing_vlan': {'something':None},
+                }
+        self.assertRaises(TestException, engines.run,
+                f5_tasks_iseries.EnsureVLAN(), store=store)
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_called()
+        # since VLAN alread existed beforehand, revert must not delete it
+        mock_bigip.delete.assert_not_called()
+
+
+    def test_EnsureVLAN_rSeries_existing(self):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_network = f5_network_models.Network(
+                id='test-network-id',
+                name='test-network-name',
+                mtu=9000,
+                segments=[{'provider:physical_network': 'physnet',
+                    'provider:segmentation_id': 1234}]
+                )
+
+        # existing VLAN (content doesn't matter)
+        existing_vlan = {'name': f'vlan-{mock_network.vlan_id}'}
+
+        engines.run(f5_tasks_rseries.EnsureVLAN(), store={
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'existing_vlan': existing_vlan
+            })
+        mock_bigip.post.assert_not_called()
+        mock_bigip.patch.assert_not_called()
+        mock_bigip.delete.assert_not_called()
+
+
+    def test_EnsureVLAN_rSeries_new_vlan(self):
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        vlan_id = 1234
+        mock_network = f5_network_models.Network(
+                id='test-network-id',
+                name='test-network-name',
+                mtu=9000,
+                segments=[{'provider:physical_network': 'physnet',
+                    'provider:segmentation_id': vlan_id}],
+                )
+
+        # no VLAN exists yet
+        existing_vlan = None
+        expected_payload = {'openconfig-vlan:vlan': [{
+            'vlan-id': vlan_id,
+            'config': {
+                'vlan-id': vlan_id,
+                'name': f"vlan-{vlan_id}",
+                }
+            }]}
+
+        engines.run(f5_tasks_rseries.EnsureVLAN(), store={
+            'bigip': mock_bigip,
+            'network': mock_network,
+            'existing_vlan': existing_vlan
+            })
+        mock_bigip.post.assert_not_called()
+        mock_bigip.put.assert_called_with(
+                path=f"/api/data/openconfig-vlan:vlans/vlan={vlan_id}",
+                json=expected_payload)
+        mock_bigip.patch.assert_not_called()
+        mock_bigip.delete.assert_not_called()
+
+
+    def test_revert_EnsureVLAN_rSeries(self):
+        vlan_id = 1234
+        mock_network = f5_network_models.Network(
+                id='test-network-id',
+                name='test-network-name',
+                mtu=9000,
+                segments=[{'provider:physical_network': 'physnet',
+                    'provider:segmentation_id': vlan_id}]
+                )
+        class TestException(Exception):
+            pass
+        mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
+        mock_bigip.put.side_effect = TestException(
+            "Test exception to trigger rollback of EnsureVLAN")
+
+        store = {
+                'bigip': mock_bigip,
+                'network': mock_network,
+                'existing_vlan': None,
+                }
+        self.assertRaises(TestException, engines.run,
+                f5_tasks_rseries.EnsureVLAN(), store=store)
+        mock_bigip.post.assert_not_called()
+        mock_bigip.put.assert_called()
+        mock_bigip.delete.assert_called_with(
+                path=f"/api/data/openconfig-vlan:vlans/vlan={vlan_id}")
+
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
@@ -72,6 +318,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.patch.assert_called_with(path='/mgmt/tm/net/route/~Common~vlan-1234',
                                             json={'gw': '2.3.4.5%1234', 'network': 'default%1234'})
         mock_bigip.post.assert_not_called()
+
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
@@ -108,6 +355,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.assert_has_calls(calls)
         mock_bigip.patch.assert_not_called()
         mock_bigip.post.assert_not_called()
+
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
@@ -150,6 +398,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.post.assert_called_with(json={
             'name': 'vlan-1234', 'gw': '8.8.8.8%1234', 'network': 'default%1234'},
             path='/mgmt/tm/net/route')
+
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
@@ -217,6 +466,7 @@ class TestF5Tasks(base.TestCase):
                 'address': "1.2.3.2%1234/24",
             })
 
+
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
     def test_EnsureSubnetRoute(self, mock_get_subnet):
@@ -274,6 +524,7 @@ class TestF5Tasks(base.TestCase):
                   'network': '2.3.4.0%1234/24'})
         mock_bigip.post.assert_not_called()
 
+
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
     def test_revert_EnsureSelfIP(self, mock_get_subnet):
@@ -317,6 +568,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.post.assert_not_called()
         mock_bigip.patch.assert_not_called()
 
+
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
     def test_revert_EnsureSubnetRoute(self, mock_get_subnet):
@@ -354,6 +606,7 @@ class TestF5Tasks(base.TestCase):
         )
         mock_bigip.post.assert_not_called()
         mock_bigip.patch.assert_not_called()
+
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
@@ -446,6 +699,7 @@ class TestF5Tasks(base.TestCase):
         mock_bigip.get.assert_called_with(path=f"/mgmt/tm/net/self/{selfip_port.id}")
         mock_bigip.post.assert_not_called()
         mock_bigip.patch.assert_not_called()
+
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
