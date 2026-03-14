@@ -117,6 +117,9 @@ class AS3(BaseDescription):
     def set_target_tokens(self, tokens):
         setattr(self, 'targetTokens', tokens)
 
+    def set_log_level(self, level):
+        setattr(self, 'logLevel', level)
+
 
 class ADC(BaseDescription):
     def __init__(self, schemaVersion='3.19.0', updateMode='selective', **kwargs):  # noqa

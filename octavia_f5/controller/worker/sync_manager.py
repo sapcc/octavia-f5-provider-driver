@@ -188,6 +188,13 @@ class SyncManager(object):
         if CONF.f5_agent.dry_run:
             decl.set_action('dry-run')
 
+        for lb in loadbalancers:
+            if 'as3_declaration_debug' in lb.tags:
+                LOG.info("AS3 declaration logging was set to debug level because "
+                         f"loadbalancer {lb.id} tagged with 'as3_declaration_debug'")
+                decl.set_log_level('debug')
+                break
+
         # No config syncing if we are in migration mode or specifically syncing one device
         if not CONF.f5_agent.migration and not device and CONF.f5_agent.sync_to_group:
             decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
