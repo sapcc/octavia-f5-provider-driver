@@ -34,6 +34,7 @@ from sqlalchemy.orm import exc as db_exceptions
 
 from octavia.common import constants as octavia_consts
 from octavia.db import repositories as repo
+from octavia.network import base
 from octavia_f5.common import constants as octavia_f5_consts
 from octavia_f5.controller.worker import status_manager, sync_manager, l2_sync_manager
 from octavia_f5.controller.worker.set_queue import SetQueue
@@ -260,10 +261,21 @@ class ControllerWorker(object):
                 show_deleted=False)[0]
         for lb in pending_create_lbs:
             # bind to loadbalancer if scheduled to this host
-            if CONF.host == self.network_driver.get_scheduled_host(lb.vip.port_id):
-                self.ensure_host_set(lb)
-                lbs.append(lb)
-
+            try:
+                if ((lb.server_group_id and CONF.host == lb.server_group_id) or
+                        (CONF.host == self.network_driver.get_scheduled_host(lb.vip.port_id))):
+                    self.ensure_host_set(lb)
+                    lbs.append(lb)
+            except base.NetworkException as exc:
+                with db_apis.session().begin() as editor_ses:
+                    self._loadbalancer_repo.update(
+                        editor_ses,
+                        id=lb.id,
+                        provisioning_status=lib_consts.ERROR,
+                        force_provisioning_status=True)
+                LOG.error(f"Failed to get scheduled host for LB {lb.id} with "
+                          f"error {exc}. Provisioning status for loadbalancer set "
+                          "to ERROR.")
         # Find pending loadbalancer
         with session.begin():
             lbs.extend(self._loadbalancer_repo.get_all_from_host(
