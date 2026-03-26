@@ -73,6 +73,11 @@ def filter_cipher_suites(cipher_suites, object_name, object_id, http2=False):
                         f"{object_id} because HTTP2 is being used")
             cipher_suites_list.append(cipher)
 
+    # Disable old ciphers
+    cipher_suites_list.append('!DHE')
+    cipher_suites_list.append('!TLSv1')
+    cipher_suites_list.append('!TLSv1_1')
+
     return cipher_suites_list
 
 
