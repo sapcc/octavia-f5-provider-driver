@@ -188,6 +188,17 @@ class SyncManager(object):
         if CONF.f5_agent.dry_run:
             decl.set_action('dry-run')
 
+        debug_enabled = False
+        for lb in loadbalancers:
+            if debug_enabled:
+                break
+            for amp in lb.amphorae:
+                if amp.vrrp_ip:
+                    decl.set_log_level('debug')
+                    LOG.info(f"AS3 debug was enabled for tenant {network_id} "
+                             f"because Amphora {amp.id} has VRRP IP set.")
+                    debug_enabled = True
+
         # No config syncing if we are in migration mode or specifically syncing one device
         if not CONF.f5_agent.migration and not device and CONF.f5_agent.sync_to_group:
             decl.set_sync_to_group(CONF.f5_agent.sync_to_group)
