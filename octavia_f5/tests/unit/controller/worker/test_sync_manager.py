@@ -58,6 +58,7 @@ class TestSyncManager(base.TestCase):
             network_models.FixedIP(ip_address='1.2.3.4')])]
 
         mock_lb = mock.Mock(spec=models.LoadBalancer)
+        mock_lb.amphorae = []
         loadbalancer_repo.get_all_by_network.return_value = [mock_lb]
         with mock.patch('octavia_f5.db.api.session'):
             manager.tenant_update('test-net-id', selfips=selfips)
