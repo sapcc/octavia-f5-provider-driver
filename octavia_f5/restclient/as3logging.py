@@ -26,8 +26,12 @@ def truncate_as3_secrets(as3_json_decl):
     """
 
     for net in as3_json_decl:
+        if not net.startswith(constants.PREFIX_NETWORK):
+            continue
         net_obj = as3_json_decl.get(net)
         for lb in net_obj:
+            if not lb.startswith(constants.PREFIX_LOADBALANCER):
+                continue
             lb_obj = net_obj.get(lb)
             for lb_key in lb_obj:
                 # remove private keys from certificate declarations
@@ -57,7 +61,7 @@ def get_response_log(response):
     if request.body:
         try:
             parsed = json.loads(request.body)
-            truncate_as3_secrets(parsed)
+            truncate_as3_secrets(parsed['declaration'])
             msg += json.dumps(parsed, sort_keys=True, indent=4)
         except ValueError:
             # No json, just dump
