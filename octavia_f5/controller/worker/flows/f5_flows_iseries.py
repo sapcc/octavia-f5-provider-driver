@@ -156,10 +156,12 @@ class F5Flows(object):
             inject=store)
 
         remove_l2_flow = linear_flow.Flow(f'remove-l2-flow-{bigip_hostname}')
-        remove_l2_flow.add(remove_subnet_routes_subflow,
-                           remove_default_route_task,
-                           # SelfIPs must be deleted after routes, otherwise a route would be unreachable
-                           remove_selfips_subflow,
+        # SubnetRoute and DefaultRoute have to be removed only from active device.
+        if store["bigip"].is_active:
+            remove_l2_flow.add(remove_subnet_routes_subflow,
+                               remove_default_route_task)
+        # SelfIPs must be deleted after routes, otherwise a route would be unreachable
+        remove_l2_flow.add(remove_selfips_subflow,
                            get_existing_route_domain,
                            remove_route_domain_task,
                            get_existing_vlan,
@@ -231,8 +233,9 @@ class F5Flows(object):
 
         # make and return flow
         remove_selfips_and_subnet_routes_flow = linear_flow.Flow('remove-selfips-and-subnet-routes-flow')
-        remove_selfips_and_subnet_routes_flow.add(remove_subnet_routes_subflow,
-                                                  remove_selfips_subflow)
+        if store['bigip'].is_active:
+            remove_selfips_and_subnet_routes_flow.add(remove_subnet_routes_subflow)
+        remove_selfips_and_subnet_routes_flow.add(remove_selfips_subflow)
         return remove_selfips_and_subnet_routes_flow
 
     def make_ensure_selfips_and_subnet_routes_flow(self, needed_selfips, subnets_that_need_routes,
