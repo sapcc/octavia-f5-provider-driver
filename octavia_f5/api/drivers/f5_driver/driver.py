@@ -14,6 +14,7 @@
 
 from octavia_lib.api.drivers import data_models as driver_dm
 from octavia_lib.api.drivers import exceptions
+from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 from oslo_log import log as logging
 
@@ -21,6 +22,7 @@ from octavia.api.drivers.amphora_driver.v2 import driver
 from octavia.common import constants as consts
 from octavia.common import exceptions as api_exceptions
 from octavia.db import api as db_apis
+from octavia.network import base
 
 from octavia_f5.api.drivers.f5_driver import arbiter
 from octavia_f5.common import constants as f5_consts
@@ -57,7 +59,19 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
 
         # fetch scheduled server from VIP port
         network_driver = driver_utils.get_network_driver()
-        return network_driver.get_scheduled_host(loadbalancer.vip.port_id)
+        try:
+            return network_driver.get_scheduled_host(loadbalancer.vip.port_id)
+        except base.NetworkException as exc:
+            LOG.error(f"Failed to get scheduled host for LB {loadbalancer.id} "
+                      f"with error {exc}. Provisioning status for loadbalancer "
+                      "set to ERROR.")
+            with session.begin():
+                self.repositories.load_balancer.update(
+                    session, loadbalancer.id,
+                    provisioning_status=lib_consts.ERROR,
+                    force_provisioning_status=True)
+            # we have to reraise error because we need to stop processing
+            raise
 
     def loadbalancer_create(self, loadbalancer):
         if loadbalancer.flavor == driver_dm.Unset:

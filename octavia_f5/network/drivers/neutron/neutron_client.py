@@ -262,7 +262,15 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         :param port_id: the neutron port id
         :return: hostname of the binding host
         """
-        res = self.network_proxy.get_port(port_id)
+        try:
+            res = self.network_proxy.get_port(port_id)
+        except os_exceptions.ResourceNotFound as exc:
+            message = _(f"Port not found (port id: {port_id}).")
+            raise base.PortNotFound(message) from exc
+        except Exception as exc:
+            message = _(f"Error retrieving port (port id: {port_id}.")
+            LOG.exception(message)
+            raise base.NetworkException(message) from exc
         return res['binding:host_id']
 
     def get_network(self, network_id, context=None):
