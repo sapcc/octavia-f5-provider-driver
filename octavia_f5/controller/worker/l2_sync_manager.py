@@ -21,7 +21,7 @@ import requests
 from oslo_config import cfg
 from oslo_log import log as logging
 from taskflow.listeners import logging as tf_logging
-from taskflow.patterns import unordered_flow
+from taskflow.patterns import unordered_flow, linear_flow
 
 from octavia.common import data_models as octavia_models
 from octavia.common.base_taskflow import BaseTaskFlowEngine
@@ -121,7 +121,11 @@ class L2SyncManager(BaseTaskFlowEngine):
             e.run()
 
     def _do_remove_l2_flow(self, data: list):
-        remove_l2_flow = unordered_flow.Flow('remove-l2-flow-from-all-devices')
+        # We have to use Linear Flow here because SubnetRoutes and DefaultRoute have to be removed first from the active
+        # device and after that SelfIPs can be removed from both devices, so we need the exact order one-by-one.
+        # This order is guaranteed by the order of data where we put the active device first every time.
+        remove_l2_flow = linear_flow.Flow('remove-l2-flow-from-all-devices')
+        data.sort(key=lambda e: e['store']['bigip'].is_active, reverse=True)
         for flow_data in data:
             # get existing SelfIPs and subnet routes
             e = self.taskflow_load(self._f5flows_guest.make_get_existing_selfips_and_subnet_routes_flow(),

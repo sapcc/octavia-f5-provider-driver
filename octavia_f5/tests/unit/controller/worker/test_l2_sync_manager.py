@@ -481,6 +481,10 @@ class TestL2SyncManager(base.TestCase):
         for i in range(0, 2):
             mock_bigip = mock.Mock(spec=as3restclient.AS3RestClient)
             mock_bigip.hostname = f'hostname-{i}'
+            if i == 0:
+                mock_bigip.is_active = True
+            else:
+                mock_bigip.is_active = False
             mock_bigip.get.side_effect = [
                 MockResponse({}, 404) for _ in range(9)]
             mock_bigips.append(mock_bigip)
@@ -504,7 +508,7 @@ class TestL2SyncManager(base.TestCase):
         self.manager._do_remove_l2_flow(data=data)
         # check that both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigips[0].get.call_count, 7)
-        self.assertEqual(mock_bigips[1].get.call_count, 7)
+        self.assertEqual(mock_bigips[1].get.call_count, 5)
         self.assertEqual(mock_bigips[0].post.call_count, 0)
         self.assertEqual(mock_bigips[1].post.call_count, 0)
         self.assertEqual(mock_bigips[0].delete.call_count, 0)
@@ -563,9 +567,8 @@ class TestL2SyncManager(base.TestCase):
         ]
         mock_bigip_2 = mock.Mock(spec=as3restclient.AS3RestClient)
         mock_bigip_2.hostname = 'hostname-2'
+        mock_bigip_2.is_active = False
         mock_bigip_2.get.side_effect = [
-            MockResponse({}, 404),
-            MockResponse({}, 404),
             # DefaultRoute
             MockResponse({}, 200),
             # RouteDomain
@@ -592,37 +595,35 @@ class TestL2SyncManager(base.TestCase):
             )
         ]
         mock_bigip_2.delete.side_effect = [
-            # DefaultRoute delete
-            MockResponse({}, 200),
             # RouteDomain delete
-            MockResponse({}, 200),
-            # VLAN delete
             MockResponse({}, 502, "something happened")
         ]
         data = [
             {
                 'store': {
                     'network': mock_network,
-                    'bigip': mock_bigip_1,
+                    'bigip': mock_bigip_2,
                     'subnet_id': 'test-subnet-id',
                 }
             },
             {
                 'store': {
                     'network': mock_network,
-                    'bigip': mock_bigip_2,
+                    'bigip': mock_bigip_1,
                     'subnet_id': 'test-subnet-id',
                 }
             }
         ]
         self.assertRaises(Exception, self.manager._do_remove_l2_flow, data=data)
+        print(mock_bigip_1.mock_calls)
+        print(mock_bigip_2.mock_calls)
         # check that both devices were called and REVERT tasks were not called
         self.assertEqual(mock_bigip_1.get.call_count, 5)
-        self.assertEqual(mock_bigip_2.get.call_count, 5)
+        self.assertEqual(mock_bigip_2.get.call_count, 3)
         self.assertEqual(mock_bigip_1.post.call_count, 2)
-        self.assertEqual(mock_bigip_2.post.call_count, 1)
+        self.assertEqual(mock_bigip_2.post.call_count, 0)
         self.assertEqual(mock_bigip_1.delete.call_count, 3)
-        self.assertEqual(mock_bigip_2.delete.call_count, 3)
+        self.assertEqual(mock_bigip_2.delete.call_count, 0)
         bigip_1_post_calls = [
             # check that VLAN reverted
             mock.call(path='/mgmt/tm/net/vlan',
@@ -634,9 +635,3 @@ class TestL2SyncManager(base.TestCase):
                       json={'name': 'vlan-1234', 'vlans': ['/Common/vlan-1234'], 'id': '1234'}),
         ]
         mock_bigip_1.post.assert_has_calls(bigip_1_post_calls, any_order=True)
-        bigip_2_post_calls = [
-            # check that RouteDomain reverted
-            mock.call(path='/mgmt/tm/net/route-domain',
-                      json={'name': 'vlan-1234', 'vlans': ['/Common/vlan-1234'], 'id': '1234'}),
-        ]
-        mock_bigip_2.post.assert_has_calls(bigip_2_post_calls, any_order=True)
