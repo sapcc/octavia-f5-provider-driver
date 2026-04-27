@@ -17,7 +17,6 @@ from octavia_lib.common import constants as lib_consts
 from oslo_config import cfg
 from oslo_log import log as logging
 
-from octavia.common import exceptions
 from octavia_f5.common import constants as f5_const
 from octavia_f5.restclient import as3classes as as3, as3types
 from octavia_f5.restclient.as3objects import application as m_app
@@ -178,11 +177,8 @@ def get_service(listener, cert_manager, esd_repository, sg_rules):
 
         # Client Side Certificates
         if listener.client_ca_tls_certificate_id and listener.client_authentication != 'NONE':
-            try:
-                auth_name, secret = cert_manager.load_secret(project_id, listener.client_ca_tls_certificate_id)
-                entities.append((auth_name, m_cert.get_ca_bundle(secret, auth_name, auth_name)))
-            except exceptions.CertificateRetrievalException as e:
-                LOG.error("Error fetching certificate: %s", e)
+            auth_name, secret = cert_manager.load_secret(project_id, listener.client_ca_tls_certificate_id)
+            entities.append((auth_name, m_cert.get_ca_bundle(secret, auth_name, auth_name)))
 
         # TLS renegotiation has to be turned off for HTTP2, in order to be compliant.
         allow_renegotiation = not is_http2(listener)

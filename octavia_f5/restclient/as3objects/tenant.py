@@ -74,11 +74,14 @@ def get_tenant(segmentation_id, loadbalancers, self_ips, status_manager, cert_ma
                         # Error connecting to keystore, skip tenant update
                         raise e
 
-                    LOG.error("Could not retrieve certificate, assuming it is deleted, skipping "
+                    LOG.error("Could not retrieve certificate, assuming it is deleted, set ERROR status for "
                               "listener '%s': %s", listener.id, e)
                     if status_manager:
                         # Key / Container not found in keystore
                         status_manager.set_error(listener)
+                    else:
+                        LOG.debug(f"Status manager not set, impossible to set ERROR "
+                                  f"status for Listener '{listener.id}'")
 
         # Attach pools
         for pool in loadbalancer.pools:
