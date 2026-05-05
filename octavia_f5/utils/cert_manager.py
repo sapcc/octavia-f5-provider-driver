@@ -44,7 +44,8 @@ class CertManagerWrapper(object):
             octavia_exc.CertificateRetrievalException),
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS),
+        reraise=True)
     def get_certificates(self, obj, context=None):
         """Fetches certificates and creates dict out of octavia objects
 
@@ -85,7 +86,8 @@ class CertManagerWrapper(object):
             octavia_exc.CertificateRetrievalException),
         wait=tenacity.wait_incrementing(
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS),
+        reraise=True)
     def load_secret(self, project_id, secret_ref):
         """Loads secrets from secret store
 
