@@ -29,7 +29,7 @@ LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
 
-class EnsureVLAN(task.Task):
+class EnsureVLANHost(task.Task):
 
     """ Task to create or update VLAN if needed """
 
@@ -57,11 +57,6 @@ class EnsureVLAN(task.Task):
         if existing_vlan:
             return existing_vlan
 
-        # contrary to the EnsureVLAN task for iSeries devices, we don't need to patch the VLAN in this task,
-        # because it only contains the VLAN ID. In fact, comparing the existing_vlan dictionary with the payload
-        # would be misleading, since existing_vlan may also include the "members" key, which can change pretty
-        # much arbitrarily.
-
         # create missing VLAN
         res = bigip.put(path=f"/api/data/openconfig-vlan:vlans/vlan={vlan_id}", json=payload)
         res.raise_for_status()
@@ -72,14 +67,23 @@ class EnsureVLAN(task.Task):
                existing_vlan, *args, **kwargs):
         vlan_id = network.vlan_id
         if existing_vlan is not None:
-            LOG.warning(f"EnsureVLAN revert: Not deleting VLAN {vlan_id}, since it existed before "
-                        f"the task was run: {existing_vlan}")
+            LOG.warning(f"EnsureVLANHost revert: Not deleting VLAN {vlan_id}, "
+                        f"since it existed before the task was run: {existing_vlan}")
             return
         res = bigip.delete(path=f"/api/data/openconfig-vlan:vlans/vlan={vlan_id}")
         if not res.ok:
-            LOG.warning("EnsureVLAN revert: Failed removing VLAN on the device %s for "
+            LOG.warning("EnsureVLANHost revert: Failed removing VLAN on the device %s for "
                         "vlan_id=%s: %s", bigip.hostname, vlan_id, res.content)
         res.raise_for_status()
+
+
+class EnsureVLANGuest(task.Task):
+    pass
+    # contrary to the EnsureVLANGuest task for iSeries devices, we don't need
+    # to patch the VLAN in this task, because it only contains the VLAN ID. In
+    # fact, comparing the existing_vlan dictionary with the payload would be
+    # misleading, since existing_vlan may also include the "members" key, which
+    # can change pretty much arbitrarily.
 
 
 class GetExistingVLAN(task.Task):

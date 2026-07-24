@@ -30,10 +30,10 @@ LOG = logging.getLogger(__name__)
 CONF = cfg.CONF
 
 
-class EnsureVLAN(task.Task):
+class EnsureVLANHost(task.Task):
     default_provides = 'device_vlan'
 
-    """ Task to create or update VLAN if needed """
+    """ Task to create VLAN on the host, if needed """
 
     @decorators.RaisesIControlRestError()
     @tenacity.retry(
@@ -54,35 +54,68 @@ class EnsureVLAN(task.Task):
             'syncacheThreshold': CONF.networking.syncache_threshold
         }
 
-        # Create vlan if not existing
-        if existing_vlan is None:
-            res = bigip.post(path='/mgmt/tm/net/vlan', json=vlan)
-            res.raise_for_status()
-            return res.json()
+        # check whether VLAN already exists
+        if existing_vlan is not None:
+            return existing_vlan
 
-        # patch VLAN if it differs (<= is a subset operator here)
-        if not vlan.items() <= existing_vlan.items():
-            res = bigip.patch(path=f"/mgmt/tm/net/vlan/~Common~{vlan['name']}",
-                              json=vlan)
-            res.raise_for_status()
-            return res.json()
-
-        # No Changes needed
-        return existing_vlan
+        # create vlan
+        res = bigip.post(path='/mgmt/tm/net/vlan', json=vlan)
+        res.raise_for_status()
+        return res.json()
 
     @decorators.RaisesIControlRestError()
     def revert(self, network: f5_network_models.Network,
                bigip: bigip_restclient.BigIPRestClient,
                existing_vlan, *args, **kwargs):
         if existing_vlan is not None:
-            LOG.warning(f"Reverting EnsureVLAN: Not deleting VLAN, since it existed before "
+            LOG.warning(f"Reverting EnsureVLANHost: Not deleting VLAN, since it existed before "
                         f"the task was run: {existing_vlan}")
             return
         res = bigip.delete(path=f"/mgmt/tm/net/vlan/~Common~vlan-{network.vlan_id}")
         if not res.ok:
-            LOG.warning("Reverting EnsureVLAN: Failed removing VLAN on the device %s for "
+            LOG.warning("Reverting EnsureVLANHost: Failed removing VLAN on the device %s for "
                         "vlan_id=%s: %s", bigip.hostname, network.vlan_id, res.content)
             res.raise_for_status()
+
+
+class EnsureVLANGuest(task.Task):
+    default_provides = 'device_vlan'
+
+    """ Task to patch the VLAN on the guest, if needed """
+
+    @decorators.RaisesIControlRestError()
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(requests.HTTPError),
+        wait=tenacity.wait_fixed(2),
+        stop=tenacity.stop_after_attempt(3)
+    )
+    def execute(self,
+                bigip: bigip_restclient.BigIPRestClient,
+                network: f5_network_models.Network):
+        vlan = {
+            'name': f'vlan-{network.vlan_id}',
+            'tag': network.vlan_id,
+            'mtu': network.mtu,
+            'hardwareSyncookie': 'enabled' if CONF.networking.hardware_syncookie else 'disabled',
+            'synFloodRateLimit': CONF.networking.syn_flood_rate_limit,
+            'syncacheThreshold': CONF.networking.syncache_threshold
+        }
+
+        # check that VLAN has been auto-created by host
+        path = f"/mgmt/tm/net/vlan/~Common~{vlan['name']}?expandSubcollections=true"
+        device_response = bigip.get(path=path)
+        device_response.raise_for_status()
+        device_vlan = device_response.json()
+
+        # check whether VLAN is already complete ('<=' is a subset operator here)
+        if vlan.items() <= device_vlan.items():
+            return device_vlan
+
+        res = bigip.patch(path=f"/mgmt/tm/net/vlan/~Common~{vlan['name']}", json=vlan)
+        return res.json()
+
+    def revert(self, *args, **kwargs):
+        LOG.warning("Reverting EnsureVLANHost: Not unpatching VLAN")
 
 
 class EnsureVLANInterface(task.Task):
@@ -260,7 +293,8 @@ class GetExistingVLAN(task.Task):
 
     def execute(self, bigip: bigip_restclient.BigIPRestClient,
                 network: f5_network_models.Network):
-        device_response = bigip.get(path=f"/mgmt/tm/net/vlan/~Common~vlan-{network.vlan_id}?expandSubcollections=true")
+        vlan_name = f"vlan-{network.vlan_id}"
+        device_response = bigip.get(path=f"/mgmt/tm/net/vlan/~Common~{vlan_name}?expandSubcollections=true")
         if device_response.status_code == 404:
             return None
         return device_response.json()
@@ -567,7 +601,7 @@ class RemoveVLAN(task.Task):
     def execute(self, network: f5_network_models.Network,
                 bigip: bigip_restclient.BigIPRestClient,
                 existing_vlan: dict):
-        """ Task to delete VLAN """
+        """ Task to delete VLAN, if it exists """
         if existing_vlan is None:
             return
         res = bigip.delete(path=f"/mgmt/tm/net/vlan/~Common~vlan-{network.vlan_id}")

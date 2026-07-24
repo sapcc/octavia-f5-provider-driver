@@ -81,16 +81,12 @@ class F5Flows(object):
         ensure_default_route = self.tasks.EnsureDefaultRoute(
             name=f'ensure-default-route-{bigip_hostname}',
             inject=store)
-        get_existing_vlan = self.tasks.GetExistingVLAN(
-            name=f'get-existing-vlan-{bigip_hostname}',
-            inject=store)
-        ensure_vlan = self.tasks.EnsureVLAN(
-            name=f'ensure-vlan-{bigip_hostname}',
+        ensure_vlan = self.tasks.EnsureVLANGuest(
+            name=f'ensure-vlan-guest-{bigip_hostname}',
             inject=store)
 
         ensure_l2_flow = linear_flow.Flow(f'ensure-l2-flow-{bigip_hostname}')
-        ensure_l2_flow.add(get_existing_vlan,
-                           ensure_vlan,
+        ensure_l2_flow.add(ensure_vlan,
                            get_existing_route_domain,
                            ensure_route_domain,
                            # SelfIPs must be present for routes to work
@@ -303,7 +299,7 @@ class F5Flows(object):
 
     def make_ensure_vcmp_l2_flow(self) -> flow.Flow:
         get_existing_vlan = self.tasks.GetExistingVLAN()
-        ensure_vlan = self.tasks.EnsureVLAN()
+        ensure_vlan = self.tasks.EnsureVLANHost()
         ensure_vlan_interface = self.tasks.EnsureVLANInterface()
         ensure_vlan_guest_assignment = self.tasks.EnsureVLANGuestAssignment()
 
