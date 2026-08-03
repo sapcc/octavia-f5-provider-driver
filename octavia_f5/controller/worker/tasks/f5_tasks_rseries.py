@@ -77,15 +77,6 @@ class EnsureVLANHost(task.Task):
         res.raise_for_status()
 
 
-class EnsureVLANGuest(task.Task):
-    pass
-    # contrary to the EnsureVLANGuest task for iSeries devices, we don't need
-    # to patch the VLAN in this task, because it only contains the VLAN ID. In
-    # fact, comparing the existing_vlan dictionary with the payload would be
-    # misleading, since existing_vlan may also include the "members" key, which
-    # can change pretty much arbitrarily.
-
-
 class GetExistingVLAN(task.Task):
     default_provides = 'existing_vlan'
 
