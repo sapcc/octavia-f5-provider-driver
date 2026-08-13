@@ -15,6 +15,10 @@
 from queue import Queue
 
 
+# FIXME:
+# - maxsize is only respected by put, not by put_priority
+# - rename to something sensible like e. g. DeduplicatingPriorityQueue (or
+#   DedupPrioQueue, though that doesn't fit with the stdlib PriorityQueue naming)
 class SetQueue(Queue):
     """
     A thread-safe queue that stores unique items using sets and supports
@@ -32,13 +36,14 @@ class SetQueue(Queue):
 
     def put_priority(self, item):
         """Add an item to the priority queue."""
-        if item not in self.priority_queue:
-            self.priority_queue.append(item)
-        if item in self.queue:
-            self.queue.remove(item)
-        # notify polling threads
-        with self.not_empty:  # acquire self.mutex for self.not_empty
-            self.not_empty.notify()
+        with self.not_full:
+            if item not in self.priority_queue:
+                self.priority_queue.append(item)
+            if item in self.queue:
+                self.queue.remove(item)
+            # notify polling threads
+            with self.not_empty:  # acquire self.mutex for self.not_empty
+                self.not_empty.notify()
 
     def _put(self, item):
         if item not in self.priority_queue and item not in self.queue:
