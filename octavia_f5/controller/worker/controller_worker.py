@@ -82,8 +82,7 @@ class ControllerWorker(object):
 
         # start thread for reconciliation loop, full sync loop, orphan cleanup loop
         worker = periodics.PeriodicWorker(
-            [(self.pending_sync, None, None),
-             (self.full_sync_reappearing_devices, None, None),
+            [(self.full_sync_reappearing_devices, None, None),
              (self.cleanup_orphaned_tenants, None, None),
              (self.full_sync_l2, None, None)]
         )
@@ -230,82 +229,6 @@ class ControllerWorker(object):
             loadbalancers = self._loadbalancer_repo.get_all_from_host(
                 session, show_deleted=False)
         self.l2sync.full_sync(loadbalancers)
-
-    @periodics.periodic(60 * 2, run_immediately=CONF.f5_agent.sync_immediately)
-    def pending_sync(self):
-        """
-        Reconciliation loop that
-        - synchronizes load balancers that are in a PENDING state
-        - deletes load balancers that are PENDING_DELETE
-        - executes a full sync on F5 devices that were offline but are now back online
-        """
-        try:
-            session = db_apis.get_session()
-        except enginefacade.AlreadyStartedError:
-            # handle race condition for sessions initialisation, skip one sync
-            return
-        # delete load balancers that are PENDING_DELETE
-        with session.begin():
-            lbs_to_delete = self._loadbalancer_repo.get_all_from_host(
-                session, provisioning_status=lib_consts.PENDING_DELETE)
-        for lb in lbs_to_delete:
-            LOG.info("Found pending deletion of lb %s", lb.id)
-            self.delete_load_balancer({octavia_consts.LOADBALANCER_ID: lb.id})
-
-        # Find pending loadbalancer not yet finally assigned to this host
-        lbs = []
-        with session.begin():
-            pending_create_lbs = self._loadbalancer_repo.get_all(
-                session,
-                provisioning_status=lib_consts.PENDING_CREATE,
-                show_deleted=False)[0]
-        for lb in pending_create_lbs:
-            # bind to loadbalancer if scheduled to this host
-            try:
-                if ((lb.server_group_id and CONF.host == lb.server_group_id) or
-                        (CONF.host == self.network_driver.get_scheduled_host(lb.vip.port_id))):
-                    self.ensure_host_set(lb)
-                    lbs.append(lb)
-            except base.NetworkException as exc:
-                with db_apis.session().begin() as editor_ses:
-                    self._loadbalancer_repo.update(
-                        editor_ses,
-                        id=lb.id,
-                        provisioning_status=lib_consts.ERROR,
-                        force_provisioning_status=True)
-                LOG.error(f"Failed to get scheduled host for LB {lb.id} with "
-                          f"error {exc}. Provisioning status for loadbalancer set "
-                          "to ERROR.")
-        # Find pending loadbalancer
-        with session.begin():
-            lbs.extend(self._loadbalancer_repo.get_all_from_host(
-                session,
-                provisioning_status=lib_consts.PENDING_UPDATE))
-
-        # Make the Octavia health manager happy by creating DB amphora entries
-        for lb in lbs:
-            self.ensure_amphora_exists(lb.id)
-
-        # Find pending listener
-        with session.begin():
-            listeners = self._listener_repo.get_pending_from_host(session)
-        lbs.extend([listener.load_balancer for listener in listeners])
-
-        # Find pending pools
-        with session.begin():
-            pools = self._pool_repo.get_pending_from_host(session)
-        lbs.extend([pool.load_balancer for pool in pools])
-
-        # Find pending l7policies
-        with session.begin():
-            l7policies = self._l7policy_repo.get_pending_from_host(session)
-        lbs.extend([l7policy.listener.load_balancer for l7policy in l7policies])
-
-        # Deduplicate into networks
-        # because each network is synced separately
-        pending_networks = set(lb.vip.network_id for lb in lbs)
-        for network_id in pending_networks:
-            self.queue.put_priority((network_id, None))
 
     @tenacity.retry(
         retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
@@ -492,6 +415,7 @@ class ControllerWorker(object):
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
     def batch_update_members(self, old_members, new_members,
                              updated_members):
+        LOG.warning(f"FOOBARBAZ batch_update_members driver RPC endpoint received payload: old_members=={old_members} new_members=={new_members} updated_members=={updated_members}")
         session = db_apis.get_session()
         with session.begin():
             old_members = [
@@ -521,7 +445,9 @@ class ControllerWorker(object):
         elif updated_members:
             pool = updated_members[0][0][octavia_consts.POOL_ID]
         else:
+            LOG.warning("FOOBARBAZ batch_update_members driver RPC endpoint returning since nothing set")
             return
+        LOG.warning("FOOBARBAZ batch_update_members driver RPC endpoint putting network on queue")
         self.queue.put_priority((pool.load_balancer.vip.network_id, None))
 
     def update_member(self, member, member_updates):

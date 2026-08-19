@@ -183,6 +183,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
                    'new_members': [],
                    'updated_members': []}
         client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
+        LOG.warning(f"FOOBARBAZ sending batch_update_members to driver with payload: {payload}")
         client.cast({}, 'batch_update_members', **payload)
 
     # Health Monitor
