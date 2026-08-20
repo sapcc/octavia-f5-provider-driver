@@ -101,11 +101,13 @@ class TestF5Flows(base.TestCase):
         engines.run(ensure_l2_flow, store=store)
 
         # check that VLAN, RD, SelfIP, and default route have been created
-        calls = [
+        patch_calls = [
             mock.call(json={'name': 'vlan-1234', 'tag': 1234,
                             'mtu': 9000, 'hardwareSyncookie': 'enabled',
                             'synFloodRateLimit': 2000, 'syncacheThreshold': 32000},
-                      path='/mgmt/tm/net/vlan'),
+                      path='/mgmt/tm/net/vlan/~Common~vlan-1234')
+        ]
+        post_calls = [
             mock.call(json={'name': 'vlan-1234', 'id': 1234,
                             'vlans': ['/Common/vlan-1234']},
                       path='/mgmt/tm/net/route-domain'),
@@ -118,9 +120,10 @@ class TestF5Flows(base.TestCase):
                             'network': 'default%1234'},
                       path='/mgmt/tm/net/route')
         ]
-        mock_bigip.post.assert_has_calls(calls, any_order=True)
+        mock_bigip.patch.assert_has_calls(patch_calls)
+        # any_order to ignore the calls to raise_for_status() and json()
+        mock_bigip.post.assert_has_calls(post_calls, any_order=True)
         mock_bigip.get.assert_called()
-        mock_bigip.patch.assert_not_called()
 
     @mock.patch("octavia.network.drivers.noop_driver.driver.NoopManager"
                 ".get_subnet")
