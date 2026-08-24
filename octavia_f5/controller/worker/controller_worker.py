@@ -524,6 +524,15 @@ class ControllerWorker(object):
             return
         self.queue.put_priority((pool.load_balancer.vip.network_id, None))
 
+    @tenacity.retry(
+        retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
+        wait=tenacity.wait_incrementing(
+            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
+        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
+    def batch_update_members_all_pools(self, loadbalancer):
+        network_id = loadbalancer['vip_network_id']
+        self.queue.put_priority((network_id, None))
+
     def update_member(self, member, member_updates):
         with db_apis.session().begin() as session:
             db_member = self._member_repo.get(

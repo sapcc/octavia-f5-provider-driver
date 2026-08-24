@@ -185,6 +185,13 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
         client.cast({}, 'batch_update_members', **payload)
 
+    def member_batch_update_all_pools(self, loadbalancer):
+        lb_dict = loadbalancer.to_dict()
+        payload = {consts.LOADBALANCER: lb_dict}
+        loadbalancer_id = lb_dict['loadbalancer_id']
+        client = self.client.prepare(server=self._get_server(loadbalancer_id))
+        client.cast({}, 'batch_update_members_all_pools', **payload)
+
     # Health Monitor
     def _health_monitor_check(self, healthmonitor):
         delay = healthmonitor.delay
