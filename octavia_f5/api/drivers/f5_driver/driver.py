@@ -179,6 +179,8 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
     def member_batch_update(self, pool_id, members):
         with db_apis.session().begin() as session:
             db_pool = self.repositories.pool.get(session, id=pool_id)
+        # we don't know which members are old/new/updated, we only know that
+        # `members` are the ones that changed in some way.
         payload = {'old_members': [],
                    'new_members': [],
                    'updated_members': []}
@@ -187,6 +189,7 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
 
     def member_batch_update_all_pools(self, loadbalancer):
         lb_dict = loadbalancer.to_dict()
+        LOG.warning(f"member_batch_update_all_pools driver calling RPC with loadbalancer=={lb_dict}")
         payload = {consts.LOADBALANCER: lb_dict}
         loadbalancer_id = lb_dict['loadbalancer_id']
         client = self.client.prepare(server=self._get_server(loadbalancer_id))

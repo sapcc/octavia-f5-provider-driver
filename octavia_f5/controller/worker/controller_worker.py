@@ -530,7 +530,9 @@ class ControllerWorker(object):
             RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
         stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
     def batch_update_members_all_pools(self, loadbalancer):
+        LOG.warning(f"FOOBARBAZ batch_update_members_all_pools got loadbalancer=={loadbalancer}")
         network_id = loadbalancer['vip_network_id']
+        LOG.warning(f"FOOBARBAZ batch_update_members_all_pools: Network {network_id}")
         self.queue.put_priority((network_id, None))
 
     def update_member(self, member, member_updates):
