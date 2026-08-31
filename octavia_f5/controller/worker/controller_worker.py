@@ -524,6 +524,10 @@ class ControllerWorker(object):
             return
         self.queue.put_priority((pool.load_balancer.vip.network_id, None))
 
+    def batch_update_members_all_pools(self, loadbalancer):
+        network_id = loadbalancer['vip_network_id']
+        self.queue.put_priority((network_id, None))
+
     def update_member(self, member, member_updates):
         with db_apis.session().begin() as session:
             db_member = self._member_repo.get(
