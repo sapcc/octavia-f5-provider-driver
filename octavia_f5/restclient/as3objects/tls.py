@@ -16,7 +16,6 @@ from oslo_config import cfg
 from oslo_log import log as logging
 
 from octavia_lib.common import constants as lib_consts
-from octavia.common import validate
 from octavia_f5.common import constants
 from octavia_f5.restclient.as3classes import TLS_Server, TLS_Client, Pointer
 
@@ -40,33 +39,6 @@ def get_pool_name(pool_id):
     :return: AS3 object name
     """
     return f"{constants.PREFIX_TLS_POOL}{pool_id}"
-
-
-def filter_cipher_suites(cipher_suites, object_print_name, object_id):
-    """Filter out cipher suites according to blocklist and allowlist.
-
-    This is necessary, because there can be invalid cipher suites if e.g. a
-    previously allowed cipher suite was added to the blocklist recently and
-    listeners/pools using the cipher suite already existed.
-
-    :param cipher_suites: String containing colon-separated list of cipher suites.
-    :param object_print_name: A printable representation of the object to be logged, e.g. "Listener" or "Pool".
-    :param object_id: ID of the object the cipher suites belong to. This is used for logging, so it should be a string.
-    :return String containing colon-separated list of non-blocked/allowed cipher suites.
-    """
-
-    blocked_cipher_suites = validate.check_cipher_prohibit_list(cipher_suites)
-    disallowed_cipher_suites = validate.check_cipher_allow_list(cipher_suites)
-    rejected_cipher_suites = list(set(blocked_cipher_suites + disallowed_cipher_suites))
-
-    cipher_suites_list = cipher_suites.split(':')
-    if rejected_cipher_suites:
-        LOG.error(f"{object_print_name} object with ID {object_id} has invalid "
-                  f"cipher suites which won't be provisioned: {', '.join(rejected_cipher_suites)}")
-        for c in rejected_cipher_suites:
-            cipher_suites_list.remove(c)
-
-    return ':'.join(cipher_suites_list)
 
 
 def get_tls_server(certificate_ids, listener, authentication_ca=None, allow_renegotiation=True, cipher_group=None):
