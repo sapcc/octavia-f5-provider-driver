@@ -177,12 +177,24 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         client.cast({}, 'update_member', **payload)
 
     def member_batch_update(self, pool_id, members):
+
+        # get LB for network ID and worker
         with db_apis.session().begin() as session:
             db_pool = self.repositories.pool.get(session, id=pool_id)
+            lb_id = db_pool.load_balancer_id
+
+        # We cannot change the RPC method signature (without carrying another
+        # custom patch around with us), so instead we exploit dynamic typing,
+        # by simply using the existing liberal signature with other semantics:
+        # passing the network ID instead of a member ID. Because the network ID
+        # is all the F5 provider driver needs.
+        network_id = db_pool.load_balancer.vip.network_id
+        # Endpoints::batch_update_members gets the member IDs from the lists,
+        # so we have to smuggle the network ID in there.
         payload = {'old_members': [],
                    'new_members': [],
-                   'updated_members': []}
-        client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
+                   'updated_members': [{consts.ID: network_id}]}
+        client = self.client.prepare(server=self._get_server(lb_id))
         client.cast({}, 'batch_update_members', **payload)
 
     def member_batch_update_all_pools(self, loadbalancer):
