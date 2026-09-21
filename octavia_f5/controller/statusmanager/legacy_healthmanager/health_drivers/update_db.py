@@ -411,9 +411,12 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                         {'pool': pool_id,
                          'status': pool.get('status')})
 
-        # Deal with the members that are reporting from
-        # the Amphora
+        # Deal with the members that are reporting from the Amphora -
+        # compute status of all members before writing to DB so we
+        # can update the pool before its members. This avoids deadlocks
+        # with other requests that lock pool then members (e.g. API member PUT).
         members = pool['members']
+        member_statuses = []
         for member_id in db_pool_dict.get('members', {}):
             member_status = None
             member_db_status = (
@@ -457,15 +460,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                                 {'mem': member_id,
                                  'status': status})
 
-            try:
-                if (member_status is not None and
-                        member_status != member_db_status):
-                    self._update_status(
-                        session, self.member_repo, constants.MEMBER,
-                        member_id, member_status, member_db_status)
-            except sqlalchemy_exceptions.NoResultFound:
-                LOG.error("Member %s is not able to update "
-                          "in DB", member_id)
+            member_statuses.append((member_id, member_status, member_db_status))
 
         try:
             if (pool_status is not None and
@@ -475,6 +470,17 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
                     pool_id, pool_status, db_pool_dict['operating_status'])
         except sqlalchemy_exceptions.NoResultFound:
             LOG.error("Pool %s is not in DB", pool_id)
+
+        for member_id, member_status, member_db_status in member_statuses:
+            try:
+                if (member_status is not None and
+                        member_status != member_db_status):
+                    self._update_status(
+                        session, self.member_repo, constants.MEMBER,
+                        member_id, member_status, member_db_status)
+            except sqlalchemy_exceptions.NoResultFound:
+                LOG.error("Member %s is not able to update "
+                          "in DB", member_id)
 
         return lb_status
 
