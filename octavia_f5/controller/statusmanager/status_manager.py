@@ -341,8 +341,8 @@ class StatusManager(object):
         - 'BOOTING': Device is online but needs a full sync, because it was offline before.
           It is the responsibility of the syncing mechanism to set the status to 'READY' again.
         """
-        with DatabaseLockSession() as session:
-            for bigip in self.bigips:
+        for bigip in self.bigips:
+            with DatabaseLockSession() as session:
                 amp_dict = {
                     'compute_flavor': CONF.host,
                     'load_balancer_id': None,
