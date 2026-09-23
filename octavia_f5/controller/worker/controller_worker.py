@@ -487,14 +487,12 @@ class ControllerWorker(object):
 
     def batch_update_members(self, old_members, new_members,
                              updated_members):
-        # Network ID is "smuggled" in one of the parameters, since the
-        # RPC method signature can't be changed. See the comment on
-        # member_batch_update in driver.py
-        if len(updated_members) < 1:
-            # fail silently, if nothing provided
-            return
-        network_id = updated_members[0][octavia_consts.ID]
-        self.queue.put_priority((network_id, None))
+        # Kept for compatibility with the core octavia controller worker
+        # interface; the F5 driver queues LB updates through
+        # batch_update_members_all_pools instead.
+        LOG.warning('batch_update_members is not used by the F5 driver, '
+                    'the loadbalancer will be picked up by the periodic '
+                    'sync')
 
     def batch_update_members_all_pools(self, loadbalancer):
         network_id = loadbalancer['vip_network_id']

@@ -114,3 +114,29 @@ class TestControllerWorker(base.TestCase):
         mock_lb_repo_get.assert_called_once_with(begin_session, id=LB_ID)
         mock_ensure_selfips.assert_called_with([_load_balancer_mock], CONF.host, cleanup_orphans=False)
         mock_cleanup_selfips.assert_called_with([_selfip])
+
+    @mock.patch.object(controller_worker.SetQueue, 'put_priority')
+    def test_batch_update_members_all_pools_puts_network_on_queue(self,
+                                                                  mock_put_priority,
+                                                                  mock_api_session,
+                                                                  mock_sync_manager,
+                                                                  mock_status_manager):
+        cw = controller_worker.ControllerWorker()
+        # this is the endpoint used by member_batch_update in driver.py
+        cw.batch_update_members_all_pools({'vip_network_id': NETWORK_ID})
+        mock_put_priority.assert_called_once_with((NETWORK_ID, None))
+        # no DB transaction needed to find the network
+        mock_api_session.assert_not_called()
+
+    @mock.patch.object(controller_worker.SetQueue, 'put_priority')
+    def test_batch_update_members_is_noop(self,
+                                          mock_put_priority,
+                                          mock_api_session,
+                                          mock_sync_manager,
+                                          mock_status_manager):
+        cw = controller_worker.ControllerWorker()
+        # kept for compatibility with the core octavia worker interface,
+        # but must not touch the queue or the DB
+        cw.batch_update_members([], [], [])
+        mock_put_priority.assert_not_called()
+        mock_api_session.assert_not_called()
