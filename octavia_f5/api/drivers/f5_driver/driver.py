@@ -177,13 +177,16 @@ class F5ProviderDriver(driver.AmphoraProviderDriver,
         client.cast({}, 'update_member', **payload)
 
     def member_batch_update(self, pool_id, members):
+        # The RPC signature of batch_update_members only allows member
+        # lists, so reuse the all-pools endpoint instead: the worker only
+        # needs the loadbalancer's network ID to put it on the sync queue.
         with db_apis.session().begin() as session:
             db_pool = self.repositories.pool.get(session, id=pool_id)
-        payload = {'old_members': [],
-                   'new_members': [],
-                   'updated_members': []}
-        client = self.client.prepare(server=self._get_server(db_pool.load_balancer_id))
-        client.cast({}, 'batch_update_members', **payload)
+            lb = db_pool.load_balancer
+        payload = {consts.LOADBALANCER: {consts.LOADBALANCER_ID: lb.id,
+                                         consts.VIP_NETWORK_ID: lb.vip.network_id}}
+        client = self.client.prepare(server=self._get_server(lb.id))
+        client.cast({}, 'batch_update_members_all_pools', **payload)
 
     def member_batch_update_all_pools(self, loadbalancer):
         lb_dict = loadbalancer.to_dict()
