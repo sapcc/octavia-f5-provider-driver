@@ -485,44 +485,16 @@ class ControllerWorker(object):
         self.ensure_amphora_exists(db_member.pool.load_balancer.id)
         self.queue.put_priority((db_member.pool.load_balancer.vip.network_id, None))
 
-    @tenacity.retry(
-        retry=tenacity.retry_if_exception_type(db_exceptions.NoResultFound),
-        wait=tenacity.wait_incrementing(
-            RETRY_INITIAL_DELAY, RETRY_BACKOFF, RETRY_MAX),
-        stop=tenacity.stop_after_attempt(RETRY_ATTEMPTS))
     def batch_update_members(self, old_members, new_members,
                              updated_members):
-        session = db_apis.get_session()
-        with session.begin():
-            old_members = [
-                self._member_repo.get(
-                    session, id=mid[octavia_consts.MEMBER_ID])
-                for mid in old_members]
-        with session.begin():
-            db_new_members = [
-                self._member_repo.get(
-                    session, id=mid[octavia_consts.MEMBER_ID])
-                for mid in new_members]
-        # The API may not have committed all of the new member records yet.
-        # Make sure we retry looking them up.
-        if None in db_new_members or len(db_new_members) != len(new_members):
-            LOG.warning('Failed to fetch one of the new members from DB. '
-                        'Retrying for up to 60 seconds.')
-            raise db_exceptions.NoResultFound
-        with session.begin():
-            updated_members = [
-                (self._member_repo.get(
-                    session, id=m.get(octavia_consts.MEMBER_ID)), m)
-                for m in updated_members]
-        if old_members:
-            pool = old_members[0][octavia_consts.POOL_ID]
-        elif new_members:
-            pool = new_members[0][octavia_consts.POOL_ID]
-        elif updated_members:
-            pool = updated_members[0][0][octavia_consts.POOL_ID]
-        else:
+        # Network ID is "smuggled" in one of the parameters, since the
+        # RPC method signature can't be changed. See the comment on
+        # member_batch_update in driver.py
+        if len(updated_members) < 1:
+            # fail silently, if nothing provided
             return
-        self.queue.put_priority((pool.load_balancer.vip.network_id, None))
+        network_id = updated_members[0][octavia_consts.ID]
+        self.queue.put_priority((network_id, None))
 
     def batch_update_members_all_pools(self, loadbalancer):
         network_id = loadbalancer['vip_network_id']
