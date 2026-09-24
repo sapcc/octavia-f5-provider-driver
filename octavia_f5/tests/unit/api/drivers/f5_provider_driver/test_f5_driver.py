@@ -207,6 +207,24 @@ class TestF5Driver(base.TestRpc):
                    consts.MEMBER_UPDATES: {}}
         mock_cast.assert_called_with({}, 'update_member', **payload)
 
+    @mock.patch('octavia.db.repositories.LoadBalancerRepository.get')
+    @mock.patch('octavia.db.repositories.PoolRepository.get')
+    @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
+    def test_member_batch_update(self, mock_cast, mock_pool_get, mock_lb_get):
+        mock_pool = mock.MagicMock()
+        mock_pool.load_balancer.id = self.sample_data.lb_id
+        mock_pool.load_balancer.vip.network_id = self.sample_data.network_id
+        mock_pool_get.return_value = mock_pool
+        mock_lb = mock.MagicMock()
+        mock_lb.id = self.sample_data.lb_id
+        mock_lb.server_group_id = 'test_host'
+        mock_lb_get.return_value = mock_lb
+        self.amp_driver.member_batch_update(self.sample_data.pool1_id, [])
+        # reuses the all-pools endpoint, which only needs the network ID
+        payload = {consts.LOADBALANCER: {consts.LOADBALANCER_ID: self.sample_data.lb_id,
+                                         consts.VIP_NETWORK_ID: self.sample_data.network_id}}
+        mock_cast.assert_called_with({}, 'batch_update_members_all_pools', **payload)
+
     # L7 Policy
     @mock.patch('oslo_messaging.rpc.client._BaseCallContext.cast')
     def test_l7policy_create(self, mock_cast):
