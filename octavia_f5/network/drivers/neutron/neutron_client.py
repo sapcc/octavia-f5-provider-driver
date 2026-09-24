@@ -242,7 +242,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
                 engine.run()
                 storage = engine.storage.fetch_all()
                 selfips = storage.get("selfips", [[]])[0]
-                LOG.debug("Successfully deallocated VIP %s, deleted SelfIPs: %s",
+                LOG.debug("Successfully deallocated VIP for port %s, deleted SelfIPs: %s",
                           vip.port_id, [selfip['id'] for selfip in selfips])
         except exceptions.OctaviaException as e:
             raise base.DeallocateVIPException(e)
