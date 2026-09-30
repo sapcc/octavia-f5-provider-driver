@@ -417,7 +417,7 @@ class UpdateHealthDb(update_base.HealthUpdateBase):
         # with other requests that lock pool then members (e.g. API member PUT).
         members = pool['members']
         member_statuses = []
-        for member_id in db_pool_dict.get('members', {}):
+        for member_id in sorted(db_pool_dict.get('members', {})):
             member_status = None
             member_db_status = (
                 db_pool_dict['members'][member_id]['operating_status'])
