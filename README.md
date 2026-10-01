@@ -37,7 +37,7 @@ We try to name the parameters on the Elektra web GUI in an explanatory way.
 
 [1] [Original Elektra PR](https://github.com/sapcc/elektra/pull/1175) superseeded by [new Elektra PR](https://github.com/sapcc/elektra/pull/1179) which has been merged
 
-[2] Calculated from database parameters like this: `fall_threshold * delay + 1` (see [code](https://github.com/sapcc/octavia-f5-provider-driver/blob/stable/yoga-m3/octavia_f5/restclient/as3objects/monitor.py#L115-L124))
+[2] Calculated from database parameters like this: `fall_threshold * delay + 1` (see [code](https://github.com/sapcc/octavia-f5-provider-driver/blob/stable/2025.1-m3/octavia_f5/restclient/as3objects/monitor.py#L110-L119))
 
 
 ## Special database handling
