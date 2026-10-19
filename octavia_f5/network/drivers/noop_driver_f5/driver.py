@@ -46,6 +46,10 @@ class NoopNetworkDriverF5(driver.NoopNetworkDriver):
     def cleanup_selfips(self, selfips):
         return
 
+    def release_vip(self, vip):
+        LOG.debug("Network %s no-op, release_vip VIP port %s",
+                  self.__class__.__name__, vip.port_id)
+
     def create_vip(self, load_balancer, candidate):
         return self.driver.create_port(load_balancer.vip.network_id)
 

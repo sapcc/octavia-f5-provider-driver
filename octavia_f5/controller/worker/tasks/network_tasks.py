@@ -148,6 +148,34 @@ class CreateVIPPort(BaseNetworkTask):
         self.network_driver.delete_port(result.id)
 
 
+class ClaimVIPPort(BaseNetworkTask):
+    """Claim a caller-provided VIP port instead of creating one (octavia-issues#66)."""
+    default_provides = ('vip_port', 'vip_port_original')
+
+    def execute(self, load_balancer: data_models.LoadBalancer,
+                candidate: str) -> Tuple[network_models.Port, dict]:
+        return self.network_driver.claim_vip_port(load_balancer, candidate)
+
+    def revert(self, result, load_balancer: data_models.LoadBalancer,
+               *args, **kwargs):
+        """Give the port back its original attributes if the flow failed."""
+        if isinstance(result, failure.Failure):
+            LOG.error("ClaimVIPPort: unable to claim VIP port %s",
+                      load_balancer.vip.port_id)
+            return
+        vip_port, original = result
+        LOG.warning("Reverting: restoring original attributes of VIP port %s",
+                    vip_port.id)
+        self.network_driver.restore_vip_port(vip_port.id, original)
+
+
+class ReleaseVIP(BaseNetworkTask):
+    """Hand a caller-owned VIP port back instead of deleting it."""
+
+    def execute(self, port_id, load_balancer_id):
+        self.network_driver.release_vip_port(port_id, load_balancer_id)
+
+
 class GetVIPFromLoadBalancer(BaseNetworkTask):
     default_provides = 'vip_port'
 

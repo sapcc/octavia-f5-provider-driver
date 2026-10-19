@@ -22,6 +22,7 @@ from oslo_log import log as logging
 
 from octavia.api.drivers.driver_agent import driver_updater
 from octavia.common import data_models
+from octavia.common import utils as octavia_utils
 from octavia.db import api as db_apis
 from octavia.db.repositories import AmphoraRepository
 from octavia_f5.utils import driver_utils as utils
@@ -30,10 +31,34 @@ CONF = cfg.CONF
 LOG = logging.getLogger(__name__)
 
 
+class DriverUpdater(driver_updater.DriverUpdater):
+    """Octavia's DriverUpdater, extended for VIP ports provided by the user.
+
+    When a load balancer becomes DELETED, Octavia only cleans up its VIP port
+    if vip.octavia_owned is set. The F5 network driver also claims VIP ports
+    that the user created and passed as vip_port_id (octavia-issues#66). Such
+    a port is not deleted but handed back to its project, otherwise it would
+    stay locked (device_owner network:f5listener) after the LB is gone.
+    """
+
+    def _check_for_lb_vip_deallocate(self, repo, lb_id):
+        with self.db_session.begin():
+            lb = repo.get(self.db_session, id=lb_id)
+        if lb.vip.octavia_owned is False:
+            vip = lb.vip
+            vip.load_balancer = lb
+            # An exception keeps the LB in PENDING_DELETE, so this is retried
+            # with the next sync, like deallocate_vip() for Octavia's ports.
+            octavia_utils.get_network_driver().release_vip(vip)
+            return
+        # octavia_owned True: delete the port, None: leave it (upstream)
+        super()._check_for_lb_vip_deallocate(repo, lb_id)
+
+
 class StatusManager(object):
 
     def __init__(self):
-        self._octavia_driver_updater = driver_updater.DriverUpdater()
+        self._octavia_driver_updater = DriverUpdater()
 
     def status_dict(self, obj, cascade=False):
         """ Returns status dict for octavia object,

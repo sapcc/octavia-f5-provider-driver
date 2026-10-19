@@ -70,7 +70,10 @@ EXP_MOCK_NEUTRON_PORT = {
 }
 
 
-class TestNeutronClient(base.TestCase):
+class NeutronClientTestCase(base.TestCase):
+    """NeutronClient with a mocked Neutron connection. Has no tests itself,
+    so other test modules can reuse it without running these tests again.
+    """
 
     def _instantiate_partial_abc(self, abclass):
         if "__abstractmethods__" not in abclass.__dict__:
@@ -85,6 +88,11 @@ class TestNeutronClient(base.TestCase):
     def setUp(self):
         super().setUp()
         mock.patch("tenacity.nap.time").start()
+        # Flow tasks open a DB session before calling the (mocked)
+        # repositories. Without this the tests only passed if another test
+        # module had started the DB engine before them.
+        mock.patch('octavia_f5.controller.worker.tasks.network_tasks.'
+                   'db_apis.session').start()
         with mock.patch('octavia.common.clients.openstack.connection.'
                         'Connection', autospec=True) as os_connection:
             self._original_find_extension = (
@@ -101,6 +109,9 @@ class TestNeutronClient(base.TestCase):
             # self.driver = neutron_driver.NeutronClient()
             self.driver = self._instantiate_partial_abc(
                 neutron_driver.NeutronClient)
+
+
+class TestNeutronClient(NeutronClientTestCase):
 
     @mock.patch('octavia_f5.db.repositories.LoadBalancerRepository.'
                 'get_all_by_network',
@@ -293,9 +304,20 @@ class TestNeutronClient(base.TestCase):
                                       mock.call('self-ip-id-1')],
                                      any_order=True)
 
-    def test_allocate_vip_when_port_already_provided(self):
-        get_port = self.driver.network_proxy.get_port
-        get_port.return_value = MOCK_NEUTRON_PORT
+    @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
+                return_value=[MOCK_CANDIDATE])
+    def test_allocate_vip_when_port_already_provided(self, mock_get_candidates):
+        # The provided port is used, not replaced by a new one. How it is
+        # claimed for the load balancer is tested in test_vip_port_ownership.
+        provided_port = Port(
+            id=t_constants.MOCK_PORT_ID,
+            network_id=t_constants.MOCK_NETWORK_ID,
+            device_id='', device_owner='', revision_number=1,
+            fixed_ips=[{'ip_address': t_constants.MOCK_IP_ADDRESS,
+                        'subnet_id': MOCK_SUBNET_ID}])
+        self.driver.network_proxy.get_port.return_value = provided_port
+        self.driver.network_proxy.update_port.return_value = provided_port
+        self.driver.network_proxy.ports.return_value = MOCK_NEUTRON_SELFIP_PORTS
         fake_lb_vip = data_models.Vip(
             port_id=t_constants.MOCK_PORT_ID,
             subnet_id=MOCK_SUBNET_ID,
@@ -308,6 +330,8 @@ class TestNeutronClient(base.TestCase):
         self.assertEqual(MOCK_SUBNET_ID, vip.subnet_id)
         self.assertEqual(t_constants.MOCK_PORT_ID, vip.port_id)
         self.assertEqual(fake_lb.id, vip.load_balancer_id)
+        self.driver.network_proxy.create_port.assert_not_called()
+        self.assertFalse(vip.octavia_owned)
 
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])

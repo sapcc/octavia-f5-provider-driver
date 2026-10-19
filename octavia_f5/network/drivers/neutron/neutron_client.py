@@ -71,7 +71,9 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         super().__init__()
         base_taskflow.BaseTaskFlowEngine.__init__(self)
         self.allocate_vip_flow = self.get_allocate_vip_flow()
+        self.adopt_vip_flow = self.get_adopt_vip_flow()
         self.deallocate_vip_flow = self.get_deallocate_vip_flow()
+        self.release_vip_flow = self.get_deallocate_vip_flow(keep_vip_port=True)
         self.amphora_repo = repositories.AmphoraRepository()
         self.physical_network = None
         self.physical_interface = None
@@ -120,6 +122,52 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
                               all_selfips_task, update_aap_task)
         return allocate_vip_flow
 
+    def get_adopt_vip_flow(self) -> flow.Flow:
+        """Flow for a VIP port that was created by the caller (vip_port_id).
+
+        Same as the allocate flow, except that the existing port is claimed
+        instead of creating a new one. Claiming sets device_owner, device_id
+        and the binding host on the port, see ClaimVIPPort and
+        octavia-issues#66. The cache is invalidated at the end so that the
+        create RPC is sent to the host the port was just bound to.
+        """
+        claim_vip_port_task = network_tasks.ClaimVIPPort(self)
+        create_selfips_task = network_tasks.CreateSelfIPs(self)
+        claim_ports_subflow = unordered_flow.Flow('claim-ports-flow')
+        claim_ports_subflow.add(claim_vip_port_task, create_selfips_task)
+
+        adopt_vip_flow = linear_flow.Flow('adopt-vip-flow')
+        adopt_vip_flow.add(network_tasks.GetCandidate(self),
+                           claim_ports_subflow,
+                           network_tasks.AllSelfIPs(self),
+                           network_tasks.UpdateAAP(self),
+                           network_tasks.InvalidateCache(self))
+        return adopt_vip_flow
+
+    def _run_vip_flow(self, vip_flow: flow.Flow,
+                      load_balancer: octavia_models.LoadBalancer,
+                      octavia_owned: bool):
+        try:
+            engine = self.taskflow_load(
+                vip_flow, store={'load_balancer': load_balancer})
+            with tf_logging.DynamicLoggingListener(engine, log=LOG):
+                engine.run()
+
+                selfips = engine.storage.fetch("selfips")
+                vip_port = engine.storage.fetch("vip_port")
+                LOG.debug("Successfully allocated SelfIPs %s for VIP %s",
+                          [selfip.id for selfip in selfips], vip_port.id)
+                return self._port_to_vip(vip_port, load_balancer,
+                                         octavia_owned=octavia_owned)
+        except WrappedFailure as f:
+            # Unwrap Allocation error and re-raise
+            for e in f:
+                if isinstance(e, base.DeallocateVIPException):
+                    raise e from f
+            # Generic TaskFlow Error, log exception and raise generic Exception
+            LOG.exception(f)
+            raise base.AllocateVIPException() from f
+
     def allocate_vip(self, load_balancer: octavia_models.LoadBalancer):
         """Runs a task flow which creates (if needed) the VIP, SelfIPs
         and updates the allowed_address_pairs, also correctly
@@ -129,6 +177,7 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         """
 
         # Checks if a port was already provided and valid
+        adopt_provided_port = False
         if load_balancer.vip.port_id:
             try:
                 port = self.get_port(load_balancer.vip.port_id)
@@ -136,23 +185,24 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
                     port.fixed_ips, load_balancer.vip.subnet_id,
                     load_balancer.vip.ip_address)
                 if (port.network_id == load_balancer.vip.network_id and fixed_ip_found):
-                    LOG.info('Port %s already exists. Nothing to be done.',
-                             load_balancer.vip.port_id)
-                    return self._port_to_vip(port, load_balancer)
-                LOG.error('Neutron VIP mis-match. Expected ip %s on '
-                          'subnet %s in network %s. Neutron has fixed_ips %s '
-                          'in network %s. Deleting and recreating the VIP '
-                          'port.', load_balancer.vip.ip_address,
-                          load_balancer.vip.subnet_id,
-                          load_balancer.vip.network_id,
-                          self._fixed_ips_to_list_of_dicts(port.fixed_ips),
-                          port.network_id)
-                if load_balancer.vip.octavia_owned:
-                    self.delete_port(load_balancer.vip.port_id)
+                    LOG.info('Port %s already exists. Claiming it for load balancer %s.',
+                             load_balancer.vip.port_id, load_balancer.id)
+                    adopt_provided_port = True
                 else:
-                    raise base.AllocateVIPException(
-                        f'VIP port {port.id} is broken, but is owned by project {port.project_id} '
-                        'so will not be recreated. Aborting VIP allocation.')
+                    LOG.error('Neutron VIP mis-match. Expected ip %s on '
+                              'subnet %s in network %s. Neutron has fixed_ips %s '
+                              'in network %s. Deleting and recreating the VIP '
+                              'port.', load_balancer.vip.ip_address,
+                              load_balancer.vip.subnet_id,
+                              load_balancer.vip.network_id,
+                              self._fixed_ips_to_list_of_dicts(port.fixed_ips),
+                              port.network_id)
+                    if load_balancer.vip.octavia_owned:
+                        self.delete_port(load_balancer.vip.port_id)
+                    else:
+                        raise base.AllocateVIPException(
+                            f'VIP port {port.id} is broken, but is owned by project {port.project_id} '
+                            'so will not be recreated. Aborting VIP allocation.')
             except base.AllocateVIPException as e:
                 # Catch this explicitly because otherwise we blame Neutron
                 LOG.error(getattr(e, 'message', None))
@@ -169,28 +219,16 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
                     orig_msg=getattr(e, 'message', None),
                     orig_code=getattr(e, 'status_code', None), )
 
-        # Run the Flow
-        try:
-            engine = self.taskflow_load(
-                self.allocate_vip_flow, store={'load_balancer': load_balancer})
-            with tf_logging.DynamicLoggingListener(engine, log=LOG):
-                engine.run()
+        if adopt_provided_port:
+            # The port belongs to the caller: claim it, but never delete it.
+            return self._run_vip_flow(self.adopt_vip_flow, load_balancer,
+                                      octavia_owned=False)
+        # Octavia creates the port (also when a provided port has vanished),
+        # so Octavia owns it and deletes it together with the load balancer.
+        return self._run_vip_flow(self.allocate_vip_flow, load_balancer,
+                                  octavia_owned=True)
 
-                selfips = engine.storage.fetch("selfips")
-                vip_port = engine.storage.fetch("vip_port")
-                LOG.debug("Successfully allocated SelfIPs %s for VIP %s",
-                          [selfip.id for selfip in selfips], vip_port.id)
-                return self._port_to_vip(vip_port, load_balancer)
-        except WrappedFailure as f:
-            # Unwrap Allocation error and re-raise
-            for e in f:
-                if isinstance(e, base.DeallocateVIPException):
-                    raise e from f
-            # Generic TaskFlow Error, log exception and raise generic Exception
-            LOG.exception(f)
-            raise base.AllocateVIPException() from f
-
-    def get_deallocate_vip_flow(self) -> flow.Flow:
+    def get_deallocate_vip_flow(self, keep_vip_port: bool = False) -> flow.Flow:
         # VIP ports needs to be allocated together with all depending resources
 
         def _cleanup_selfips_decider(history):
@@ -210,10 +248,14 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         ensure_selfips_subflow.link(get_all_selfips_task, cleanup_selfips_task)
 
         # linear tasks
-        delete_vip_task = network_tasks.DeleteVIP(self)
+        if keep_vip_port:
+            # caller-owned VIP port: hand it back instead of deleting it
+            vip_task = network_tasks.ReleaseVIP(self)
+        else:
+            vip_task = network_tasks.DeleteVIP(self)
         deallocate_vip_flow = unordered_flow.Flow('deallocate-vip-flow')
         deallocate_vip_flow.add(ensure_selfips_subflow,
-                                delete_vip_task)
+                                vip_task)
         return deallocate_vip_flow
 
     def deallocate_vip(self, vip):
@@ -232,12 +274,23 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
 
         agent = port['binding:host_id']
 
+        # A port provided by the caller (octavia_owned explicitly False) is
+        # never deleted, only handed back. deallocate_vip() sees such a port
+        # when LB creation fails after the port was claimed and the API rolls
+        # back. Before claiming existed, the device_owner check above kept
+        # caller ports safe; now we set device_owner ourselves, so the
+        # ownership flag has to decide. octavia_owned=None (old DB rows, not
+        # set) keeps the previous behaviour.
+        keep_vip_port = vip.octavia_owned is False
+        vip_flow = self.release_vip_flow if keep_vip_port else self.deallocate_vip_flow
+
         # Run the Flow
         try:
             engine = self.taskflow_load(
-                self.deallocate_vip_flow, store={'agent': agent,
-                                                 'network_id': vip.network_id,
-                                                 'port_id': vip.port_id})
+                vip_flow, store={'agent': agent,
+                                 'network_id': vip.network_id,
+                                 'port_id': vip.port_id,
+                                 'load_balancer_id': vip.load_balancer_id})
             with tf_logging.DynamicLoggingListener(engine, log=LOG):
                 engine.run()
                 storage = engine.storage.fetch_all()
@@ -491,6 +544,104 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
             'binding:host_id': candidate
         }
         self.network_proxy.update_port(vip.id, **host_binding)
+
+    def claim_vip_port(self, load_balancer: octavia_models.LoadBalancer, candidate: str):
+        """Take over a VIP port that was created by the caller (octavia-issues#66).
+
+        Sets the same attributes a port created by Octavia would have:
+        - device_owner network:f5listener: Neutron policy stops the project from
+          deleting the port while the load balancer exists
+        - device_id <lb id>: check_port_in_use() in the API rejects every further
+          load balancer on this port
+        - binding:host_id <candidate>: the create RPC and the reconciliation loop
+          reach the agent chosen by the scheduler, in the right AZ
+        The update is conditional on the port revision, so of two concurrent
+        creates on the same port only one can claim it.
+
+        :return: tuple (claimed port model, dict of the original attributes)
+        """
+        port_id = load_balancer.vip.port_id
+        # orig_code is the HTTP status the API answers with (instead of 500)
+        try:
+            port = self.network_proxy.get_port(port_id)
+            if port.device_id and port.device_id != load_balancer.id:
+                raise base.AllocateVIPException(
+                    f'VIP port {port_id} is already used by device {port.device_id}.',
+                    orig_code=409)
+
+            original = {
+                'device_owner': port.device_owner or '',
+                'device_id': port.device_id or '',
+                'binding:host_id': port.binding_host_id or '',
+                'allowed_address_pairs': list(port.allowed_address_pairs or []),
+            }
+            claimed = self.network_proxy.update_port(
+                port_id, if_revision=port.revision_number,
+                device_owner=constants.DEVICE_OWNER_LISTENER,
+                device_id=load_balancer.id,
+                **{'binding:host_id': candidate})
+        except os_exceptions.NotFoundException as e:
+            raise base.AllocateVIPException(
+                f'VIP port {port_id} disappeared before it could be claimed.',
+                orig_code=409) from e
+        except os_exceptions.PreconditionFailedException as e:
+            raise base.AllocateVIPException(
+                f'VIP port {port_id} was modified concurrently, refusing to claim it.',
+                orig_code=409) from e
+        except os_exceptions.SDKException as e:
+            raise base.AllocateVIPException(
+                f'Could not claim VIP port {port_id}: {e}',
+                orig_code=getattr(e, 'status_code', None)) from e
+        return utils.convert_port_to_model(claimed), original
+
+    def restore_vip_port(self, port_id: str, original: dict):
+        """Undo claim_vip_port() when the rest of the VIP allocation failed."""
+        try:
+            self.network_proxy.update_port(port_id, **original)
+        except os_exceptions.ResourceNotFound:
+            LOG.debug('VIP port %s already gone, nothing to restore.', port_id)
+
+    def release_vip_port(self, port_id: str, load_balancer_id: str):
+        """Hand a claimed caller VIP port back to its project.
+
+        Clears what claim_vip_port() and UpdateAAP set. Only touches the port
+        if it is still claimed by this load balancer: ports of LBs created
+        before claiming existed (empty device_id) are left alone.
+        """
+        try:
+            port = self.network_proxy.get_port(port_id)
+        except os_exceptions.NotFoundException:
+            LOG.debug('VIP port %s already gone, nothing to release.', port_id)
+            return
+        except Exception as e:
+            raise exceptions.NetworkServiceError(net_error=str(e))
+        if port.device_id != load_balancer_id:
+            LOG.info('Not releasing VIP port %s: claimed by %r, not by load balancer %s.',
+                     port_id, port.device_id, load_balancer_id)
+            return
+        try:
+            self.network_proxy.update_port(
+                port_id, device_owner='', device_id='', allowed_address_pairs=[],
+                **{'binding:host_id': ''})
+        except os_exceptions.ResourceNotFound:
+            LOG.debug('VIP port %s vanished while releasing it.', port_id)
+            return
+        except Exception as e:
+            raise exceptions.NetworkServiceError(net_error=str(e))
+        LOG.info('Released VIP port %s, load balancer %s does not use it anymore.',
+                 port_id, load_balancer_id)
+
+    def release_vip(self, vip):
+        """Called when a load balancer with a caller-owned VIP port is deleted.
+
+        Counterpart of deallocate_vip() for vip.octavia_owned=False: the port
+        is not deleted, but must not stay locked with device_owner
+        network:f5listener, otherwise its project cannot delete it anymore.
+        """
+        try:
+            self.release_vip_port(vip.port_id, vip.load_balancer_id)
+        except exceptions.OctaviaException as e:
+            raise base.DeallocateVIPException(e) from e
 
     def cleanup_selfips(self, selfips: List[network_models.Port]):
         for port in selfips:
