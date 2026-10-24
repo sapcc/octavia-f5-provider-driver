@@ -25,6 +25,7 @@ from octavia.common import data_models
 from octavia.common import utils as octavia_utils
 from octavia.db import api as db_apis
 from octavia.db.repositories import AmphoraRepository
+from octavia_f5.db import repositories as f5_repositories
 from octavia_f5.utils import driver_utils as utils
 
 CONF = cfg.CONF
@@ -39,11 +40,24 @@ class DriverUpdater(driver_updater.DriverUpdater):
     that the user created and passed as vip_port_id (octavia-issues#66). Such
     a port is not deleted but handed back to its project, otherwise it would
     stay locked (device_owner network:f5listener) after the LB is gone.
+    A port that another load balancer still uses is not touched at all.
     """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.f5_lb_repo = f5_repositories.LoadBalancerRepository()
 
     def _check_for_lb_vip_deallocate(self, repo, lb_id):
         with self.db_session.begin():
             lb = repo.get(self.db_session, id=lb_id)
+            users = self.f5_lb_repo.get_ids_by_vip_port(self.db_session, lb.vip.port_id)
+        others = [other for other in users if other != lb_id]
+        if others:
+            # New load balancers can't share a port anymore, but older ones may
+            LOG.warning('Leaving VIP port %s of deleted load balancer %s alone, '
+                        'load balancer %s still uses it.',
+                        lb.vip.port_id, lb_id, ', '.join(others))
+            return
         if lb.vip.octavia_owned is False:
             vip = lb.vip
             vip.load_balancer = lb

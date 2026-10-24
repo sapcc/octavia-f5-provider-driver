@@ -304,9 +304,12 @@ class TestNeutronClient(NeutronClientTestCase):
                                       mock.call('self-ip-id-1')],
                                      any_order=True)
 
+    @mock.patch('octavia_f5.db.repositories.LoadBalancerRepository.'
+                'get_ids_by_vip_port', return_value=[])
     @mock.patch('octavia_f5.db.scheduler.Scheduler.get_candidates',
                 return_value=[MOCK_CANDIDATE])
-    def test_allocate_vip_when_port_already_provided(self, mock_get_candidates):
+    def test_allocate_vip_when_port_already_provided(self, mock_get_candidates,
+                                                     mock_get_ids_by_vip_port):
         # The provided port is used, not replaced by a new one. How it is
         # claimed for the load balancer is tested in test_vip_port_ownership.
         provided_port = Port(

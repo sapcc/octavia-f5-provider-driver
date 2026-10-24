@@ -148,6 +148,25 @@ class CreateVIPPort(BaseNetworkTask):
         self.network_driver.delete_port(result.id)
 
 
+class CheckVIPPortUnused(BaseNetworkTask):
+    """Refuse a caller-provided VIP port another load balancer uses (octavia-issues#66).
+
+    Neutron shows this only for claimed ports (device_id). Load balancers
+    created before ports were claimed are known only to the Octavia DB.
+    """
+
+    def execute(self, load_balancer: data_models.LoadBalancer):
+        port_id = load_balancer.vip.port_id
+        with db_apis.session().begin() as session:
+            users = self.lb_repo.get_ids_by_vip_port(session, port_id)
+        others = [lb_id for lb_id in users if lb_id != load_balancer.id]
+        if others:
+            # orig_code: the API answers 409 Conflict instead of 500
+            raise base.AllocateVIPException(
+                f'VIP port {port_id} is already used by load balancer {", ".join(others)}.',
+                orig_code=409)
+
+
 class ClaimVIPPort(BaseNetworkTask):
     """Claim a caller-provided VIP port instead of creating one (octavia-issues#66)."""
     default_provides = ('vip_port', 'vip_port_original')

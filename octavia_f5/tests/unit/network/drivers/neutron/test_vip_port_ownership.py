@@ -85,6 +85,10 @@ class TestClaimProvidedVipPort(NeutronClientTestCase):
 
     def setUp(self):
         super().setUp()
+        # load balancers that use the port according to the Octavia DB
+        self.port_users = mock.patch(
+            'octavia_f5.db.repositories.LoadBalancerRepository.get_ids_by_vip_port',
+            return_value=[]).start()
         proxy = self.driver.network_proxy
         proxy.get_port.return_value = caller_port()
         proxy.update_port.return_value = claimed_port()
@@ -132,14 +136,34 @@ class TestClaimProvidedVipPort(NeutronClientTestCase):
             self.driver.allocate_vip(provided_port_lb())
         invalidate.assert_called_once_with()
 
-    def test_port_used_by_other_lb_is_refused(self, _sched):
+    def test_port_of_older_lb_is_refused(self, _sched):
+        # 66.2 for load balancers created before ports were claimed: Neutron
+        # doesn't show the port as used (no device_id), the Octavia DB does
+        self.port_users.return_value = ['older-lb']
+
+        exc = self.assertRaises(network_base.AllocateVIPException,
+                                self.driver.allocate_vip, provided_port_lb())
+        self.assertEqual(409, exc.orig_code)  # the API answers 409 Conflict
+        self.port_users.assert_called_once_with(mock.ANY, t_constants.MOCK_PORT_ID)
+        self.assertEqual([], claim_calls(self.driver.network_proxy.update_port))
+        self.driver.network_proxy.create_port.assert_not_called()
+
+    def test_lb_itself_does_not_count_as_other_user(self, _sched):
+        self.port_users.return_value = [LB_ID]
+
+        vip, _ = self.driver.allocate_vip(provided_port_lb())
+
+        self.assertEqual(t_constants.MOCK_PORT_ID, vip.port_id)
+        self.assertEqual(1, len(claim_calls(self.driver.network_proxy.update_port)))
+
+    def test_port_claimed_by_other_lb_is_refused(self, _sched):
         # 66.2, second line of defence behind check_port_in_use() in the API
         self.driver.network_proxy.get_port.return_value = caller_port(
             device_id='another-lb')
 
         exc = self.assertRaises(network_base.AllocateVIPException,
                                 self.driver.allocate_vip, provided_port_lb())
-        self.assertEqual(409, exc.orig_code)  # the API answers 409 Conflict
+        self.assertEqual(409, exc.orig_code)
         self.assertEqual([], claim_calls(self.driver.network_proxy.update_port))
 
     def test_concurrent_claim_is_refused(self, _sched):

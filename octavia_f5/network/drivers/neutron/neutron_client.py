@@ -126,10 +126,11 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         """Flow for a VIP port that was created by the caller (vip_port_id).
 
         Same as the allocate flow, except that the existing port is claimed
-        instead of creating a new one. Claiming sets device_owner, device_id
-        and the binding host on the port, see ClaimVIPPort and
-        octavia-issues#66. The cache is invalidated at the end so that the
-        create RPC is sent to the host the port was just bound to.
+        instead of creating a new one, unless another load balancer uses it.
+        Claiming sets device_owner, device_id and the binding host on the
+        port, see ClaimVIPPort and octavia-issues#66. The cache is
+        invalidated at the end so that the create RPC is sent to the host the
+        port was just bound to.
         """
         claim_vip_port_task = network_tasks.ClaimVIPPort(self)
         create_selfips_task = network_tasks.CreateSelfIPs(self)
@@ -137,7 +138,8 @@ class NeutronClient(neutron_base.BaseNeutronDriver,
         claim_ports_subflow.add(claim_vip_port_task, create_selfips_task)
 
         adopt_vip_flow = linear_flow.Flow('adopt-vip-flow')
-        adopt_vip_flow.add(network_tasks.GetCandidate(self),
+        adopt_vip_flow.add(network_tasks.CheckVIPPortUnused(self),
+                           network_tasks.GetCandidate(self),
                            claim_ports_subflow,
                            network_tasks.AllSelfIPs(self),
                            network_tasks.UpdateAAP(self),

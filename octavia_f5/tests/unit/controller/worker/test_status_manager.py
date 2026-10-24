@@ -44,6 +44,11 @@ class TestDriverUpdater(base.TestCase):
         mock.patch('octavia.common.utils.get_network_driver',
                    return_value=self.network_driver).start()
         mock.patch('octavia.db.repositories.Repositories.decrement_quota').start()
+        # load balancers that use the VIP port according to the Octavia DB;
+        # the deleted one itself is still PENDING_DELETE, so it is included
+        self.port_users = mock.patch(
+            'octavia_f5.db.repositories.LoadBalancerRepository.get_ids_by_vip_port',
+            return_value=[LB_ID]).start()
         with mock.patch('octavia.db.api.get_session'), \
                 mock.patch('octavia.db.repositories.LoadBalancerRepository'):
             self.updater = status_manager.DriverUpdater()
@@ -100,6 +105,29 @@ class TestDriverUpdater(base.TestCase):
 
         self.network_driver.deallocate_vip.assert_not_called()
         self.network_driver.release_vip.assert_not_called()
+        self.assertTrue(self.deleted_written())
+
+    def test_shared_octavia_port_is_not_deleted(self):
+        # Octavia's port of the deleted LB is still the VIP of another LB
+        # (possible for LBs created before #66): deleting it would break it
+        self.deleting_lb(octavia_owned=True)
+        self.port_users.return_value = [LB_ID, 'lb-2']
+
+        self.report_deleted()
+
+        self.port_users.assert_called_once_with(mock.ANY, 'vip-port-1')
+        self.network_driver.deallocate_vip.assert_not_called()
+        self.network_driver.release_vip.assert_not_called()
+        self.assertTrue(self.deleted_written())  # the LB itself is deleted
+
+    def test_shared_caller_port_is_not_released(self):
+        self.deleting_lb(octavia_owned=False)
+        self.port_users.return_value = [LB_ID, 'lb-2']
+
+        self.report_deleted()
+
+        self.network_driver.release_vip.assert_not_called()
+        self.network_driver.deallocate_vip.assert_not_called()
         self.assertTrue(self.deleted_written())
 
     def test_failed_release_keeps_lb_pending_delete(self):
