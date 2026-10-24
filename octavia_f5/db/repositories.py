@@ -83,6 +83,21 @@ class LoadBalancerRepository(repositories.LoadBalancerRepository):
 
         return [model.to_data_model() for model in query.all()]
 
+    def get_ids_by_vip_port(self, session, port_id):
+        """ Get the IDs of all load balancers (not DELETED) whose VIP is this port
+
+        :param session: A Sql Alchemy database session.
+        :param port_id: Neutron port ID of the VIP.
+        :returns: [str]
+        """
+        if not port_id:
+            return []
+        query = session.query(models.LoadBalancer.id).filter(
+            models.LoadBalancer.id == models.Vip.load_balancer_id,
+            models.Vip.port_id == port_id,
+            models.LoadBalancer.provisioning_status != consts.DELETED)
+        return [lb_id for (lb_id,) in query.all()]
+
 
 class PoolRepository(repositories.PoolRepository):
     def get_pending_from_host(self, session, host=None):
