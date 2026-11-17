@@ -120,7 +120,7 @@ class ControllerWorker(object):
             selfips = list(chain.from_iterable(
                 self.network_driver.ensure_selfips(loadbalancers, CONF.host, cleanup_orphans=True)))
             if all(lb.provisioning_status == lib_consts.PENDING_DELETE for lb in loadbalancers):
-                self.sync.tenant_delete(network_id, device).raise_for_status()
+                self.sync.tenant_delete(network_id).raise_for_status()
                 # Cleanup l2 configuration and remove selfip ports
                 self.l2sync.remove_l2_flow(network_id, device)
                 self.network_driver.cleanup_selfips(selfips)
